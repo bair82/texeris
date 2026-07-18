@@ -1,0 +1,527 @@
+/* Texeris editor spike — restrained academic look. */
+
+:root {
+  --ink: #1c1b18;
+  --muted: #6d6a61;
+  --paper: #faf9f5;
+  --panel: #f2f0ea;
+  --line: #e2dfd6;
+  --accent: #3a5bbf;
+  --agent: #7a3ea0;
+  --serif: Georgia, 'Source Serif 4', 'Source Serif Pro', 'Iowan Old Style', 'Times New Roman', serif;
+  --sans: ui-sans-serif, system-ui, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+}
+
+/* ---- chrome ---- */
+
+.app-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 22px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.app-title h1 {
+  display: inline;
+  font-size: 17px;
+  margin: 0 10px 0 0;
+}
+
+.app-sub {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.sample-picker {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.sample-picker select {
+  font: inherit;
+  margin-left: 6px;
+}
+
+.tab-bar {
+  display: flex;
+  gap: 2px;
+  padding: 0 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tab-btn {
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 14px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tab-btn.active {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.tab-pane.hidden,
+.hidden {
+  display: none;
+}
+
+/* ---- toolbar ---- */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  padding: 8px 22px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 12px;
+}
+
+.tool-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tool-label {
+  color: var(--muted);
+  margin-right: 2px;
+}
+
+.tool-btn {
+  font: inherit;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.tool-btn:hover {
+  border-color: #c6c2b4;
+  background: #fdfcf9;
+}
+
+.tool-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.rt-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+}
+
+.rt-badge.ok {
+  background: #e2f3e4;
+  color: #1d6b2a;
+}
+
+.rt-badge.bad {
+  background: #f9ecd2;
+  color: #8a5a00;
+}
+
+.rt-badge.unknown {
+  background: #eceae4;
+  color: var(--muted);
+}
+
+/* ---- body layout ---- */
+
+.tab-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 0;
+  align-items: start;
+}
+
+@media (max-width: 1000px) {
+  .tab-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.editor-mount {
+  padding: 0 22px 40px;
+}
+
+/* ---- editor typography (shared) ---- */
+
+.cm-host .cm-editor,
+.tiptap-host .ProseMirror {
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.cm-host .cm-editor {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin-top: 18px;
+  min-height: 55vh;
+}
+
+.cm-host .cm-editor.cm-focused {
+  outline: none;
+  border-color: #bdb8a8;
+}
+
+.cm-host .cm-content {
+  max-width: 70ch;
+  margin: 0 auto;
+  padding: 22px 18px 70px;
+  caret-color: var(--accent);
+}
+
+.tiptap-host .ProseMirror {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin-top: 18px;
+  min-height: 55vh;
+  max-width: calc(70ch + 36px);
+  margin-left: auto;
+  margin-right: auto;
+  padding: 22px 18px 70px;
+  outline: none;
+}
+
+/* raw mode: plain monospace source */
+
+.raw-mode .cm-content,
+.tiptap-raw .cm-content {
+  font-family: var(--mono);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+/* headings (CM line classes + Tiptap elements) */
+
+.cm-h1,
+.ProseMirror h1 {
+  font-size: 1.65em;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.cm-h2,
+.ProseMirror h2 {
+  font-size: 1.32em;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.cm-h3,
+.ProseMirror h3 {
+  font-size: 1.12em;
+  font-weight: 700;
+}
+
+.cm-h4,
+.cm-h5,
+.cm-h6 {
+  font-weight: 700;
+}
+
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3 {
+  margin: 1.1em 0 0.45em;
+}
+
+.ProseMirror p {
+  margin: 0.55em 0;
+}
+
+/* inline styling */
+
+.cm-em {
+  font-style: italic;
+}
+
+.cm-strong {
+  font-weight: 700;
+}
+
+.cm-code,
+.ProseMirror code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  background: #f4f2ec;
+  border-radius: 3px;
+  padding: 0.1em 0.25em;
+}
+
+.cm-link,
+.ProseMirror a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: #c3cdec;
+  text-underline-offset: 2px;
+}
+
+.cite-pill {
+  display: inline-block;
+  font-family: var(--sans);
+  font-size: 0.76em;
+  line-height: 1.7;
+  padding: 0 0.6em;
+  border-radius: 999px;
+  background: #eef0f6;
+  border: 1px solid #d6dbea;
+  color: #37415c;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.fn-ref {
+  color: #8a5a13;
+  font-size: 0.72em;
+  font-family: var(--sans);
+}
+
+/* footnote definitions */
+
+.cm-fn-def {
+  font-size: 0.86em;
+  color: #57544b;
+}
+
+.fn-def {
+  position: relative;
+  font-size: 0.88em;
+  color: #57544b;
+  padding-left: 4.6em;
+  margin: 0.2em 0;
+}
+
+.fn-def::before {
+  content: attr(data-marker);
+  position: absolute;
+  left: 0;
+  top: 0.1em;
+  font-family: var(--mono);
+  font-size: 0.85em;
+  color: #a09c90;
+}
+
+.fn-def p {
+  margin: 0.25em 0;
+}
+
+/* tables */
+
+.cm-table-line {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  background: #fbfaf7;
+}
+
+.cm-table-pipe {
+  color: #c0b28a;
+  font-weight: 700;
+}
+
+.cm-table-delimiter-row {
+  color: #a8a496;
+}
+
+.ProseMirror table {
+  border-collapse: collapse;
+  margin: 0.8em 0;
+  font-size: 0.92em;
+}
+
+.ProseMirror th,
+.ProseMirror td {
+  border: 1px solid #ddd8ca;
+  padding: 5px 12px;
+  min-width: 60px;
+}
+
+.ProseMirror th {
+  background: #f4f2ea;
+  text-align: left;
+}
+
+.ProseMirror .selectedCell:after {
+  background: rgba(58, 91, 191, 0.12);
+}
+
+/* blockquotes */
+
+.cm-quote-line {
+  box-shadow: inset 3px 0 0 #ddd6c4;
+  padding-left: 12px;
+  color: #44423b;
+}
+
+.ProseMirror blockquote {
+  margin: 0.7em 0;
+  padding-left: 1em;
+  border-left: 3px solid #ddd6c4;
+  color: #44423b;
+}
+
+/* lists */
+
+.ProseMirror ul,
+.ProseMirror ol {
+  padding-left: 1.6em;
+}
+
+/* patch highlight */
+
+.patch-highlight {
+  background: #fff0a8;
+  border-radius: 2px;
+  transition: background 0.4s;
+}
+
+/* ---- side panel ---- */
+
+.side-panel {
+  border-left: 1px solid var(--line);
+  padding: 14px 18px;
+  font-size: 12.5px;
+  min-height: 60vh;
+}
+
+.side-panel h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 18px 0 8px;
+}
+
+.message-line {
+  padding: 8px 10px;
+  border-radius: 5px;
+  white-space: pre-wrap;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.message-line.info {
+  background: #eef1f8;
+  color: #37415c;
+}
+
+.message-line.ok {
+  background: #e2f3e4;
+  color: #1d6b2a;
+}
+
+.message-line.error {
+  background: #f9e4e0;
+  color: #8c2f1b;
+}
+
+.diff-view {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  background: #fdfdf8;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.revision-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.revision-entry {
+  border-left: 2px solid var(--accent);
+  padding: 4px 0 4px 9px;
+  margin-bottom: 8px;
+}
+
+.revision-entry.actor-agent {
+  border-left-color: var(--agent);
+}
+
+.revision-head {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.revision-counts {
+  float: right;
+  font-weight: 400;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.revision-snippet {
+  color: var(--muted);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.revision-base {
+  list-style: none;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  margin-top: 10px;
+}
+
+/* ---- checklist ---- */
+
+#checklist-root {
+  border-top: 1px solid var(--line);
+  padding: 10px 22px 40px;
+}
+
+.checklist summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.checklist ol {
+  margin: 10px 0 0;
+  padding-left: 22px;
+  font-size: 13px;
+  line-height: 1.9;
+  color: #3c3a34;
+}
