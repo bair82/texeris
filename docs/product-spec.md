@@ -1096,6 +1096,8 @@ The following ideas should remain available without being allowed to dominate in
 - Reusable project agents.
 - Local models for selected tasks.
 - Scheduled archive or reference maintenance.
+- A meta-skill for skill creation: interview the user about a recurring workflow and scaffold a new skill package (metadata, SKILL.md, examples, tests) that follows the skill contract. Prior art worth studying: Anthropic's skill-creator skill.
+- Automatic skill polishing: evaluation-driven refinement — run a skill against its test set, analyse failures, and propose reviewable patches to the skill's instructions, examples, or defaults. The document patch-review loop applies unchanged; skill edits are just another reviewable artifact. Relevant methods: automatic prompt-optimisation research (OPRO, TextGrad, GEPA-style reflective mutation against evals).
 
 ---
 
