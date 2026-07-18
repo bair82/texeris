@@ -18,6 +18,10 @@ when product or architecture decisions change, update them.
 - TypeScript everywhere; pnpm workspaces.
 - Canonical writing format: Pandoc-oriented Markdown. References: CSL JSON +
   Pandoc citation keys. Export: Pandoc.
+- Agent runtime: Pi — repo <https://github.com/earendil-works/pi>
+  (`@earendil-works/pi-agent-core`, `@earendil-works/pi-ai`), embedded behind
+  an application adapter. Pi has no built-in permission sandbox, so the agent
+  only ever gets domain-specific application tools, never raw fs/shell.
 - The agent never mutates documents directly; it proposes structured patches
   against a base revision. The application validates and applies them.
 - Rendered and raw editor modes are two views of one canonical document —

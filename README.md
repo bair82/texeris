@@ -15,7 +15,8 @@ rejects, or modifies it → the application records what happened.
   Likely / Exploratory commitment levels).
 - [Architecture options](docs/architecture-options.md) — provisional
   architecture: Electron + TypeScript + SQLite (FTS5) + Pandoc-oriented
-  Markdown + Pi agent runtime behind an adapter.
+  Markdown + [Pi](https://github.com/earendil-works/pi) agent runtime behind
+  an adapter.
 
 ## Repository layout
 

@@ -696,6 +696,8 @@ The UI may collapse low-risk repetitive changes while highlighting substantive o
 
 Pi's current project provides an agent runtime, multi-provider model support, SDK embedding, custom tools/extensions, and on-demand skills. That makes it a strong initial fit.
 
+The canonical Pi repository is <https://github.com/earendil-works/pi> (MIT). Relevant packages: `@earendil-works/pi-ai` (unified multi-provider LLM API), `@earendil-works/pi-agent-core` (agent runtime with tool calling and state management), `@earendil-works/pi-coding-agent` (CLI) and `@earendil-works/pi-tui`. Note that Pi includes no built-in permission system — it runs with the launching process's permissions — so the domain-specific tool boundary (§12.2) and the process isolation decisions (§7) carry the full weight of constraining agent behaviour.
+
 ## 12.1 Integration options
 
 ### Option A: Pi SDK in an Electron process
@@ -1599,7 +1601,7 @@ The recommendations in this document are informed by the current official docume
 - Electron's main, renderer, and utility process model.
 - Tauri 2's cross-platform architecture.
 - CodeMirror 6's transaction-based editor state and decoration model, and ProseMirror/Tiptap's structured editing and transaction model.
-- Pi's SDK, agent runtime, tools/extensions, providers, and skills.
+- Pi's SDK, agent runtime, tools/extensions, providers, and skills (repository: <https://github.com/earendil-works/pi>).
 - SQLite WAL and FTS5.
 - Pandoc Markdown, footnotes, citations, and citeproc export.
 
