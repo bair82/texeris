@@ -17,6 +17,10 @@ rejects, or modifies it → the application records what happened.
   architecture: Electron + TypeScript + SQLite (FTS5) + Pandoc-oriented
   Markdown + [Pi](https://github.com/earendil-works/pi) agent runtime behind
   an adapter.
+- [Implementation plan](docs/implementation-plan.md) — Milestone 1 build
+  sequence, recorded first decisions, editor decision gate.
+- [Pi integration notes](docs/pi-integration-notes.md) — findings from
+  studying the Pi repo: embedding layer, tools, providers, gotchas.
 
 ## Repository layout
 

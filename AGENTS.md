@@ -9,7 +9,8 @@ when product or architecture decisions change, update them.
 
 ## Layout
 
-- `docs/` — product spec and architecture options (living documents).
+- `docs/` — living documents: product spec, architecture options,
+  implementation plan, Pi integration notes.
 - `spikes/` — disposable Milestone 0 prototypes. Spike code is allowed to be
   rough; it exists to answer a narrow question, not to be reused blindly.
 
