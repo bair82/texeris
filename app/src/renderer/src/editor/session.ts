@@ -18,6 +18,7 @@ import {
   Decoration as CMDecoration,
   DecorationSet as CMDecorationSet,
   EditorView,
+  drawSelection,
   keymap,
   lineNumbers,
 } from '@codemirror/view';
@@ -270,6 +271,9 @@ export class RawSession implements EditorSession {
           keymap.of([...defaultKeymap, ...historyKeymap]),
           markdownLang(),
           cmHighlightField,
+          // Custom-drawn cursor + selection: the native caret can be
+          // invisible under Electron/Wayland (owner report).
+          drawSelection(),
           EditorView.updateListener.of((update) => {
             if (!update.docChanged) {
               return;

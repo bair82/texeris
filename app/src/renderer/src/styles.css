@@ -95,9 +95,20 @@ body {
   background: transparent;
 }
 
-.cm-raw .cm-content {
+/* Must out-specify CodeMirror's own base theme (caret-color: black). */
+.cm-raw.cm-editor .cm-content {
   caret-color: #dde;
   color: #dde;
+}
+
+/* drawSelection's custom cursor + selection (native caret unreliable here) */
+.cm-raw .cm-cursor {
+  border-left: 1.4px solid #dde;
+}
+
+.cm-raw .cm-selectionBackground,
+.cm-raw .cm-focused .cm-selectionBackground {
+  background: rgba(125, 184, 248, 0.25) !important;
 }
 
 .cm-raw .cm-gutters {
