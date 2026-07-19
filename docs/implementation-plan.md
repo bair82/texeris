@@ -393,6 +393,15 @@ and landed a clean patch.
 failure retry (context preserved), usage record view, error surfaces,
 renderer CSP, electron-builder artifacts for macOS + Linux. *DoD:* e2e suite
 green; installable artifact on both platforms.
+**Done 2026-07-19** — retry button re-issues a failed turn (verified against
+the missing-API-key path); usage panel over `agent_runs`; external-change
+conflict offers explicit reload (never silent loss); strict CSP in
+production (stripped in dev by a vite transform); smoke suite
+(`app/scripts/smoke-all.mjs`: chat, editor, patch, crash-recovery incl.
+SIGKILL + orphan tmp + offline edit, error/retry) all green. Linux
+AppImage (`app/dist/`) built and verified booting. **macOS artifact
+configured (dmg+zip) but needs a Mac to build** — electron-builder cannot
+cross-build dmg from Linux.
 
 ## 15. Testing plan
 

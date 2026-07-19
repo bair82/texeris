@@ -3,6 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Strict CSP for production. Removed in dev by the strip-csp plugin
+         (vite dev needs inline scripts + the HMR websocket). style-src keeps
+         'unsafe-inline' because CodeMirror injects style modules at runtime. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'"
+    />
     <title>Texeris</title>
   </head>
   <body>

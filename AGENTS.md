@@ -52,6 +52,9 @@ when product or architecture decisions change, update them.
   `TEXERIS_FAUX_PROVIDER=1 pnpm --filter @texeris/app dev`
 - App checks: `pnpm --filter @texeris/app typecheck` /
   `pnpm --filter @texeris/app test` / `pnpm --filter @texeris/app build`
+- App e2e smoke suite (CDP, offline): `pnpm --filter @texeris/app smoke`
+- Package (Linux AppImage): `pnpm --filter @texeris/app dist:linux`
+  (macOS dmg/zip configured in `app/electron-builder.yml`, needs a Mac)
 - App e2e smoke (CDP, offline faux provider): after `pnpm --filter
   @texeris/app build`, run `node app/scripts/smoke.mjs`
 - Editor e2e smoke (typing, mode switch, restart survival):
@@ -76,5 +79,7 @@ when product or architecture decisions change, update them.
 
 ## Git
 
-- Commit locally; do not push unless the user explicitly asks.
+- Git is delegated to the agent (owner decision 2026-07-19): commit and push
+  as work completes, in clear scoped commits. No force-push, no history
+  rewrites on `main` without explicit approval.
 - Repo-local identity is set to the owner's GitHub noreply address.

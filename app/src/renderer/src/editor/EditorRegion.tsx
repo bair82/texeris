@@ -9,6 +9,12 @@ import {
 
 type SaveState = 'loading' | 'saved' | 'dirty' | 'saving' | 'error';
 
+interface EditorNotice {
+  text: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}
+
 /**
  * The editor region (plan §12): rendered mode default with a raw toggle,
  * commit-on-group over IPC (autosave), external-change reload, and a status
@@ -21,7 +27,7 @@ export default function EditorRegion() {
   const [mode, setMode] = useState<EditorMode>('rendered');
   const [revision, setRevision] = useState<number | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('loading');
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<EditorNotice | null>(null);
   const dirtyRef = useRef(false);
 
   const destroySession = useCallback(() => {
@@ -49,9 +55,9 @@ export default function EditorRegion() {
             })
             .catch((err: unknown) => {
               setSaveState('error');
-              setNotice(
-                `commit failed: ${err instanceof Error ? err.message : String(err)} — reloading`,
-              );
+              setNotice({
+                text: `commit failed: ${err instanceof Error ? err.message : String(err)} — reloading`,
+              });
               void reload();
             });
         },
@@ -101,18 +107,34 @@ export default function EditorRegion() {
     };
   }, [reload]);
 
-  // External-change events from main.
+  // External-change events from main. When we have uncommitted edits, the
+  // user decides explicitly: reload the external version (discarding the
+  // uncommitted buffer — never a silent loss, plan §8) or keep editing.
   useEffect(() => {
     return window.texeris.doc.onEvent((event) => {
       if (event.type === 'external-import') {
         if (dirtyRef.current) {
-          setNotice('file changed on disk while you had unsaved edits — kept yours, check history');
+          setNotice({
+            text: 'file changed on disk while you had unsaved edits — yours are kept in the editor',
+            actionLabel: 'Reload external (discard my uncommitted edits)',
+            onAction: () => {
+              dirtyRef.current = false;
+              void reload();
+            },
+          });
         } else {
-          setNotice('reloaded after an external edit');
+          setNotice({ text: 'reloaded after an external edit' });
           void reload();
         }
       } else if (event.type === 'external-conflict') {
-        setNotice('external edit conflicts with an in-flight commit — kept both, check history');
+        setNotice({
+          text: 'external edit arrived mid-commit — kept both versions, check history',
+          actionLabel: 'Reload external (discard my uncommitted edits)',
+          onAction: () => {
+            dirtyRef.current = false;
+            void reload();
+          },
+        });
       }
     });
   }, [reload]);
@@ -135,7 +157,19 @@ export default function EditorRegion() {
       <div className="editor-host" ref={hostRef} />
       {notice && (
         <p className="editor-notice" onClick={() => setNotice(null)}>
-          {notice}
+          {notice.text}
+          {notice.actionLabel && (
+            <button
+              className="notice-action"
+              onClick={(e) => {
+                e.stopPropagation();
+                notice.onAction?.();
+                setNotice(null);
+              }}
+            >
+              {notice.actionLabel}
+            </button>
+          )}
         </p>
       )}
       <footer className="editor-status">

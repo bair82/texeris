@@ -1,0 +1,29 @@
+# electron-builder config (WP5). No native modules anywhere (node:sqlite),
+# so no rebuild step. Everything the renderer/main needs is bundled by
+# electron-vite; only @sinclair/typebox ships as a runtime dependency.
+appId: app.texeris.desktop
+productName: Texeris
+executableName: texeris
+copyright: Copyright © 2026
+
+directories:
+  output: dist
+
+files:
+  - out/**
+  - package.json
+  - node_modules/**
+
+npmRebuild: false
+
+linux:
+  target: AppImage
+  category: Office
+  artifactName: texeris-${version}-${arch}.${ext}
+
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.productivity
+  artifactName: texeris-${version}-${arch}.${ext}

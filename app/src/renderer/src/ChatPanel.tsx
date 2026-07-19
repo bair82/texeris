@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
+  AgentRunRecord,
   ContextManifest,
   ContextScope,
   ModelMode,
@@ -16,9 +17,17 @@ interface StreamingState {
   tools: Array<{ toolCallId: string; toolName: string; isError?: boolean }>;
 }
 
+interface LastTurn {
+  text: string;
+  mode: ModelMode;
+  scope: ContextScope;
+}
+
 export default function ChatPanel() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<UiMessage[]>([]);
+  const [runs, setRuns] = useState<AgentRunRecord[]>([]);
+  const [showUsage, setShowUsage] = useState(false);
   const [headings, setHeadings] = useState<HeadingInfo[]>([]);
   const [mode, setMode] = useState<ModelMode>('fast');
   const [scope, setScope] = useState<ContextScope>({ kind: 'document' });
@@ -26,6 +35,7 @@ export default function ChatPanel() {
   const [streaming, setStreaming] = useState<StreamingState | null>(null);
   const [manifest, setManifest] = useState<ContextManifest | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastTurn, setLastTurn] = useState<LastTurn | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -33,6 +43,7 @@ export default function ChatPanel() {
       const { conversationId: id } = await window.texeris.chat.getOrCreateConversation();
       setConversationId(id);
       setMessages(await window.texeris.chat.listMessages(id));
+      setRuns(await window.texeris.chat.listRuns(id));
       setHeadings(await window.texeris.doc.outline());
     })();
   }, []);
@@ -73,16 +84,32 @@ export default function ChatPanel() {
         setStreaming(null);
         if (conversationId) {
           void window.texeris.chat.listMessages(conversationId).then(setMessages);
+          void window.texeris.chat.listRuns(conversationId).then(setRuns);
         }
       }
     });
   }, [conversationId]);
 
+  const startTurn = useCallback(
+    async (turn: LastTurn) => {
+      if (!conversationId || streaming) {
+        return;
+      }
+      try {
+        setHeadings(await window.texeris.doc.outline());
+        await window.texeris.chat.startTurn({ conversationId, ...turn });
+        setLastTurn(turn);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [conversationId, streaming],
+  );
+
   const send = useCallback(async () => {
-    if (!conversationId || !input.trim() || streaming) {
+    if (!input.trim()) {
       return;
     }
-    const text = input.trim();
     let effectiveScope = scope;
     if (scope.kind === 'selection') {
       const selection = getEditorSelection();
@@ -92,19 +119,10 @@ export default function ChatPanel() {
       }
       effectiveScope = { kind: 'selection', ...selection };
     }
+    const text = input.trim();
     setInput('');
-    setHeadings(await window.texeris.doc.outline());
-    try {
-      await window.texeris.chat.startTurn({
-        conversationId,
-        text,
-        mode,
-        scope: effectiveScope,
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }, [conversationId, input, streaming, mode, scope]);
+    await startTurn({ text, mode, scope: effectiveScope });
+  }, [input, mode, scope, startTurn]);
 
   const cancel = useCallback(() => {
     if (streaming) {
@@ -145,7 +163,7 @@ export default function ChatPanel() {
           <option value="selection">Selection</option>
           {headings.map((h) => (
             <option key={`${h.line}:${h.text}`} value={`section:${h.text}`}>
-              {' '.repeat(h.level)}§ {h.text}
+              {' '.repeat(h.level)}§ {h.text}
             </option>
           ))}
         </select>
@@ -156,7 +174,36 @@ export default function ChatPanel() {
             {manifest.truncated ? ' · truncated' : ''}
           </span>
         )}
+        <button
+          className="usage-toggle"
+          title="Usage records"
+          onClick={() => setShowUsage((v) => !v)}
+        >
+          usage
+        </button>
       </header>
+
+      {showUsage && (
+        <div className="usage-panel">
+          {runs.length === 0 && <p className="usage-empty">no runs yet</p>}
+          {runs.slice(-10).reverse().map((run) => (
+            <div key={run.id} className="usage-row" title={run.error ?? undefined}>
+              <span className={`usage-status usage-${run.status}`}>{run.status}</span>
+              <span>{run.modelMode}</span>
+              <span>
+                {run.usage
+                  ? `${run.usage.input}→${run.usage.output} tok`
+                  : '—'}
+              </span>
+              <span>
+                {run.endedAt
+                  ? `${((Date.parse(run.endedAt) - Date.parse(run.startedAt)) / 1000).toFixed(1)}s`
+                  : '…'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="chat-messages">
         {messages.map((m) => (
@@ -178,13 +225,28 @@ export default function ChatPanel() {
                 {t.isError === undefined ? '…' : t.isError ? '⚠' : '⚙'} {t.toolName}
               </span>
             ))}
-            <p>{streaming.text || ' '}</p>
+            <p>{streaming.text || ' '}</p>
           </div>
         )}
         <div ref={bottomRef} />
       </div>
 
-      {error && <p className="chat-error">{error}</p>}
+      {error && (
+        <p className="chat-error">
+          {error}
+          {lastTurn && (
+            <button
+              className="retry-button"
+              onClick={() => {
+                setError(null);
+                void startTurn(lastTurn);
+              }}
+            >
+              Retry
+            </button>
+          )}
+        </p>
+      )}
 
       <footer className="chat-input">
         <textarea
