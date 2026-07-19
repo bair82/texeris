@@ -8,6 +8,7 @@ import {
   registerReloadHandler,
   registerSelectionGetter,
 } from './editorBridge';
+import HistoryPanel from './HistoryPanel';
 import Toolbar from './Toolbar';
 
 type SaveState = 'loading' | 'saved' | 'dirty' | 'saving' | 'error';
@@ -36,6 +37,7 @@ export default function EditorRegion() {
   const [notice, setNotice] = useState<EditorNotice | null>(null);
   const [newDocName, setNewDocName] = useState<string | null>(null);
   const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
   const dirtyRef = useRef(false);
   const openDocIdRef = useRef<string | null>(null);
   openDocIdRef.current = openDocId;
@@ -251,7 +253,15 @@ export default function EditorRegion() {
             <button onClick={() => void createNewDocument()}>Create</button>
           </span>
         )}
+        <button
+          className="doc-new history-toggle"
+          title="Revision history"
+          onClick={() => setShowHistory((v) => !v)}
+        >
+          History
+        </button>
       </div>
+      {showHistory && openDocId && <HistoryPanel documentId={openDocId} />}
       {activeEditor && <Toolbar editor={activeEditor} />}
       <div className="editor-host" ref={hostRef} />      {notice && (
         <p className="editor-notice" onClick={() => setNotice(null)}>

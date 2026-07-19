@@ -429,11 +429,19 @@ cross-build dmg from Linux.
 - Raw-mode caret: visible after a specificity battle with CodeMirror's
   injected base theme; `drawSelection` as belt and braces.
 
-**Known remaining gaps (next in line):** HistoryPanel (revision timeline
-UI — engine and data exist), checkpoint UI (service exists), first-run
-project flow (open/create arbitrary project folders — the app still boots
-into the dev-project harness), chat scopes follow the main document only
-(other documents are agent-readable via tools), macOS packaging.
+- Rendered mode: formatting toolbar (bold/italic/strike/code, H1–H3,
+  lists, blockquote, table, link, undo/redo) for Word-style workflows.
+- Projects: first-run flow — picker with recents + open/create/switch
+  (`ProjectManager` + native folder dialogs; dev harness now only via
+  `TEXERIS_PROJECT_DIR`). History: HistoryPanel with the revision
+  timeline (actor badges, summaries, patch linkage), restore, and
+  checkpoint create/restore.
+
+**Known remaining gaps (next in line):** chat scopes follow the main
+document only (other documents are agent-readable via tools), macOS
+packaging (needs a Mac), raw-mode caret color still black on the owner's
+build despite the shipped `!important` rules — investigate the actual
+cursor element when it next surfaces.
 
 ## 15. Testing plan
 

@@ -17,7 +17,8 @@ import type {
   PatchRecord,
 } from './patch-types';
 import type { SettingsView } from './settings-types';
-import type { DocumentInfo } from './domain-types';
+import type { CheckpointInfo, DocumentInfo, RevisionInfo } from './domain-types';
+import type { ProjectInfo } from './project-types';
 
 /**
  * IPC contract shared by main, preload, and renderer.
@@ -74,5 +75,20 @@ export interface TexerisApi {
     get(): Promise<SettingsView>;
     setApiKey(provider: string, key: string): Promise<{ keySource: string }>;
     clearApiKey(provider: string): Promise<{ keySource: string }>;
+  };
+  project: {
+    current(): Promise<ProjectInfo | null>;
+    recents(): Promise<string[]>;
+    pickDirectory(): Promise<string | null>;
+    openDialog(): Promise<ProjectInfo | null>;
+    openPath(path: string): Promise<ProjectInfo>;
+    create(parentDir: string, name: string): Promise<ProjectInfo>;
+    onChanged(callback: (info: ProjectInfo) => void): () => void;
+  };
+  history: {
+    revisions(documentId?: string): Promise<RevisionInfo[]>;
+    listCheckpoints(documentId?: string): Promise<CheckpointInfo[]>;
+    createCheckpoint(name: string, documentId?: string): Promise<CheckpointInfo>;
+    restoreCheckpoint(checkpointId: string): Promise<{ seq: number }>;
   };
 }

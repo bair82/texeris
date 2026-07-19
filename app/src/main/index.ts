@@ -1,14 +1,17 @@
 import { app, BrowserWindow, safeStorage } from 'electron';
 import path from 'node:path';
-import { registerIpcHandlers } from './ipc';
+import { registerIpcHandlers, projectInfo } from './ipc';
 import { DocChannels } from '../shared/doc-types';
 import { PatchChannels } from '../shared/patch-types';
+import { ProjectChannels } from '../shared/project-types';
 import { PiAgentRuntime } from './agent/runtime';
 import { createAppModels, createFauxModels } from './agent/models';
 import { ConversationService } from './services/conversation';
 import { CredentialsService } from './services/credentials';
 import { openDevProject } from './services/devProject';
 import { PatchService } from './services/patch';
+import type { ProjectContext } from './services/project';
+import { ProjectManager } from './services/projectManager';
 import { loadWorkspaceConfig, type WorkspaceConfig } from './services/settings';
 import { watchProjectFiles } from './services/watcher';
 import type { Models } from '@earendil-works/pi-ai';
@@ -78,16 +81,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
   assertNodeVersion();
 
-  // WP3 wiring: dev project + conversation persistence + agent runtime.
   // TEXERIS_FAUX_PROVIDER=1 swaps real providers for a scripted one (offline).
-  const project = openDevProject();
-  const conversations = new ConversationService(project.db);
-  const patches = new PatchService(project.db, project.revisions, (patchId, title) => {
-    // patch.proposed push (plan §9): open the review UI in every window.
-    for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send(PatchChannels.event, { type: 'patch-proposed', patchId, title });
-    }
-  });
   let models: Models;
   let config: WorkspaceConfig;
   if (process.env.TEXERIS_FAUX_PROVIDER) {
@@ -99,22 +93,93 @@ app.whenReady().then(() => {
     config = loadWorkspaceConfig();
   }
   const credentials = new CredentialsService(safeStorage);
-  const runtime = new PiAgentRuntime({
-    models,
-    config,
-    conversations,
-    project,
-    patches,
-    credentials,
-  });
-  registerIpcHandlers({ runtime, conversations, project, patches, credentials, config });
+  const manager = new ProjectManager();
 
-  // External edits (plan §8): import + notify all windows.
-  watchProjectFiles(project, (docEvent) => {
+  let runtime: PiAgentRuntime | null = null;
+  let conversations: ConversationService | null = null;
+  let patches: PatchService | null = null;
+  let stopWatcher: (() => void) | null = null;
+
+  const broadcast = (channel: string, payload: unknown) => {
     for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send(DocChannels.event, docEvent);
+      win.webContents.send(channel, payload);
     }
+  };
+
+  /** Bind a project context: (re)build per-project services and watchers. */
+  const adoptProject = (ctx: ProjectContext): void => {
+    conversations = new ConversationService(ctx.db);
+    patches = new PatchService(ctx.db, ctx.revisions, (patchId, title) => {
+      broadcast(PatchChannels.event, { type: 'patch-proposed', patchId, title });
+    });
+    if (runtime) {
+      runtime.setProject(ctx, conversations, patches);
+    } else {
+      runtime = new PiAgentRuntime({
+        models,
+        config,
+        conversations,
+        project: ctx,
+        patches,
+        credentials,
+      });
+    }
+    stopWatcher?.();
+    stopWatcher = watchProjectFiles(ctx, (docEvent) => {
+      broadcast(DocChannels.event, docEvent);
+    });
+    broadcast(ProjectChannels.changed, projectInfo(ctx));
+  };
+
+  const requireProject = (): ProjectContext => {
+    if (!manager.current) {
+      throw new Error('no project open');
+    }
+    return manager.current;
+  };
+  const requireRuntime = (): PiAgentRuntime => {
+    if (!runtime) {
+      throw new Error('no project open');
+    }
+    return runtime;
+  };
+  const requireConversations = (): ConversationService => {
+    if (!conversations) {
+      throw new Error('no project open');
+    }
+    return conversations;
+  };
+  const requirePatches = (): PatchService => {
+    if (!patches) {
+      throw new Error('no project open');
+    }
+    return patches;
+  };
+
+  registerIpcHandlers({
+    requireProject,
+    requireRuntime,
+    requireConversations,
+    requirePatches,
+    credentials,
+    config,
+    manager,
+    adoptProject,
   });
+
+  // Boot project: smoke/dev override → most recent project → picker.
+  if (process.env.TEXERIS_PROJECT_DIR) {
+    adoptProject(manager.adoptContext(openDevProject()));
+  } else {
+    const [recent] = manager.recents();
+    if (recent) {
+      try {
+        adoptProject(manager.open(recent));
+      } catch (err) {
+        console.error('failed to open recent project, showing picker', err);
+      }
+    }
+  }
 
   createWindow();
 

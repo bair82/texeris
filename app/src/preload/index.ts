@@ -12,6 +12,8 @@ import {
 import { DocChannels, type DocEvent } from '../shared/doc-types';
 import { PatchChannels, type PatchProposedEvent } from '../shared/patch-types';
 import { SettingsChannels } from '../shared/settings-types';
+import { ProjectChannels, type ProjectInfo } from '../shared/project-types';
+import { HistoryChannels } from '../shared/doc-types';
 
 const api: TexerisApi = {
   async getAppInfo() {
@@ -80,6 +82,33 @@ const api: TexerisApi = {
       ipcRenderer.invoke(SettingsChannels.setApiKey, { provider, key }),
     clearApiKey: (provider) =>
       ipcRenderer.invoke(SettingsChannels.clearApiKey, { provider }),
+  },
+  project: {
+    current: () => ipcRenderer.invoke(ProjectChannels.current),
+    recents: () => ipcRenderer.invoke(ProjectChannels.recents),
+    pickDirectory: () => ipcRenderer.invoke(ProjectChannels.pickDirectory),
+    openDialog: () => ipcRenderer.invoke(ProjectChannels.openDialog),
+    openPath: (path) => ipcRenderer.invoke(ProjectChannels.openPath, { path }),
+    create: (parentDir, name) =>
+      ipcRenderer.invoke(ProjectChannels.create, { parentDir, name }),
+    onChanged: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
+        callback(payload as ProjectInfo);
+      };
+      ipcRenderer.on(ProjectChannels.changed, listener);
+      return () => {
+        ipcRenderer.removeListener(ProjectChannels.changed, listener);
+      };
+    },
+  },
+  history: {
+    revisions: (documentId) => ipcRenderer.invoke(HistoryChannels.revisions, { documentId }),
+    listCheckpoints: (documentId) =>
+      ipcRenderer.invoke(HistoryChannels.checkpointList, { documentId }),
+    createCheckpoint: (name, documentId) =>
+      ipcRenderer.invoke(HistoryChannels.checkpointCreate, { documentId, name }),
+    restoreCheckpoint: (checkpointId) =>
+      ipcRenderer.invoke(HistoryChannels.checkpointRestore, { checkpointId }),
   },
 };
 

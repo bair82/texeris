@@ -753,3 +753,185 @@ body {
   opacity: 0.4;
   cursor: default;
 }
+
+/* ------------------------------ history panel ----------------------------- */
+
+.history-panel {
+  border-bottom: 1px solid #2a3a4a;
+  max-height: 40%;
+  overflow-y: auto;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.checkpoint-form {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.checkpoint-form input {
+  flex: 1;
+  background: #101820;
+  color: #dde;
+  border: 1px solid #2a3a4a;
+  border-radius: 5px;
+  padding: 4px 8px;
+}
+
+.checkpoint-form button,
+.revision-list button,
+.checkpoint-list button {
+  background: #16202b;
+  color: #9ab;
+  border: 1px solid #2a3a4a;
+  border-radius: 5px;
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.revision-list,
+.checkpoint-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.revision-list li,
+.checkpoint-list li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 0;
+  border-bottom: 1px dotted #1c2530;
+}
+
+.actor-badge {
+  border-radius: 8px;
+  padding: 1px 7px;
+  font-size: 10px;
+  background: #1c2530;
+  color: #9ab;
+  min-width: 48px;
+  text-align: center;
+}
+
+.actor-user {
+  background: #24405e;
+}
+
+.actor-agent {
+  background: #3a2f5e;
+  color: #c4b5fd;
+}
+
+.actor-external {
+  background: #3a2f14;
+  color: #e5c76b;
+}
+
+.history-meta {
+  color: #567;
+  white-space: nowrap;
+}
+
+.history-summary {
+  color: #9ab;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.revision-list button,
+.checkpoint-list button {
+  margin-left: auto;
+}
+
+.checkpoint-name {
+  color: #e5c76b;
+}
+
+/* ----------------------------- project picker ----------------------------- */
+
+.project-picker {
+  max-width: 480px;
+  margin: 15vh auto 0;
+  padding: 24px;
+}
+
+.project-picker h1 {
+  font-size: 28px;
+  margin-bottom: 4px;
+}
+
+.project-picker h2 {
+  font-size: 13px;
+  color: #9ab;
+  margin: 24px 0 8px;
+}
+
+.picker-sub {
+  color: #9ab;
+}
+
+.picker-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  align-items: center;
+}
+
+.picker-actions button,
+.picker-recents button {
+  background: #16202b;
+  color: #cde;
+  border: 1px solid #2a3a4a;
+  border-radius: 6px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.picker-primary {
+  background: #245 !important;
+  color: #fff !important;
+}
+
+.picker-create-form {
+  display: flex;
+  gap: 8px;
+}
+
+.picker-create-form input {
+  background: #101820;
+  color: #dde;
+  border: 1px solid #2a3a4a;
+  border-radius: 6px;
+  padding: 7px 10px;
+}
+
+.picker-recents {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.picker-recents li {
+  margin: 4px 0;
+}
+
+.picker-recents button {
+  width: 100%;
+  text-align: left;
+  font-size: 13px;
+}
+
+.project-chip {
+  font-size: 11px;
+  color: #9ab;
+  background: #1c2530;
+  border-radius: 10px;
+  padding: 2px 8px;
+  margin-right: 8px;
+}

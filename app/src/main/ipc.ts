@@ -1,4 +1,4 @@
-import { app, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import { Value } from '@sinclair/typebox/value';
 import {
   AppInfoSchema,
@@ -12,11 +12,16 @@ import {
   StartTurnRequestSchema,
 } from '../shared/chat-types';
 import {
+  CheckpointCreateRequestSchema,
+  CheckpointListRequestSchema,
+  CheckpointRestoreRequestSchema,
   DocChannels,
   DocCommitRequestSchema,
   DocCreateRequestSchema,
   DocGetTextRequestSchema,
   DocOutlineRequestSchema,
+  DocRevisionsRequestSchema,
+  HistoryChannels,
 } from '../shared/doc-types';
 import {
   PatchAcceptRequestSchema,
@@ -26,6 +31,12 @@ import {
   DocRestoreRequestSchema,
 } from '../shared/patch-types';
 import {
+  ProjectChannels,
+  ProjectCreateRequestSchema,
+  ProjectOpenPathRequestSchema,
+  type ProjectInfo,
+} from '../shared/project-types';
+import {
   ClearApiKeyRequestSchema,
   SetApiKeyRequestSchema,
   SettingsChannels,
@@ -34,11 +45,32 @@ import {
 import type { AgentRuntime } from './agent/runtime';
 import type { ConversationService } from './services/conversation';
 import { CredentialsService } from './services/credentials';
+import { CheckpointService } from './services/checkpoint';
 import type { PatchService } from './services/patch';
 import type { ProjectContext } from './services/project';
+import type { ProjectManager } from './services/projectManager';
 import type { WorkspaceConfig } from './services/settings';
 import { extractHeadings } from './agent/markdown';
 import { createDocument, ensureDocument } from './services/project';
+
+export interface IpcDeps {
+  requireProject(): ProjectContext;
+  requireRuntime(): AgentRuntime;
+  requireConversations(): ConversationService;
+  requirePatches(): PatchService;
+  credentials: CredentialsService;
+  config: WorkspaceConfig;
+  manager: ProjectManager;
+  adoptProject(ctx: ProjectContext): void;
+}
+
+export function projectInfo(ctx: ProjectContext): ProjectInfo {
+  return {
+    root: ctx.root,
+    projectId: ctx.project.projectId,
+    mainDocument: ctx.project.mainDocument,
+  };
+}
 
 function mainDocId(project: ProjectContext): string {
   return ensureDocument(project, project.project.mainDocument);
@@ -49,15 +81,6 @@ function docPath(project: ProjectContext, documentId: string): string {
     .prepare('SELECT path FROM documents WHERE id = ?')
     .get(documentId) as { path: string } | undefined;
   return row?.path ?? project.project.mainDocument;
-}
-
-export interface IpcDeps {
-  runtime: AgentRuntime;
-  conversations: ConversationService;
-  project: ProjectContext;
-  patches: PatchService;
-  credentials: CredentialsService;
-  config: WorkspaceConfig;
 }
 
 export function registerIpcHandlers(deps: IpcDeps): void {
@@ -74,31 +97,78 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return Value.Decode(AppInfoSchema, info);
   });
 
+  // ---------------------------------------------------------------- project
+
+  ipcMain.handle(ProjectChannels.current, (): ProjectInfo | null =>
+    deps.manager.current ? projectInfo(deps.manager.current) : null,
+  );
+
+  ipcMain.handle(ProjectChannels.recents, () => deps.manager.recents());
+
+  ipcMain.handle(ProjectChannels.pickDirectory, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Choose a folder',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
+  ipcMain.handle(ProjectChannels.openDialog, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Open a Texeris project folder',
+      properties: ['openDirectory'],
+    });
+    if (result.canceled) {
+      return null;
+    }
+    const ctx = deps.manager.open(result.filePaths[0]);
+    deps.adoptProject(ctx);
+    return projectInfo(ctx);
+  });
+
+  ipcMain.handle(ProjectChannels.openPath, (_event, raw: unknown) => {
+    const req = Value.Decode(ProjectOpenPathRequestSchema, raw);
+    const ctx = deps.manager.open(req.path);
+    deps.adoptProject(ctx);
+    return projectInfo(ctx);
+  });
+
+  ipcMain.handle(ProjectChannels.create, (_event, raw: unknown) => {
+    const req = Value.Decode(ProjectCreateRequestSchema, raw);
+    const ctx = deps.manager.create(req.parentDir, req.name);
+    deps.adoptProject(ctx);
+    return projectInfo(ctx);
+  });
+
+  // ------------------------------------------------------------------- chat
+
   ipcMain.handle(ChatChannels.getOrCreateConversation, () => ({
-    conversationId: deps.conversations.getOrCreateConversation(),
+    conversationId: deps.requireConversations().getOrCreateConversation(),
   }));
 
   ipcMain.handle(ChatChannels.newConversation, () => ({
-    conversationId: deps.conversations.startNewConversation(),
+    conversationId: deps.requireConversations().startNewConversation(),
   }));
 
   ipcMain.handle(ChatChannels.listMessages, (_event, raw: unknown) => {
     const req = Value.Decode(ConversationRequestSchema, raw);
-    return deps.conversations.listUiMessages(req.conversationId);
+    return deps.requireConversations().listUiMessages(req.conversationId);
   });
 
   ipcMain.handle(ChatChannels.listRuns, (_event, raw: unknown) => {
     const req = Value.Decode(ConversationRequestSchema, raw);
-    return deps.conversations.listRuns(req.conversationId);
+    return deps.requireConversations().listRuns(req.conversationId);
   });
 
   ipcMain.handle(ChatChannels.startTurn, async (event, raw: unknown) => {
     const req = Value.Decode(StartTurnRequestSchema, raw);
-    const { runId } = await deps.runtime.startTurn(req);
+    const { runId } = await deps.requireRuntime().startTurn(req);
     // Forward this run's events to the requesting window until the queue
     // closes (run end). Events originate in main — trusted, not re-validated.
     void (async () => {
-      for await (const agentEvent of deps.runtime.events(runId)) {
+      for await (const agentEvent of deps.requireRuntime().events(runId)) {
         if (!event.sender.isDestroyed()) {
           event.sender.send(ChatChannels.event, agentEvent);
         }
@@ -109,12 +179,14 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
   ipcMain.handle(ChatChannels.cancel, async (_event, raw: unknown) => {
     const req = Value.Decode(CancelRequestSchema, raw);
-    await deps.runtime.cancel(req.runId);
+    await deps.requireRuntime().cancel(req.runId);
     return { cancelled: true };
   });
 
+  // -------------------------------------------------------------------- doc
+
   ipcMain.handle(DocChannels.list, () => {
-    const rows = deps.project.db
+    const rows = deps.requireProject().db
       .prepare(
         'SELECT id, path, title, current_revision, content_hash FROM documents ORDER BY path',
       )
@@ -136,19 +208,21 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
   ipcMain.handle(DocChannels.outline, (_event, raw: unknown) => {
     const req = Value.Decode(DocOutlineRequestSchema, raw ?? {});
-    const docId = req.documentId ?? mainDocId(deps.project);
-    const text = deps.project.revisions.getCurrentText(docId);
+    const project = deps.requireProject();
+    const docId = req.documentId ?? mainDocId(project);
+    const text = project.revisions.getCurrentText(docId);
     return extractHeadings(text);
   });
 
   ipcMain.handle(DocChannels.getText, (_event, raw: unknown) => {
     const req = Value.Decode(DocGetTextRequestSchema, raw ?? {});
-    const docId = req.documentId ?? mainDocId(deps.project);
+    const project = deps.requireProject();
+    const docId = req.documentId ?? mainDocId(project);
     return {
       documentId: docId,
-      path: docPath(deps.project, docId),
-      text: deps.project.revisions.getCurrentText(docId),
-      revision: deps.project.revisions.getCurrentRevision(docId),
+      path: docPath(project, docId),
+      text: project.revisions.getCurrentText(docId),
+      revision: project.revisions.getCurrentRevision(docId),
     };
   });
 
@@ -160,8 +234,9 @@ export function registerIpcHandlers(deps: IpcDeps): void {
    */
   ipcMain.handle(DocChannels.commit, (_event, raw: unknown) => {
     const req = Value.Decode(DocCommitRequestSchema, raw);
-    const docId = req.documentId ?? mainDocId(deps.project);
-    const seq = deps.project.revisions.commit(docId, req.splices, {
+    const project = deps.requireProject();
+    const docId = req.documentId ?? mainDocId(project);
+    const seq = project.revisions.commit(docId, req.splices, {
       actor: 'user',
       source: { kind: req.kind },
     });
@@ -171,24 +246,58 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   /** Restore an earlier revision as a new revision (undo path, §8). */
   ipcMain.handle(DocChannels.restore, (_event, raw: unknown) => {
     const req = Value.Decode(DocRestoreRequestSchema, raw);
-    const docId = req.documentId ?? mainDocId(deps.project);
-    const seq = deps.project.revisions.restore(docId, req.revision);
+    const project = deps.requireProject();
+    const docId = req.documentId ?? mainDocId(project);
+    const seq = project.revisions.restore(docId, req.revision);
     return { seq };
   });
 
   ipcMain.handle(DocChannels.create, (_event, raw: unknown) => {
     const req = Value.Decode(DocCreateRequestSchema, raw);
-    return createDocument(deps.project, req.name);
+    return createDocument(deps.requireProject(), req.name);
   });
 
+  // ---------------------------------------------------------------- history
+
+  ipcMain.handle(HistoryChannels.revisions, (_event, raw: unknown) => {
+    const req = Value.Decode(DocRevisionsRequestSchema, raw ?? {});
+    const project = deps.requireProject();
+    const docId = req.documentId ?? mainDocId(project);
+    return project.revisions.listRevisions(docId, 200);
+  });
+
+  ipcMain.handle(HistoryChannels.checkpointList, (_event, raw: unknown) => {
+    const req = Value.Decode(CheckpointListRequestSchema, raw ?? {});
+    const project = deps.requireProject();
+    const docId = req.documentId ?? mainDocId(project);
+    return new CheckpointService(project.db, project.revisions).list(docId);
+  });
+
+  ipcMain.handle(HistoryChannels.checkpointCreate, (_event, raw: unknown) => {
+    const req = Value.Decode(CheckpointCreateRequestSchema, raw);
+    const project = deps.requireProject();
+    const docId = req.documentId ?? mainDocId(project);
+    return new CheckpointService(project.db, project.revisions).create(docId, req.name);
+  });
+
+  ipcMain.handle(HistoryChannels.checkpointRestore, (_event, raw: unknown) => {
+    const req = Value.Decode(CheckpointRestoreRequestSchema, raw);
+    const project = deps.requireProject();
+    const seq = new CheckpointService(project.db, project.revisions).restore(req.checkpointId);
+    return { seq };
+  });
+
+  // ------------------------------------------------------------------ patch
+
   ipcMain.handle(PatchChannels.list, () => {
-    const docId = ensureDocument(deps.project, deps.project.project.mainDocument);
-    return deps.patches.list(docId);
+    const project = deps.requireProject();
+    const docId = ensureDocument(project, project.project.mainDocument);
+    return deps.requirePatches().list(docId);
   });
 
   ipcMain.handle(PatchChannels.get, (_event, raw: unknown) => {
     const req = Value.Decode(PatchGetRequestSchema, raw);
-    const patch = deps.patches.get(req.patchId);
+    const patch = deps.requirePatches().get(req.patchId);
     if (!patch) {
       throw new Error(`unknown patch: ${req.patchId}`);
     }
@@ -197,14 +306,16 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
   ipcMain.handle(PatchChannels.accept, (_event, raw: unknown) => {
     const req = Value.Decode(PatchAcceptRequestSchema, raw);
-    return deps.patches.accept(req.patchId, req.groupIds);
+    return deps.requirePatches().accept(req.patchId, req.groupIds);
   });
 
   ipcMain.handle(PatchChannels.reject, (_event, raw: unknown) => {
     const req = Value.Decode(PatchRejectRequestSchema, raw);
-    deps.patches.reject(req.patchId, req.groupIds);
+    deps.requirePatches().reject(req.patchId, req.groupIds);
     return { rejected: true };
   });
+
+  // --------------------------------------------------------------- settings
 
   ipcMain.handle(SettingsChannels.get, (): SettingsView => {
     return {

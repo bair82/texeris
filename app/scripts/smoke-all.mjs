@@ -12,6 +12,7 @@ const SMOKE = [
   'scripts/smoke-patch.mjs',
   'scripts/smoke-recovery.mjs',
   'scripts/smoke-error.mjs',
+  'scripts/smoke-project.mjs',
 ];
 
 let failed = 0;

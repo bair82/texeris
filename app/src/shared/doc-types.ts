@@ -35,6 +35,34 @@ export const DocCreateRequestSchema = Type.Object({
 });
 export type DocCreateRequest = Static<typeof DocCreateRequestSchema>;
 
+export const DocRevisionsRequestSchema = Type.Object({
+  documentId: Type.Optional(Type.String()),
+});
+export type DocRevisionsRequest = Static<typeof DocRevisionsRequestSchema>;
+
+export const CheckpointListRequestSchema = Type.Object({
+  documentId: Type.Optional(Type.String()),
+});
+export type CheckpointListRequest = Static<typeof CheckpointListRequestSchema>;
+
+export const CheckpointCreateRequestSchema = Type.Object({
+  documentId: Type.Optional(Type.String()),
+  name: Type.String({ minLength: 1 }),
+});
+export type CheckpointCreateRequest = Static<typeof CheckpointCreateRequestSchema>;
+
+export const CheckpointRestoreRequestSchema = Type.Object({
+  checkpointId: Type.String(),
+});
+export type CheckpointRestoreRequest = Static<typeof CheckpointRestoreRequestSchema>;
+
+export const HistoryChannels = {
+  revisions: 'texeris:history-revisions',
+  checkpointList: 'texeris:checkpoint-list',
+  checkpointCreate: 'texeris:checkpoint-create',
+  checkpointRestore: 'texeris:checkpoint-restore',
+} as const;
+
 export interface DocText {
   documentId: string;
   path: string;

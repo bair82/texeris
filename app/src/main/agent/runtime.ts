@@ -200,6 +200,22 @@ export class PiAgentRuntime implements AgentRuntime {
     this.runs.get(runId)?.agent.abort();
   }
 
+  /** Swap the project (project manager): agents and pending runs reset. */
+  setProject(
+    project: ProjectContext,
+    conversations: ConversationService,
+    patches: PatchService,
+  ): void {
+    this.options.project = project;
+    this.options.conversations = conversations;
+    this.options.patches = patches;
+    for (const run of this.runs.values()) {
+      run.agent.abort();
+    }
+    this.runs.clear();
+    this.agents.clear();
+  }
+
   /** One Agent per conversation; history replayed verbatim from SQLite. */
   private agentFor(conversationId: string, model: Agent['state']['model']): Agent {
     const existing = this.agents.get(conversationId);
