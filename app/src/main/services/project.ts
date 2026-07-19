@@ -132,3 +132,31 @@ export function openProject(root: string): ProjectContext {
 export function ensureDocument(ctx: ProjectContext, relativePath: string): string {
   return registerDocument(ctx.db, relativePath);
 }
+
+const SAFE_NAME = /^[\w .-]+\.md$/i;
+
+/**
+ * Create a new Markdown document in the project (WP-adjacent: document
+ * management). The file is created empty (atomically) and registered.
+ */
+export function createDocument(
+  ctx: ProjectContext,
+  name: string,
+): { id: string; path: string; title: string } {
+  const trimmed = name.trim();
+  if (
+    !SAFE_NAME.test(trimmed) ||
+    trimmed.includes('..') ||
+    path.isAbsolute(trimmed)
+  ) {
+    throw new Error(
+      `invalid document name ${JSON.stringify(name)} — use a simple relative path ending in .md`,
+    );
+  }
+  const filePath = path.join(ctx.root, trimmed);
+  if (!fs.existsSync(filePath)) {
+    atomicWriteText(filePath, '');
+  }
+  const id = ensureDocument(ctx, trimmed);
+  return { id, path: trimmed, title: titleFor(trimmed) };
+}

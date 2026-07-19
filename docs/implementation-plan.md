@@ -411,6 +411,28 @@ AppImage (`app/dist/`) built and verified booting. **macOS artifact
 configured (dmg+zip) but needs a Mac to build** — electron-builder cannot
 cross-build dmg from Linux.
 
+### First-use polish (2026-07-19, after the owner's first real run)
+
+- `propose_patch` is **anchor-based**: offsets optional, the app resolves
+  `expectedText` (+prefix/suffix context). LLMs count characters poorly.
+- Chat: messages render as Markdown; reasoning in collapsed `<details>`;
+  user echo is immediate; Retry + usage panel; settings panel with
+  keychain-backed API keys (plan §4.6 landed early).
+- Context: between turns the agent gets a compact `<recent-changes>` diff
+  since the last revision it saw (§11), plus "no changes" when idle.
+- Grouping tuned: idle window 1 s → 5 s (§8).
+- Documents: switcher + new-document creation; `doc:*` channels take
+  `documentId`; watcher covers all registered documents. Conversations:
+  "new chat" starts a fresh conversation (old ones stay in storage).
+- Raw-mode caret: visible after a specificity battle with CodeMirror's
+  injected base theme; `drawSelection` as belt and braces.
+
+**Known remaining gaps (next in line):** HistoryPanel (revision timeline
+UI — engine and data exist), checkpoint UI (service exists), first-run
+project flow (open/create arbitrary project folders — the app still boots
+into the dev-project harness), chat scopes follow the main document only
+(other documents are agent-readable via tools), macOS packaging.
+
 ## 15. Testing plan
 
 - **Unit (vitest, node env):** revision grouping/replay, patch

@@ -14,10 +14,26 @@ export const TextSpliceSchema = Type.Object({
 });
 
 export const DocCommitRequestSchema = Type.Object({
+  documentId: Type.Optional(Type.String()),
   splices: Type.Array(TextSpliceSchema, { minItems: 1 }),
   kind: Type.Union([Type.Literal('typing'), Type.Literal('paste')]),
 });
 export type DocCommitRequest = Static<typeof DocCommitRequestSchema>;
+
+export const DocGetTextRequestSchema = Type.Object({
+  documentId: Type.Optional(Type.String()),
+});
+export type DocGetTextRequest = Static<typeof DocGetTextRequestSchema>;
+
+export const DocOutlineRequestSchema = Type.Object({
+  documentId: Type.Optional(Type.String()),
+});
+export type DocOutlineRequest = Static<typeof DocOutlineRequestSchema>;
+
+export const DocCreateRequestSchema = Type.Object({
+  name: Type.String({ minLength: 1 }),
+});
+export type DocCreateRequest = Static<typeof DocCreateRequestSchema>;
 
 export interface DocText {
   documentId: string;
@@ -28,8 +44,8 @@ export interface DocText {
 
 /** main → renderer push events about external file changes (plan §8). */
 export type DocEvent =
-  | { type: 'external-import'; revision: number }
-  | { type: 'external-conflict' };
+  | { type: 'external-import'; documentId: string; revision: number }
+  | { type: 'external-conflict'; documentId: string };
 
 export interface HeadingInfo {
   level: number;
@@ -44,5 +60,6 @@ export const DocChannels = {
   getText: 'texeris:doc-get-text',
   commit: 'texeris:doc-commit',
   restore: 'texeris:doc-restore',
+  create: 'texeris:doc-create',
   event: 'texeris:doc-event',
 } as const;

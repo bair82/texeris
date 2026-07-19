@@ -35,10 +35,13 @@ function userMessage(text: string): AgentMessage {
 }
 
 describe('ConversationService', () => {
-  it('returns the same conversation on repeated calls (one per project)', () => {
+  it('returns the same conversation on repeated calls; startNew rotates it', () => {
     const a = conversations.getOrCreateConversation();
     const b = conversations.getOrCreateConversation();
     expect(a).toBe(b);
+    const c = conversations.startNewConversation();
+    expect(c).not.toBe(a);
+    expect(conversations.getOrCreateConversation()).toBe(c);
   });
 
   it('round-trips messages verbatim for replay and derives UI messages', () => {

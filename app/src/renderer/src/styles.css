@@ -95,15 +95,15 @@ body {
   background: transparent;
 }
 
-/* Must out-specify CodeMirror's own base theme (caret-color: black). */
+/* Must beat CodeMirror's injected base theme (black caret on dark bg). */
 .cm-raw.cm-editor .cm-content {
-  caret-color: #dde;
-  color: #dde;
+  caret-color: #f5f5f5 !important;
+  color: #f5f5f5;
 }
 
 /* drawSelection's custom cursor + selection (native caret unreliable here) */
 .cm-raw .cm-cursor {
-  border-left: 1.4px solid #dde;
+  border-left: 1.4px solid #f5f5f5 !important;
 }
 
 .cm-raw .cm-selectionBackground,
@@ -124,6 +124,46 @@ body {
   color: #e5c76b;
   font-size: 13px;
   cursor: pointer;
+}
+
+.doc-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 12px;
+  border-bottom: 1px solid #2a3a4a;
+}
+
+.doc-select {
+  background: #16202b;
+  color: #cde;
+  border: 1px solid #2a3a4a;
+  border-radius: 5px;
+  padding: 3px 8px;
+  font-size: 12px;
+  max-width: 260px;
+}
+
+.doc-new,
+.doc-new-form button {
+  background: #16202b;
+  color: #9ab;
+  border: 1px solid #2a3a4a;
+  border-radius: 5px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.doc-new-form input {
+  background: #101820;
+  color: #dde;
+  border: 1px solid #2a3a4a;
+  border-radius: 5px;
+  padding: 3px 8px;
+  font-size: 12px;
+  width: 180px;
+  margin-right: 6px;
 }
 
 .editor-status {

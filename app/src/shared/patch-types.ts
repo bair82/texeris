@@ -351,6 +351,7 @@ export type PatchRejectRequest = Static<typeof PatchRejectRequestSchema>;
 export const PatchGetRequestSchema = Type.Object({ patchId: Type.String() });
 
 export const DocRestoreRequestSchema = Type.Object({
+  documentId: Type.Optional(Type.String()),
   revision: Type.Integer({ minimum: 1 }),
 });
 export type DocRestoreRequest = Static<typeof DocRestoreRequestSchema>;

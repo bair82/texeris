@@ -179,6 +179,22 @@ export default function ChatPanel() {
         )}
         <button
           className="usage-toggle"
+          title="Start a fresh conversation (the old one stays in history storage)"
+          onClick={() => {
+            void (async () => {
+              const { conversationId: id } = await window.texeris.chat.newConversation();
+              setConversationId(id);
+              setMessages([]);
+              setRuns([]);
+              setManifest(null);
+              setError(null);
+            })();
+          }}
+        >
+          new chat
+        </button>
+        <button
+          className="usage-toggle"
           title="Usage records"
           onClick={() => setShowUsage((v) => !v)}
         >

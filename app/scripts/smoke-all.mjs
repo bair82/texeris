@@ -25,7 +25,7 @@ for (const script of SMOKE) {
   if (result.status !== 0) {
     // Back-to-back Electron launches are racy; one retry before failing.
     console.log(`=== ${script} failed (exit ${result.status}), retrying once ===`);
-    spawnSync('sleep', ['3']);
+    spawnSync('sleep', ['5']);
     result = spawnSync(process.execPath, [script], {
       cwd: new URL('..', import.meta.url).pathname,
       stdio: 'inherit',
@@ -37,7 +37,7 @@ for (const script of SMOKE) {
     console.log(`=== ${script} FAILED (exit ${result.status}) ===`);
   }
   // Let Electron instances fully exit before the next smoke attaches.
-  spawnSync('sleep', ['3']);
+  spawnSync('sleep', ['5']);
 }
 console.log(failed ? `\n${failed} smoke(s) FAILED` : '\nall smokes passed');
 process.exit(failed ? 1 : 0);

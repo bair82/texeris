@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   createProject,
+  createDocument,
   ensureDocument,
   openProject,
   PROJECT_FORMAT_VERSION,
@@ -98,5 +99,16 @@ describe('openProject', () => {
     expect(reopened.revisions.getTextAt(docId, 2)).toBe('draft edited elsewhere');
     const latest = reopened.revisions.listRevisions(docId)[0];
     expect(latest.actor).toBe('external');
+  });
+
+  it('createDocument creates and registers a new markdown file', () => {
+    const ctx = create();
+    const doc = createDocument(ctx, 'notes.md');
+    expect(doc.path).toBe('notes.md');
+    expect(fs.readFileSync(path.join(root, 'notes.md'), 'utf8')).toBe('');
+    expect(ensureDocument(ctx, 'notes.md')).toBe(doc.id);
+
+    expect(() => createDocument(ctx, '../escape.md')).toThrow(/invalid document name/);
+    expect(() => createDocument(ctx, 'no-extension.txt')).toThrow(/invalid document name/);
   });
 });

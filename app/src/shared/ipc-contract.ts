@@ -43,6 +43,7 @@ export interface TexerisApi {
   getAppInfo(): Promise<AppInfo>;
   chat: {
     getOrCreateConversation(): Promise<{ conversationId: string }>;
+    newConversation(): Promise<{ conversationId: string }>;
     listMessages(conversationId: string): Promise<UiMessage[]>;
     listRuns(conversationId: string): Promise<AgentRunRecord[]>;
     startTurn(request: StartTurnRequest): Promise<{ runId: string }>;
@@ -52,10 +53,11 @@ export interface TexerisApi {
   };
   doc: {
     list(): Promise<DocumentInfo[]>;
-    outline(): Promise<HeadingInfo[]>;
-    getText(): Promise<DocText>;
+    outline(documentId?: string): Promise<HeadingInfo[]>;
+    getText(documentId?: string): Promise<DocText>;
     commit(request: DocCommitRequest): Promise<{ seq: number }>;
-    restore(revision: number): Promise<{ seq: number }>;
+    restore(revision: number, documentId?: string): Promise<{ seq: number }>;
+    create(name: string): Promise<{ id: string; path: string; title: string }>;
     onEvent(callback: (event: DocEvent) => void): () => void;
   };
   patch: {

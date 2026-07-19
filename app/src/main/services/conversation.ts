@@ -53,13 +53,19 @@ function mapRun(row: RunRow): AgentRunRecord {
 export class ConversationService {
   constructor(private readonly db: DatabaseSync) {}
 
+  /** The active conversation = the most recent one (one per project at a time). */
   getOrCreateConversation(): string {
     const existing = this.db
-      .prepare('SELECT id FROM conversations ORDER BY created_at LIMIT 1')
+      .prepare('SELECT id FROM conversations ORDER BY rowid DESC LIMIT 1')
       .get() as { id: string } | undefined;
     if (existing) {
       return existing.id;
     }
+    return this.startNewConversation();
+  }
+
+  /** Start a fresh conversation (prior ones stay in history storage). */
+  startNewConversation(): string {
     const id = randomUUID();
     this.db
       .prepare('INSERT INTO conversations (id, title, created_at) VALUES (?, ?, ?)')

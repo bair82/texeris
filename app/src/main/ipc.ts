@@ -11,7 +11,13 @@ import {
   ConversationRequestSchema,
   StartTurnRequestSchema,
 } from '../shared/chat-types';
-import { DocChannels, DocCommitRequestSchema } from '../shared/doc-types';
+import {
+  DocChannels,
+  DocCommitRequestSchema,
+  DocCreateRequestSchema,
+  DocGetTextRequestSchema,
+  DocOutlineRequestSchema,
+} from '../shared/doc-types';
 import {
   PatchAcceptRequestSchema,
   PatchChannels,
@@ -32,7 +38,18 @@ import type { PatchService } from './services/patch';
 import type { ProjectContext } from './services/project';
 import type { WorkspaceConfig } from './services/settings';
 import { extractHeadings } from './agent/markdown';
-import { ensureDocument } from './services/project';
+import { createDocument, ensureDocument } from './services/project';
+
+function mainDocId(project: ProjectContext): string {
+  return ensureDocument(project, project.project.mainDocument);
+}
+
+function docPath(project: ProjectContext, documentId: string): string {
+  const row = project.db
+    .prepare('SELECT path FROM documents WHERE id = ?')
+    .get(documentId) as { path: string } | undefined;
+  return row?.path ?? project.project.mainDocument;
+}
 
 export interface IpcDeps {
   runtime: AgentRuntime;
@@ -59,6 +76,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
   ipcMain.handle(ChatChannels.getOrCreateConversation, () => ({
     conversationId: deps.conversations.getOrCreateConversation(),
+  }));
+
+  ipcMain.handle(ChatChannels.newConversation, () => ({
+    conversationId: deps.conversations.startNewConversation(),
   }));
 
   ipcMain.handle(ChatChannels.listMessages, (_event, raw: unknown) => {
@@ -113,17 +134,19 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     }));
   });
 
-  ipcMain.handle(DocChannels.outline, () => {
-    const docId = ensureDocument(deps.project, deps.project.project.mainDocument);
+  ipcMain.handle(DocChannels.outline, (_event, raw: unknown) => {
+    const req = Value.Decode(DocOutlineRequestSchema, raw ?? {});
+    const docId = req.documentId ?? mainDocId(deps.project);
     const text = deps.project.revisions.getCurrentText(docId);
     return extractHeadings(text);
   });
 
-  ipcMain.handle(DocChannels.getText, () => {
-    const docId = ensureDocument(deps.project, deps.project.project.mainDocument);
+  ipcMain.handle(DocChannels.getText, (_event, raw: unknown) => {
+    const req = Value.Decode(DocGetTextRequestSchema, raw ?? {});
+    const docId = req.documentId ?? mainDocId(deps.project);
     return {
       documentId: docId,
-      path: deps.project.project.mainDocument,
+      path: docPath(deps.project, docId),
       text: deps.project.revisions.getCurrentText(docId),
       revision: deps.project.revisions.getCurrentRevision(docId),
     };
@@ -137,7 +160,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
    */
   ipcMain.handle(DocChannels.commit, (_event, raw: unknown) => {
     const req = Value.Decode(DocCommitRequestSchema, raw);
-    const docId = ensureDocument(deps.project, deps.project.project.mainDocument);
+    const docId = req.documentId ?? mainDocId(deps.project);
     const seq = deps.project.revisions.commit(docId, req.splices, {
       actor: 'user',
       source: { kind: req.kind },
@@ -148,9 +171,14 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   /** Restore an earlier revision as a new revision (undo path, §8). */
   ipcMain.handle(DocChannels.restore, (_event, raw: unknown) => {
     const req = Value.Decode(DocRestoreRequestSchema, raw);
-    const docId = ensureDocument(deps.project, deps.project.project.mainDocument);
+    const docId = req.documentId ?? mainDocId(deps.project);
     const seq = deps.project.revisions.restore(docId, req.revision);
     return { seq };
+  });
+
+  ipcMain.handle(DocChannels.create, (_event, raw: unknown) => {
+    const req = Value.Decode(DocCreateRequestSchema, raw);
+    return createDocument(deps.project, req.name);
   });
 
   ipcMain.handle(PatchChannels.list, () => {

@@ -113,6 +113,7 @@ export type ConversationRequest = Static<typeof ConversationRequestSchema>;
 
 export const ChatChannels = {
   getOrCreateConversation: 'texeris:chat-get-or-create-conversation',
+  newConversation: 'texeris:chat-new-conversation',
   listMessages: 'texeris:chat-list-messages',
   listRuns: 'texeris:chat-list-runs',
   startTurn: 'texeris:chat-start-turn',

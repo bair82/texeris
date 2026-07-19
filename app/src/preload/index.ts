@@ -22,6 +22,7 @@ const api: TexerisApi = {
   chat: {
     getOrCreateConversation: () =>
       ipcRenderer.invoke(ChatChannels.getOrCreateConversation),
+    newConversation: () => ipcRenderer.invoke(ChatChannels.newConversation),
     listMessages: (conversationId) =>
       ipcRenderer.invoke(ChatChannels.listMessages, { conversationId }),
     listRuns: (conversationId) =>
@@ -40,10 +41,12 @@ const api: TexerisApi = {
   },
   doc: {
     list: () => ipcRenderer.invoke(DocChannels.list),
-    outline: () => ipcRenderer.invoke(DocChannels.outline),
-    getText: () => ipcRenderer.invoke(DocChannels.getText),
+    outline: (documentId) => ipcRenderer.invoke(DocChannels.outline, { documentId }),
+    getText: (documentId) => ipcRenderer.invoke(DocChannels.getText, { documentId }),
     commit: (request) => ipcRenderer.invoke(DocChannels.commit, request),
-    restore: (revision) => ipcRenderer.invoke(DocChannels.restore, { revision }),
+    restore: (revision, documentId) =>
+      ipcRenderer.invoke(DocChannels.restore, { revision, documentId }),
+    create: (name) => ipcRenderer.invoke(DocChannels.create, { name }),
     onEvent: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
         callback(payload as DocEvent);
