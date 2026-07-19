@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { Editor } from '@tiptap/core';
 import type { DocumentInfo } from '../../../shared/domain-types';
 import type { EditorMode, EditorSession } from './session';
 import { RawSession, RenderedSession } from './session';
@@ -7,6 +8,7 @@ import {
   registerReloadHandler,
   registerSelectionGetter,
 } from './editorBridge';
+import Toolbar from './Toolbar';
 
 type SaveState = 'loading' | 'saved' | 'dirty' | 'saving' | 'error';
 
@@ -33,6 +35,7 @@ export default function EditorRegion() {
   const [saveState, setSaveState] = useState<SaveState>('loading');
   const [notice, setNotice] = useState<EditorNotice | null>(null);
   const [newDocName, setNewDocName] = useState<string | null>(null);
+  const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
   const dirtyRef = useRef(false);
   const openDocIdRef = useRef<string | null>(null);
   openDocIdRef.current = openDocId;
@@ -80,6 +83,7 @@ export default function EditorRegion() {
       const session = forMode === 'rendered' ? new RenderedSession(Options) : new RawSession(Options);
       session.mount(host);
       sessionRef.current = session;
+      setActiveEditor(session instanceof RenderedSession ? session.getEditor() : null);
     },
     [],
   );
@@ -248,8 +252,8 @@ export default function EditorRegion() {
           </span>
         )}
       </div>
-      <div className="editor-host" ref={hostRef} />
-      {notice && (
+      {activeEditor && <Toolbar editor={activeEditor} />}
+      <div className="editor-host" ref={hostRef} />      {notice && (
         <p className="editor-notice" onClick={() => setNotice(null)}>
           {notice.text}
           {notice.actionLabel && (

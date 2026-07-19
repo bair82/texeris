@@ -176,6 +176,11 @@ export class RenderedSession implements EditorSession {
     return markdownOut(this.editor.getJSON() as PMNodeJSON);
   }
 
+  /** The underlying Tiptap editor (toolbar commands). */
+  getEditor(): Editor {
+    return this.editor;
+  }
+
   flush(): void {
     this.accumulator.flush();
   }

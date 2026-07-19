@@ -134,6 +134,57 @@ body {
   border-bottom: 1px solid #2a3a4a;
 }
 
+.toolbar {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  padding: 4px 12px;
+  border-bottom: 1px solid #2a3a4a;
+  flex-wrap: wrap;
+}
+
+.toolbar button {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #9ab;
+  padding: 3px 8px;
+  font-size: 13px;
+  cursor: pointer;
+  min-width: 28px;
+}
+
+.toolbar button:hover {
+  background: #16202b;
+}
+
+.toolbar button.active {
+  background: #245;
+  color: #fff;
+}
+
+.toolbar button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.toolbar-sep {
+  width: 1px;
+  height: 18px;
+  background: #2a3a4a;
+  margin: 0 6px;
+}
+
+.toolbar-link-form input {
+  background: #101820;
+  color: #dde;
+  border: 1px solid #2a3a4a;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 12px;
+  width: 200px;
+}
+
 .doc-select {
   background: #16202b;
   color: #cde;

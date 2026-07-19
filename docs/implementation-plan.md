@@ -424,6 +424,8 @@ cross-build dmg from Linux.
 - Documents: switcher + new-document creation; `doc:*` channels take
   `documentId`; watcher covers all registered documents. Conversations:
   "new chat" starts a fresh conversation (old ones stay in storage).
+- Rendered mode: formatting toolbar (bold/italic/strike/code, H1–H3,
+  lists, blockquote, table, link, undo/redo) for Word-style workflows.
 - Raw-mode caret: visible after a specificity battle with CodeMirror's
   injected base theme; `drawSelection` as belt and braces.
 
