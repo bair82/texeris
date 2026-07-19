@@ -95,6 +95,11 @@ body {
   background: transparent;
 }
 
+.cm-raw .cm-content {
+  caret-color: #dde;
+  color: #dde;
+}
+
 .cm-raw .cm-gutters {
   background: #0d141c;
   color: #44566a;
