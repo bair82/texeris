@@ -33,6 +33,7 @@ async function launchApp(projectDir) {
       TEXERIS_FAUX_PATCH: '1',
       TEXERIS_PROJECT_DIR: projectDir,
       ELECTRON_ENABLE_LOGGING: '1',
+      TEXERIS_SMOKE: '1',
     },
   });
   const wsUrl = await new Promise((resolve, reject) => {

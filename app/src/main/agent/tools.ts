@@ -4,6 +4,7 @@ import { Type } from '@earendil-works/pi-ai';
 import type { AgentTool } from '@earendil-works/pi-agent-core';
 import type { PatchService } from '../services/patch';
 import type { ProjectContext } from '../services/project';
+import { summarizeChangesSince } from './changes';
 import { extractHeadings, sliceSection } from './markdown';
 
 /**
@@ -17,8 +18,6 @@ import { extractHeadings, sliceSection } from './markdown';
  * Document reads return JSON — the model needs the exact `text` field to
  * compute patch offsets reliably.
  */
-
-const PREVIEW = 120;
 
 const ReadDocumentParams = Type.Object({
   documentId: Type.Optional(Type.String()),
@@ -37,14 +36,25 @@ const ReadChangesParams = Type.Object({
 const EmptyParams = Type.Object({});
 
 const TextChangeSchema = Type.Object({
-  from: Type.Integer({ minimum: 0 }),
-  to: Type.Integer({ minimum: 0 }),
+  from: Type.Optional(
+    Type.Integer({ minimum: 0, description: 'Optional; omit — the app locates expectedText itself' }),
+  ),
+  to: Type.Optional(Type.Integer({ minimum: 0 })),
   expectedText: Type.String({
-    description: 'The exact text currently at [from, to) — must match byte-for-byte',
+    description:
+      'The exact text to replace, quoted verbatim from the document (must match byte-for-byte)',
   }),
   insert: Type.String({ description: 'Replacement text (empty string deletes)' }),
-  prefixContext: Type.Optional(Type.String()),
-  suffixContext: Type.Optional(Type.String()),
+  prefixContext: Type.Optional(
+    Type.String({
+      description: 'Verbatim text right before the target; needed only when expectedText occurs more than once',
+    }),
+  ),
+  suffixContext: Type.Optional(
+    Type.String({
+      description: 'Verbatim text right after the target; needed only when expectedText occurs more than once',
+    }),
+  ),
 });
 
 const ProposePatchParams = Type.Object({
@@ -170,30 +180,9 @@ export function createAgentTools(
     parameters: ReadChangesParams,
     async execute(_id, params) {
       const docId = resolveDocId(params.documentId);
-      const rows = project.db
-        .prepare(
-          `SELECT c.seq, c.idx, c.deleted_text, c.inserted_text, r.actor, r.summary
-           FROM revision_changes c
-           JOIN revisions r ON r.document_id = c.document_id AND r.seq = c.seq
-           WHERE c.document_id = ? AND c.seq > ?
-           ORDER BY c.seq, c.idx`,
-        )
-        .all(docId, params.sinceRevision) as unknown as Array<{
-        seq: number;
-        idx: number;
-        deleted_text: string;
-        inserted_text: string;
-        actor: string;
-        summary: string;
-      }>;
-      const preview = (s: string) =>
-        s.length > PREVIEW ? `${s.slice(0, PREVIEW)}…(${s.length} chars)` : s;
-      const lines = rows.map(
-        (row) =>
-          `r${row.seq} [${row.actor}] -${JSON.stringify(preview(row.deleted_text))} +${JSON.stringify(preview(row.inserted_text))}`,
-      );
-      return textResult(lines.join('\n') || '(no changes since that revision)', {
-        changeCount: rows.length,
+      const summary = summarizeChangesSince(project.db, docId, params.sinceRevision);
+      return textResult(summary?.text ?? '(no changes since that revision)', {
+        changeCount: summary?.changeCount ?? 0,
       });
     },
   };
@@ -217,7 +206,7 @@ export function createAgentTools(
     name: 'propose_patch',
     label: 'Propose patch',
     description:
-      'Propose structured edits to a document. The ONLY way to change text. Offsets are 0-based character indices into the document text (the `text` field from read_document); expectedText must match the current text at [from, to) exactly. Changes are reviewed by the user before application — do not claim they are applied.',
+      'Propose structured edits to a document. The ONLY way to change text. For each change, quote the exact text to replace in expectedText — offsets are located for you; add prefixContext/suffixContext only if the quoted text occurs more than once. Changes are reviewed by the user before application — do not claim they are applied.',
     parameters: ProposePatchParams,
     async execute(_id, params) {
       const runContext = getRunContext();
@@ -232,10 +221,10 @@ export function createAgentTools(
         runContext ?? {},
       );
       if ('conflict' in result) {
-        // Expected outcome, not an error: the agent re-reads and regenerates.
+        // Expected outcome, not an error: the agent re-reads and adjusts.
         return jsonResult({
           conflict: result.conflict,
-          hint: 'the document changed under you or an anchor is wrong — call read_document and regenerate the patch',
+          hint: 'a change did not validate: quote expectedText exactly as it appears in the document (verbatim, including whitespace); if it occurs more than once, add prefixContext/suffixContext. Call read_document and regenerate if unsure.',
         });
       }
       return jsonResult({ patchId: result.patchId, status: 'proposed' });

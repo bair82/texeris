@@ -9,8 +9,13 @@ import type { TextSplice } from './domain-types';
  */
 
 export interface TextChange {
-  from: number;
-  to: number;
+  /**
+   * Optional offsets. Prefer omitting them: the application locates
+   * `expectedText` itself (uniquely, or disambiguated by context). When
+   * given, they must be exact — expectedText must match at [from, to).
+   */
+  from?: number;
+  to?: number;
   expectedText: string;
   insert: string;
   prefixContext?: string;
@@ -35,7 +40,10 @@ export type ConflictReason =
   | 'expected-text-mismatch'
   | 'context-mismatch'
   | 'overlapping-changes'
-  | 'empty-patch';
+  | 'empty-patch'
+  | 'anchor-not-found'
+  | 'anchor-ambiguous'
+  | 'anchor-missing';
 
 export interface PatchConflictItem {
   groupIdx: number;
@@ -54,7 +62,8 @@ export interface PatchGroupRecord {
   idx: number;
   explanation: string;
   status: PatchGroupStatus;
-  changes: TextChange[];
+  /** Stored changes always carry resolved offsets. */
+  changes: ResolvedTextChange[];
 }
 
 export interface PatchRecord {
@@ -70,6 +79,119 @@ export interface PatchRecord {
 }
 
 // ---------------------------------------------------------------------------
+// Anchor resolution (offset-free changes)
+// ---------------------------------------------------------------------------
+
+/** A change whose offsets are known (post-resolution, post-storage). */
+export type ResolvedTextChange = TextChange & { from: number; to: number };
+export type ResolvedPatchGroup = Omit<PatchGroupInput, 'changes'> & {
+  changes: ResolvedTextChange[];
+};
+
+function occurrencesOf(text: string, needle: string): number[] {
+  const out: number[] = [];
+  let i = text.indexOf(needle);
+  while (i !== -1) {
+    out.push(i);
+    i = text.indexOf(needle, i + 1);
+  }
+  return out;
+}
+
+/**
+ * Locate every change in the text: changes with explicit offsets pass
+ * through; offset-free changes are resolved by searching `expectedText`
+ * (uniquely, or disambiguated by prefix/suffix context). LLMs are bad at
+ * counting characters — anchors move that work to deterministic code.
+ */
+export function resolveAnchors(
+  text: string,
+  groups: readonly PatchGroupInput[],
+):
+  | { ok: true; groups: ResolvedPatchGroup[] }
+  | { ok: false; conflicts: PatchConflictItem[] } {
+  const conflicts: PatchConflictItem[] = [];
+  const resolved: ResolvedPatchGroup[] = groups.map((group, groupIdx) => ({
+    explanation: group.explanation,
+    changes: group.changes.map((change, changeIdx) => {
+      const conflict = (reason: ConflictReason, message: string): PatchConflictItem => ({
+        groupIdx,
+        changeIdx,
+        reason,
+        message,
+      });
+      if (change.from !== undefined && change.to !== undefined) {
+        return change as ResolvedTextChange;
+      }
+      if (change.expectedText === '') {
+        // pure insertion: needs a unique context anchor
+        if (change.prefixContext) {
+          const hits = occurrencesOf(text, change.prefixContext);
+          if (hits.length === 1) {
+            const at = hits[0] + change.prefixContext.length;
+            return { ...change, from: at, to: at };
+          }
+        }
+        if (change.suffixContext) {
+          const hits = occurrencesOf(text, change.suffixContext);
+          if (hits.length === 1) {
+            const at = hits[0];
+            return { ...change, from: at, to: at };
+          }
+        }
+        conflicts.push(
+          conflict(
+            'anchor-missing',
+            'pure insertion needs from/to or a unique prefixContext/suffixContext anchor',
+          ),
+        );
+        return { ...change, from: 0, to: 0 };
+      }
+      let hits = occurrencesOf(text, change.expectedText);
+      if (change.prefixContext) {
+        hits = hits.filter(
+          (h) =>
+            text.slice(Math.max(0, h - change.prefixContext!.length), h) ===
+            change.prefixContext,
+        );
+      }
+      if (change.suffixContext) {
+        hits = hits.filter(
+          (h) =>
+            text.slice(h + change.expectedText.length, h + change.expectedText.length + change.suffixContext!.length) ===
+            change.suffixContext,
+        );
+      }
+      if (hits.length === 0) {
+        conflicts.push(
+          conflict(
+            'anchor-not-found',
+            `expectedText ${JSON.stringify(change.expectedText.slice(0, 80))} not found` +
+              (change.prefixContext || change.suffixContext ? ' (with the given context)' : ''),
+          ),
+        );
+        return { ...change, from: 0, to: 0 };
+      }
+      if (hits.length > 1) {
+        conflicts.push(
+          conflict(
+            'anchor-ambiguous',
+            `expectedText ${JSON.stringify(change.expectedText.slice(0, 80))} matches ${hits.length} places — add prefixContext/suffixContext to disambiguate`,
+          ),
+        );
+        return { ...change, from: 0, to: 0 };
+      }
+      const from = hits[0];
+      return { ...change, from, to: from + change.expectedText.length };
+    }),
+  }));
+  if (conflicts.length > 0) {
+    return { ok: false, conflicts };
+  }
+  return { ok: true, groups: resolved };
+}
+
+// ---------------------------------------------------------------------------
 // Pure validation / application
 // ---------------------------------------------------------------------------
 
@@ -78,7 +200,7 @@ function checkChange(
   text: string,
   groupIdx: number,
   changeIdx: number,
-  change: TextChange,
+  change: ResolvedTextChange,
 ): PatchConflictItem | null {
   const actual = text.slice(change.from, change.to);
   if (actual !== change.expectedText) {
@@ -124,13 +246,13 @@ function checkChange(
  */
 export function validateGroups(
   text: string,
-  groups: readonly PatchGroupInput[],
+  groups: readonly ResolvedPatchGroup[],
 ): PatchConflictItem[] {
   const conflicts: PatchConflictItem[] = [];
   interface Flat {
     groupIdx: number;
     changeIdx: number;
-    change: TextChange;
+    change: ResolvedTextChange;
   }
   const flat: Flat[] = [];
   groups.forEach((group, groupIdx) => {
@@ -182,14 +304,14 @@ export type ApplyGroupsResult =
  */
 export function applyGroups(
   text: string,
-  groups: readonly PatchGroupInput[],
+  groups: readonly ResolvedPatchGroup[],
 ): ApplyGroupsResult {
   const conflicts = validateGroups(text, groups);
   if (conflicts.length > 0) {
     return { ok: false, conflicts };
   }
   interface Flat {
-    change: TextChange;
+    change: ResolvedTextChange;
   }
   const flat: Flat[] = groups.flatMap((group) =>
     group.changes.map((change) => ({ change })),

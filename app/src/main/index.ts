@@ -45,11 +45,14 @@ function assertNodeVersion(): void {
 }
 
 function createWindow(): void {
+  // Smoke runs (TEXERIS_SMOKE) stay hidden — never steal the user's focus.
+  const smoke = Boolean(process.env.TEXERIS_SMOKE);
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
     show: false,
     autoHideMenuBar: true,
+    skipTaskbar: smoke,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       sandbox: true,
@@ -58,9 +61,11 @@ function createWindow(): void {
     },
   });
 
-  win.on('ready-to-show', () => {
-    win.show();
-  });
+  if (!smoke) {
+    win.on('ready-to-show', () => {
+      win.show();
+    });
+  }
 
   // electron-vite exposes the dev server URL via this env var in dev mode.
   if (process.env.ELECTRON_RENDERER_URL) {

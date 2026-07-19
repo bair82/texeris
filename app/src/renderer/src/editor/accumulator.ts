@@ -11,7 +11,7 @@ import { minimalSplice } from '../../../shared/text-splice';
 import { firstChangedLine, lineDiff } from './lib/diff';
 
 /** Default idle period after which pending changes are flushed (§8). */
-export const IDLE_FLUSH_MS = 1000;
+export const IDLE_FLUSH_MS = 5000;
 
 export class ChangeAccumulator {
   private pending: TextSplice[] = [];

@@ -31,7 +31,12 @@ const check = (label, ok, detail = '') => {
 const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'texeris-settings-'));
 let proc;
 try {
-  const env = { ...process.env, TEXERIS_PROJECT_DIR: projectDir, ELECTRON_ENABLE_LOGGING: '1' };
+  const env = {
+    ...process.env,
+    TEXERIS_PROJECT_DIR: projectDir,
+    ELECTRON_ENABLE_LOGGING: '1',
+    TEXERIS_SMOKE: '1',
+  };
   delete env.DEEPSEEK_API_KEY;
   delete env.MOONSHOT_API_KEY;
   proc = spawn(ELECTRON, ['.', '--no-sandbox', '--remote-debugging-port=0'], { cwd: APP_DIR, env });

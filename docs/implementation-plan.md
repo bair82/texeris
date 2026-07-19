@@ -50,7 +50,7 @@ them.
 |---|----------|------------|
 | 1 | Canonical data | **File-centric hybrid** (owner decision 2026-07-18): Markdown files canonical; SQLite holds revisions, conversations, patches, indexes. |
 | 2 | Revision unit for patches | A **committed change group** = one revision: monotonically increasing integer per document + content hash. Agent patches declare the revision id of the text they were generated against. |
-| 3 | Minimum patch schema | Architecture §11.2 as implemented in the spike (`TextChange{from,to,expectedText,insert,prefixContext?,suffixContext?}` inside ordered `PatchGroup`s). |
+| 3 | Minimum patch schema | Architecture §11.2 as implemented in the spike (`TextChange{from,to,expectedText,insert,prefixContext?,suffixContext?}` inside ordered `PatchGroup`s). **2026-07-19:** `from`/`to` now optional — the app resolves anchors from `expectedText` (+ context); LLMs count offsets poorly. |
 | 4 | Agent tools (v1) | §10.2 — six read/propose tools; no fs, no shell, no web. |
 | 5 | Supported Markdown profile | Architecture §17.1 minus YAML metadata: ATX headings, emphasis/strong, lists, blockquotes, links, code spans/blocks, pipe tables, footnotes, Pandoc citations. Same profile as the spike. |
 | 6 | Model credentials | Development: `MOONSHOT_API_KEY` / `DEEPSEEK_API_KEY` env vars as fallback; **primary: settings UI storing keys via Electron `safeStorage`** (gnome-keyring on the dev box; landed 2026-07-19 with the settings panel). Linux needs `--password-store=gnome-libsecret` under Hyprland (auto-detect fails). Never in project files. |
@@ -169,9 +169,12 @@ feeds style learning and product signals (spec §18.1).
 
 ## 8. Revision engine (main process)
 
-Grouping rules v1 (from spike, tune after use): new revision on — 1000 ms
-idle after last change · paste · selection jump across a paragraph boundary ·
-applied patch · mode switch does **not** create one · restore/checkpoint does.
+Grouping rules v1 (from spike, tuned after first real use 2026-07-19): new
+revision on — **5 s** idle after last change (was 1 s; a typing burst is one
+revision) · paste · selection jump across a paragraph boundary ·
+applied patch · mode switch does **not** create one · restore/checkpoint
+does. (M2 candidate: compaction of long runs of consecutive typing
+revisions — snapshots already make it possible.)
 
 Commit flow: renderer sends grouped text changes → validate against current
 revision → apply to canonical text → atomic write → insert revision + change
@@ -276,8 +279,13 @@ Every run stores a **context manifest**: item list, char counts, base
 revision, truncation notices. Truncation v1: if the document exceeds the
 model budget — selection/section verbatim + full heading outline + explicit
 notice; UI shows when summarisation occurred (spec §11.5). Between turns the
-agent gets: current text of its scope + `read_revision_changes` summary
-since `baseRevision` of its last patch (spec §10.6).
+agent gets a **compact change summary since the last revision it saw**
+(previous run's manifest `baseRevision` → current), injected into the system
+prompt (`<recent-changes>`), plus "no changes" when nothing moved —
+implemented 2026-07-19. Rationale (owner feedback): edit groups and
+agent-facing diffs are separate concerns — user edits are stored
+fine-grained for history/undo (every group restorable); the agent only ever
+receives the diff since its last turn, so context stays small and on-task.
 
 ## 12. UI plan
 

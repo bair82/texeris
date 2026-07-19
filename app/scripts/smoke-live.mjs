@@ -38,7 +38,7 @@ function note(label, detail) {
 async function launchApp(projectDir) {
   const proc = spawn(ELECTRON, ['.', '--no-sandbox', '--remote-debugging-port=0'], {
     cwd: APP_DIR,
-    env: { ...process.env, TEXERIS_PROJECT_DIR: projectDir, ELECTRON_ENABLE_LOGGING: '1' },
+    env: { ...process.env, TEXERIS_PROJECT_DIR: projectDir, ELECTRON_ENABLE_LOGGING: '1', TEXERIS_SMOKE: '1' },
   });
   const wsUrl = await new Promise((resolve, reject) => {
     let buf = '';

@@ -10,6 +10,40 @@ import type {
   UsageSummary,
 } from '../../shared/chat-types';
 
+interface RunRow {
+  id: string;
+  conversation_id: string;
+  model_mode: string;
+  provider: string;
+  model: string;
+  status: string;
+  started_at: string;
+  ended_at: string | null;
+  usage_json: string | null;
+  context_manifest_json: string | null;
+  error_json: string | null;
+}
+
+function mapRun(row: RunRow): AgentRunRecord {
+  return {
+    id: row.id,
+    conversationId: row.conversation_id,
+    modelMode: row.model_mode as ModelMode,
+    provider: row.provider,
+    model: row.model,
+    status: row.status as RunStatus,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    usage: row.usage_json ? (JSON.parse(row.usage_json) as UsageSummary) : null,
+    manifest: row.context_manifest_json
+      ? (JSON.parse(row.context_manifest_json) as ContextManifest)
+      : null,
+    error: row.error_json
+      ? (JSON.parse(row.error_json) as { message: string }).message
+      : null,
+  };
+}
+
 /**
  * Conversation persistence (plan §10.4): one conversation per project in M1,
  * messages stored as verbatim Pi AgentMessage JSON so runs can be replayed
@@ -154,36 +188,20 @@ export class ConversationService {
                 started_at, ended_at, usage_json, context_manifest_json, error_json
          FROM agent_runs WHERE conversation_id = ? ORDER BY started_at`,
       )
-      .all(conversationId) as Array<{
-      id: string;
-      conversation_id: string;
-      model_mode: string;
-      provider: string;
-      model: string;
-      status: string;
-      started_at: string;
-      ended_at: string | null;
-      usage_json: string | null;
-      context_manifest_json: string | null;
-      error_json: string | null;
-    }>;
-    return rows.map((row) => ({
-      id: row.id,
-      conversationId: row.conversation_id,
-      modelMode: row.model_mode as ModelMode,
-      provider: row.provider,
-      model: row.model,
-      status: row.status as RunStatus,
-      startedAt: row.started_at,
-      endedAt: row.ended_at,
-      usage: row.usage_json ? (JSON.parse(row.usage_json) as UsageSummary) : null,
-      manifest: row.context_manifest_json
-        ? (JSON.parse(row.context_manifest_json) as ContextManifest)
-        : null,
-      error: row.error_json
-        ? (JSON.parse(row.error_json) as { message: string }).message
-        : null,
-    }));
+      .all(conversationId) as unknown as RunRow[];
+    return rows.map(mapRun);
+  }
+
+  /** The most recent run (by insertion order), for last-seen revision. */
+  latestRun(conversationId: string): AgentRunRecord | null {
+    const row = this.db
+      .prepare(
+        `SELECT id, conversation_id, model_mode, provider, model, status,
+                started_at, ended_at, usage_json, context_manifest_json, error_json
+         FROM agent_runs WHERE conversation_id = ? ORDER BY rowid DESC LIMIT 1`,
+      )
+      .get(conversationId) as RunRow | undefined;
+    return row ? mapRun(row) : null;
   }
 }
 

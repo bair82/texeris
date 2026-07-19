@@ -9,6 +9,7 @@ import type {
 } from '../../shared/chat-types';
 import type { HeadingInfo } from '../../shared/doc-types';
 import { getEditorSelection } from './editor/editorBridge';
+import MarkdownView from './MarkdownView';
 
 interface StreamingState {
   runId: string;
@@ -97,6 +98,8 @@ export default function ChatPanel() {
       }
       try {
         setHeadings(await window.texeris.doc.outline());
+        // Echo the user's message immediately — the run may take a while.
+        setMessages((m) => [...m, { seq: -Date.now(), role: 'user', text: turn.text }]);
         await window.texeris.chat.startTurn({ conversationId, ...turn });
         setLastTurn(turn);
       } catch (err) {
@@ -213,13 +216,18 @@ export default function ChatPanel() {
                 {m.isError ? '⚠' : '⚙'} {m.toolName}
               </span>
             ) : (
-              <p>{m.text}</p>
+              <MarkdownView text={m.text} />
             )}
           </div>
         ))}
         {streaming && (
           <div className="msg msg-assistant streaming">
-            {streaming.thinking && <p className="thinking">{streaming.thinking}</p>}
+            {streaming.thinking && (
+              <details className="thinking">
+                <summary>Reasoning</summary>
+                <p>{streaming.thinking}</p>
+              </details>
+            )}
             {streaming.tools.map((t) => (
               <span key={t.toolCallId} className="tool-chip">
                 {t.isError === undefined ? '…' : t.isError ? '⚠' : '⚙'} {t.toolName}

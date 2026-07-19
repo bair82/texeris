@@ -14,6 +14,8 @@ import type { ConversationService } from '../services/conversation';
 import type { PatchService } from '../services/patch';
 import type { ProjectContext } from '../services/project';
 import type { WorkspaceConfig } from '../services/settings';
+import type { ChangeSummary } from './changes';
+import { summarizeChangesSince } from './changes';
 import { assembleContext, buildSystemPrompt } from './context';
 import { createAgentTools } from './tools';
 
@@ -112,10 +114,31 @@ export class PiAgentRuntime implements AgentRuntime {
 
     const agent = this.agentFor(input.conversationId, model);
     if (agent.state.isStreaming) {
-      throw new Error('a turn is already in progress for this conversation');
+      const stillActive = [...this.runs.values()].some(
+        (r) => r.conversationId === input.conversationId,
+      );
+      if (stillActive) {
+        throw new Error('a turn is already in progress for this conversation');
+      }
+      // Our run map cleared at agent_end; the agent may still be settling
+      // listeners — wait for that, then proceed.
+      await agent.waitForIdle();
     }
     // Refresh per-turn state: context-bearing system prompt + model mode.
-    agent.state.systemPrompt = buildSystemPrompt(assembled);
+    // Between turns the agent gets a compact diff of what changed since the
+    // last revision it saw (plan §11) — not a blind full re-read.
+    const lastRun = this.options.conversations.latestRun(input.conversationId);
+    const lastSeen =
+      lastRun?.manifest?.documentId === assembled.manifest.documentId
+        ? lastRun.manifest.baseRevision
+        : undefined;
+    let changeSummary: ChangeSummary | 'unchanged' | null = null;
+    if (lastSeen !== undefined) {
+      changeSummary =
+        summarizeChangesSince(project.db, assembled.manifest.documentId, lastSeen) ??
+        'unchanged';
+    }
+    agent.state.systemPrompt = buildSystemPrompt(assembled, changeSummary);
     agent.state.model = model;
 
     const runId = this.options.conversations.startRun({

@@ -22,6 +22,7 @@ const proc = spawn(BIN, ['--no-sandbox', '--remote-debugging-port=0'], {
     TEXERIS_FAUX_PROVIDER: '1',
     TEXERIS_PROJECT_DIR: projectDir,
     ELECTRON_ENABLE_LOGGING: '1',
+      TEXERIS_SMOKE: '1',
   },
 });
 

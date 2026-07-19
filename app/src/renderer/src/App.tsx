@@ -25,7 +25,7 @@ export default function App() {
       <footer className="app-footer">
         {info && `Texeris · Electron ${info.electronVersion} · Node ${info.nodeVersion}`}
         <button className="settings-button" onClick={() => setShowSettings(true)}>
-          settings
+          ⚙ Settings
         </button>
       </footer>
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}

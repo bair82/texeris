@@ -34,6 +34,7 @@ try {
     TEXERIS_PROJECT_DIR: projectDir,
     XDG_CONFIG_HOME: configDir,
     ELECTRON_ENABLE_LOGGING: '1',
+      TEXERIS_SMOKE: '1',
   };
   delete env.DEEPSEEK_API_KEY;
   delete env.MOONSHOT_API_KEY;

@@ -35,6 +35,7 @@ async function launchApp(projectDir) {
       TEXERIS_FAUX_PROVIDER: '1',
       TEXERIS_PROJECT_DIR: projectDir,
       ELECTRON_ENABLE_LOGGING: '1',
+      TEXERIS_SMOKE: '1',
     },
   });
   const wsUrl = await new Promise((resolve, reject) => {
@@ -148,7 +149,7 @@ try {
   await waitFor(cdp, `!!document.querySelector('.tiptap-rendered')`, 'rendered editor never mounted');
   await evaluate(cdp, FOCUS_END_JS);
   await cdp.send('Input.insertText', { text: '\n\nTyped by the smoke test.' });
-  await sleep(2200); // idle flush (1s) + commit
+  await sleep(6500); // idle flush (5s) + commit
   const afterType = await evaluate(cdp, 'window.texeris.doc.getText()');
   check(
     'typing in rendered mode committed a revision',
@@ -171,7 +172,7 @@ try {
   // type in raw mode too
   await evaluate(cdp, FOCUS_END_JS);
   await cdp.send('Input.insertText', { text: '\n\nRaw edit.' });
-  await sleep(2200);
+  await sleep(6500);
   const afterRaw = await evaluate(cdp, 'window.texeris.doc.getText()');
   check(
     'typing in raw mode committed a revision',

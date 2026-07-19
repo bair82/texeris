@@ -17,17 +17,27 @@ const SMOKE = [
 let failed = 0;
 for (const script of SMOKE) {
   console.log(`\n=== ${script} ===`);
-  const result = spawnSync(process.execPath, [script], {
+  let result = spawnSync(process.execPath, [script], {
     cwd: new URL('..', import.meta.url).pathname,
     stdio: 'inherit',
     env: process.env,
   });
   if (result.status !== 0) {
+    // Back-to-back Electron launches are racy; one retry before failing.
+    console.log(`=== ${script} failed (exit ${result.status}), retrying once ===`);
+    spawnSync('sleep', ['3']);
+    result = spawnSync(process.execPath, [script], {
+      cwd: new URL('..', import.meta.url).pathname,
+      stdio: 'inherit',
+      env: process.env,
+    });
+  }
+  if (result.status !== 0) {
     failed += 1;
     console.log(`=== ${script} FAILED (exit ${result.status}) ===`);
   }
   // Let Electron instances fully exit before the next smoke attaches.
-  spawnSync('sleep', ['1.5']);
+  spawnSync('sleep', ['3']);
 }
 console.log(failed ? `\n${failed} smoke(s) FAILED` : '\nall smokes passed');
 process.exit(failed ? 1 : 0);

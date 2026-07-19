@@ -6,6 +6,7 @@ import type {
 } from '../../shared/chat-types';
 import type { ProjectContext } from '../services/project';
 import { ensureDocument } from '../services/project';
+import type { ChangeSummary } from './changes';
 import { extractHeadings, sliceSection } from './markdown';
 
 /**
@@ -115,13 +116,28 @@ function renderOutline(outline: ReturnType<typeof extractHeadings>): string {
   return outline.map((h) => `${'  '.repeat(h.level - 1)}- ${h.text}`).join('\n');
 }
 
-export function buildSystemPrompt(assembled: AssembledContext): string {
-  return [
+export function buildSystemPrompt(
+  assembled: AssembledContext,
+  changeSummary: ChangeSummary | 'unchanged' | null = null,
+): string {
+  const parts = [
     'You are Texeris, an editorial collaborator embedded in the user’s academic writing workspace.',
     'You answer questions about the manuscript and help revise it.',
     'The current document context is below. Use the read tools when you need text outside this context, and read_revision_changes to see what changed recently.',
-    'To change text, call propose_patch with structured changes against a base revision — the user reviews every group before anything is applied. Offsets are 0-based character indices into the document text; expectedText must match exactly. Never claim your changes are applied; they are proposals.',
-    '',
-    assembled.contextText,
-  ].join('\n');
+    'To change text, call propose_patch: for each change, quote the exact text to replace in expectedText — the application locates it (add prefixContext/suffixContext only if the quote is not unique). The user reviews every group before anything is applied. Never claim your changes are applied; they are proposals.',
+  ];
+  if (changeSummary === 'unchanged') {
+    parts.push(
+      '<recent-changes>No changes since you last saw the document.</recent-changes>',
+    );
+  } else if (changeSummary) {
+    parts.push(
+      `<recent-changes since-revision="${changeSummary.fromRevision}" current-revision="${changeSummary.toRevision}">`,
+      'Edits made since you last saw the document:',
+      changeSummary.text,
+      '</recent-changes>',
+    );
+  }
+  parts.push('', assembled.contextText);
+  return parts.join('\n');
 }

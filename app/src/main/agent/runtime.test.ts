@@ -231,6 +231,51 @@ describe('PiAgentRuntime', () => {
     expect(agentRev?.source).toMatchObject({ kind: 'patch', patchId: proposed[0].id });
   });
 
+  it('injects a compact change summary between turns (last-seen revision)', async () => {
+    const seenPrompts: string[] = [];
+    faux.setResponses([
+      (context) => {
+        seenPrompts.push(context.systemPrompt ?? '');
+        return fauxAssistantMessage('first answer');
+      },
+      (context) => {
+        seenPrompts.push(context.systemPrompt ?? '');
+        return fauxAssistantMessage('second answer');
+      },
+    ]);
+
+    const first = await runtime.startTurn({
+      conversationId,
+      text: 'first question',
+      mode: 'fast',
+      scope: { kind: 'document' },
+    });
+    await drain(first.runId);
+
+    // user edits between turns: quick → slow (rev 1 → 2)
+    const docId = ensureDocument(ctx, 'manuscript.md');
+    ctx.revisions.commit(
+      docId,
+      [{ from: 13, to: 18, deletedText: 'quick', insertedText: 'slow' }],
+      { actor: 'user', source: { kind: 'typing' } },
+    );
+
+    const second = await runtime.startTurn({
+      conversationId,
+      text: 'second question',
+      mode: 'fast',
+      scope: { kind: 'document' },
+    });
+    await drain(second.runId);
+
+    expect(seenPrompts).toHaveLength(2);
+    // first turn: no previous run → no recent-changes section
+    expect(seenPrompts[0]).not.toContain('<recent-changes');
+    // second turn: compact diff of what changed since the agent last looked
+    expect(seenPrompts[1]).toContain('<recent-changes since-revision="1" current-revision="2">');
+    expect(seenPrompts[1]).toContain('+"slow"');
+  });
+
   it('rejects a second turn while one is running', async () => {
     const slow = fauxProvider({ models: [{ id: 'faux-model' }], tokensPerSecond: 1 });
     const models = createModels();

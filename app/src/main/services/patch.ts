@@ -6,9 +6,9 @@ import type {
   PatchRecord,
   PatchStatus,
   ProposePatchInput,
-  TextChange,
+  ResolvedTextChange,
 } from '../../shared/patch-types';
-import { applyGroups, validateGroups } from '../../shared/patch-types';
+import { applyGroups, resolveAnchors, validateGroups } from '../../shared/patch-types';
 import type { RevisionService } from './revision';
 
 /**
@@ -23,7 +23,10 @@ import type { RevisionService } from './revision';
  * already-applied changes located before them (partial acceptance across
  * multiple transactions).
  */
-function shiftChanges(changes: TextChange[], applied: TextChange[]): TextChange[] {
+function shiftChanges(
+  changes: ResolvedTextChange[],
+  applied: ResolvedTextChange[],
+): ResolvedTextChange[] {
   if (applied.length === 0) {
     return changes;
   }
@@ -64,7 +67,12 @@ export class PatchService {
       };
     }
     const text = this.revisions.getCurrentText(input.documentId);
-    const conflicts = validateGroups(text, input.groups);
+    const resolved = resolveAnchors(text, input.groups);
+    if (!resolved.ok) {
+      return { conflict: resolved.conflicts };
+    }
+    const resolvedGroups = resolved.groups;
+    const conflicts = validateGroups(text, resolvedGroups);
     if (conflicts.length > 0) {
       return { conflict: conflicts };
     }
@@ -96,7 +104,7 @@ export class PatchService {
             prefix_context, suffix_context)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
-      input.groups.forEach((group, groupIdx) => {
+      resolvedGroups.forEach((group, groupIdx) => {
         const groupId = randomUUID();
         insertGroup.run(groupId, patchId, groupIdx, group.explanation, 'pending');
         group.changes.forEach((change, changeIdx) => {
@@ -170,8 +178,8 @@ export class PatchService {
           prefix_context: string | null;
           suffix_context: string | null;
         }>
-      ).map((change): TextChange => {
-        const out: TextChange = {
+      ).map((change): ResolvedTextChange => {
+        const out: ResolvedTextChange = {
           from: change.from_off,
           to: change.to_off,
           expectedText: change.expected_text,
