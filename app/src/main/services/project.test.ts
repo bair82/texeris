@@ -1,0 +1,102 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+  createProject,
+  ensureDocument,
+  openProject,
+  PROJECT_FORMAT_VERSION,
+  type ProjectContext,
+} from './project';
+
+let root: string;
+const created: ProjectContext[] = [];
+
+beforeEach(() => {
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'texeris-proj-'));
+});
+
+afterEach(() => {
+  while (created.length) {
+    created.pop()?.db.close();
+  }
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+function create(): ProjectContext {
+  const ctx = createProject(root);
+  created.push(ctx);
+  return ctx;
+}
+
+describe('createProject', () => {
+  it('creates .texeris/project.json, history.sqlite and the main document', () => {
+    const ctx = create();
+    expect(ctx.project.formatVersion).toBe(PROJECT_FORMAT_VERSION);
+    expect(ctx.project.projectId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(fs.existsSync(path.join(root, '.texeris', 'project.json'))).toBe(true);
+    expect(fs.existsSync(path.join(root, '.texeris', 'history.sqlite'))).toBe(true);
+    expect(fs.readFileSync(path.join(root, 'manuscript.md'), 'utf8')).toBe('');
+    expect(ensureDocument(ctx, 'manuscript.md')).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('refuses to create over an existing project', () => {
+    create();
+    expect(() => createProject(root)).toThrow(/already exists/);
+  });
+});
+
+describe('openProject', () => {
+  it('reopens the same project identity', () => {
+    const ctx = create();
+    const reopened = openProject(root);
+    created.push(reopened);
+    expect(reopened.project.projectId).toBe(ctx.project.projectId);
+  });
+
+  it('rejects an unknown format version', () => {
+    create();
+    const file = path.join(root, '.texeris', 'project.json');
+    const json = JSON.parse(fs.readFileSync(file, 'utf8')) as { formatVersion: number };
+    json.formatVersion = 99;
+    fs.writeFileSync(file, JSON.stringify(json));
+    expect(() => openProject(root)).toThrow(/format version 99/);
+  });
+
+  it('cleans orphan tmp files and never chooses them as content', () => {
+    const ctx = create();
+    const docId = ensureDocument(ctx, 'manuscript.md');
+    ctx.revisions.commit(docId, [{ from: 0, to: 0, deletedText: '', insertedText: 'safe' }], {
+      actor: 'user',
+      source: { kind: 'typing' },
+    });
+    // simulate an interrupted atomic write
+    fs.writeFileSync(path.join(root, 'manuscript.md.texeris-tmp-1234-0'), 'partial!');
+
+    const reopened = openProject(root);
+    created.push(reopened);
+    expect(fs.existsSync(path.join(root, 'manuscript.md.texeris-tmp-1234-0'))).toBe(false);
+    expect(fs.readFileSync(path.join(root, 'manuscript.md'), 'utf8')).toBe('safe');
+    expect(reopened.revisions.getCurrentRevision(docId)).toBe(1);
+  });
+
+  it('imports edits made while the app was closed as external revisions', () => {
+    const ctx = create();
+    const docId = ensureDocument(ctx, 'manuscript.md');
+    ctx.revisions.commit(docId, [{ from: 0, to: 0, deletedText: '', insertedText: 'draft' }], {
+      actor: 'user',
+      source: { kind: 'typing' },
+    });
+    ctx.db.close();
+    created.length = 0;
+    fs.writeFileSync(path.join(root, 'manuscript.md'), 'draft edited elsewhere');
+
+    const reopened = openProject(root);
+    created.push(reopened);
+    expect(reopened.revisions.getCurrentRevision(docId)).toBe(2);
+    expect(reopened.revisions.getTextAt(docId, 2)).toBe('draft edited elsewhere');
+    const latest = reopened.revisions.listRevisions(docId)[0];
+    expect(latest.actor).toBe('external');
+  });
+});

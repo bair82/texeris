@@ -1,0 +1,211 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type {
+  ContextManifest,
+  ContextScope,
+  ModelMode,
+  NormalizedAgentEvent,
+  UiMessage,
+} from '../../shared/chat-types';
+import type { HeadingInfo } from '../../shared/doc-types';
+import { getEditorSelection } from './editor/editorBridge';
+
+interface StreamingState {
+  runId: string;
+  text: string;
+  thinking: string;
+  tools: Array<{ toolCallId: string; toolName: string; isError?: boolean }>;
+}
+
+export default function ChatPanel() {
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<UiMessage[]>([]);
+  const [headings, setHeadings] = useState<HeadingInfo[]>([]);
+  const [mode, setMode] = useState<ModelMode>('fast');
+  const [scope, setScope] = useState<ContextScope>({ kind: 'document' });
+  const [input, setInput] = useState('');
+  const [streaming, setStreaming] = useState<StreamingState | null>(null);
+  const [manifest, setManifest] = useState<ContextManifest | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const { conversationId: id } = await window.texeris.chat.getOrCreateConversation();
+      setConversationId(id);
+      setMessages(await window.texeris.chat.listMessages(id));
+      setHeadings(await window.texeris.doc.outline());
+    })();
+  }, []);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, streaming]);
+
+  useEffect(() => {
+    return window.texeris.chat.onEvent((event: NormalizedAgentEvent) => {
+      if (event.type === 'run_start') {
+        setStreaming({ runId: event.runId, text: '', thinking: '', tools: [] });
+        setError(null);
+      } else if (event.type === 'text_delta') {
+        setStreaming((s) => (s ? { ...s, text: s.text + event.delta } : s));
+      } else if (event.type === 'thinking_delta') {
+        setStreaming((s) => (s ? { ...s, thinking: s.thinking + event.delta } : s));
+      } else if (event.type === 'tool_start') {
+        setStreaming((s) =>
+          s ? { ...s, tools: [...s.tools, { toolCallId: event.toolCallId, toolName: event.toolName }] } : s,
+        );
+      } else if (event.type === 'tool_end') {
+        setStreaming((s) =>
+          s
+            ? {
+                ...s,
+                tools: s.tools.map((t) =>
+                  t.toolCallId === event.toolCallId ? { ...t, isError: event.isError } : t,
+                ),
+              }
+            : s,
+        );
+      } else if (event.type === 'run_end') {
+        setManifest(event.manifest);
+        if (event.status === 'error') {
+          setError(event.errorMessage ?? 'unknown error');
+        }
+        setStreaming(null);
+        if (conversationId) {
+          void window.texeris.chat.listMessages(conversationId).then(setMessages);
+        }
+      }
+    });
+  }, [conversationId]);
+
+  const send = useCallback(async () => {
+    if (!conversationId || !input.trim() || streaming) {
+      return;
+    }
+    const text = input.trim();
+    let effectiveScope = scope;
+    if (scope.kind === 'selection') {
+      const selection = getEditorSelection();
+      if (!selection) {
+        setError('no active editor selection — select some text first');
+        return;
+      }
+      effectiveScope = { kind: 'selection', ...selection };
+    }
+    setInput('');
+    setHeadings(await window.texeris.doc.outline());
+    try {
+      await window.texeris.chat.startTurn({
+        conversationId,
+        text,
+        mode,
+        scope: effectiveScope,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [conversationId, input, streaming, mode, scope]);
+
+  const cancel = useCallback(() => {
+    if (streaming) {
+      void window.texeris.chat.cancel(streaming.runId);
+    }
+  }, [streaming]);
+
+  return (
+    <section className="chat">
+      <header className="chat-controls">
+        <div className="toggle-group" title="Model mode">
+          {(['fast', 'deep'] as const).map((m) => (
+            <button
+              key={m}
+              className={mode === m ? 'active' : ''}
+              onClick={() => setMode(m)}
+            >
+              {m === 'fast' ? 'Fast' : 'Deep'}
+            </button>
+          ))}
+        </div>
+        <select
+          className="scope-select"
+          title="Context scope"
+          value={scope.kind === 'section' ? `section:${scope.heading}` : scope.kind}
+          onChange={(e) => {
+            const value = e.target.value;
+            setScope(
+              value === 'document'
+                ? { kind: 'document' }
+                : value === 'selection'
+                  ? { kind: 'selection', from: 0, to: 0 }
+                  : { kind: 'section', heading: value.slice('section:'.length) },
+            );
+          }}
+        >
+          <option value="document">Document</option>
+          <option value="selection">Selection</option>
+          {headings.map((h) => (
+            <option key={`${h.line}:${h.text}`} value={`section:${h.text}`}>
+              {' '.repeat(h.level)}§ {h.text}
+            </option>
+          ))}
+        </select>
+        {manifest && (
+          <span className="manifest-chip" title={manifest.notices.join('\n')}>
+            {manifest.scope.kind} · rev {manifest.baseRevision} ·{' '}
+            {manifest.items.reduce((n, i) => n + i.chars, 0)} chars
+            {manifest.truncated ? ' · truncated' : ''}
+          </span>
+        )}
+      </header>
+
+      <div className="chat-messages">
+        {messages.map((m) => (
+          <div key={m.seq} className={`msg msg-${m.role}`}>
+            {m.role === 'tool' ? (
+              <span className="tool-chip">
+                {m.isError ? '⚠' : '⚙'} {m.toolName}
+              </span>
+            ) : (
+              <p>{m.text}</p>
+            )}
+          </div>
+        ))}
+        {streaming && (
+          <div className="msg msg-assistant streaming">
+            {streaming.thinking && <p className="thinking">{streaming.thinking}</p>}
+            {streaming.tools.map((t) => (
+              <span key={t.toolCallId} className="tool-chip">
+                {t.isError === undefined ? '…' : t.isError ? '⚠' : '⚙'} {t.toolName}
+              </span>
+            ))}
+            <p>{streaming.text || ' '}</p>
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      {error && <p className="chat-error">{error}</p>}
+
+      <footer className="chat-input">
+        <textarea
+          value={input}
+          placeholder="Ask about the manuscript…"
+          rows={3}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              void send();
+            }
+          }}
+        />
+        {streaming ? (
+          <button onClick={cancel}>Cancel</button>
+        ) : (
+          <button onClick={() => void send()} disabled={!input.trim()}>
+            Send ⌘⏎
+          </button>
+        )}
+      </footer>
+    </section>
+  );
+}

@@ -1,2 +1,9 @@
 packages:
+  - "app"
   - "spikes/*"
+
+allowBuilds:
+  '@google/genai': false
+  electron: true
+  esbuild: true
+  protobufjs: false
