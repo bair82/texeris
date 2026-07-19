@@ -4,6 +4,11 @@ Disposable prototype. Its only job is to let the developer **feel and compare**
 two rendered-editing approaches over the same academic Markdown material, then
 choose one for the real app. Code here is throwaway: readable, but not hardened.
 
+**Outcome (2026-07-19): Tiptap chosen** — recorded as decision D0 in
+`docs/implementation-plan.md` §5. This spike is kept for reference; the real
+editor is ported (not imported) per the plan, with the D0 feedback on patch
+visuals and citation styling applied.
+
 ## What it is deciding
 
 Texeris' canonical document format is Pandoc-oriented Markdown. Two candidate

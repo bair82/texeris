@@ -292,6 +292,8 @@ Do not settle this choice from architectural preference alone. Build a small dis
 
 Test the spike with the actual user. Prefer CodeMirror if its rendered mode feels sufficiently natural, because it keeps Markdown, revisions, and patches simple. Prefer ProseMirror/Tiptap if the CodeMirror version still feels materially like editing source code.
 
+**Outcome (2026-07-19):** the spike (`spikes/editor/`) was built for both approaches and evaluated by the user. **Tiptap was chosen** — the CodeMirror rendered layer still felt like editing source (most visibly, tables never render as tables), while Tiptap felt like a document editor. The Markdown⇄ProseMirror round trip is the accepted cost: the spike demonstrated byte-exact round trips for the supported profile, guarded going forward by round-trip tests over golden samples and a normalization warn badge. Two pieces of evaluation feedback carry into the product: patch review needs an obvious visual indication of what changes where, plus reversibility of accepted patches; and rendered citations should be text-like, tinted, and editable rather than opaque pill widgets.
+
 Whichever implementation is chosen, put it behind an internal editor adapter. The rest of the application should consume concepts such as current canonical text, selection, transaction/change events, decorations, commands, and patch application rather than importing one editor library throughout the codebase.
 
 Monaco remains a possible source-mode or diff-view component, but is likely too code-oriented for the default writing surface. A custom `contenteditable` implementation is not recommended because cursor, selection, undo, composition, accessibility, and cross-platform behaviour become product-sized problems.
@@ -550,7 +552,7 @@ Begin with the simplest reliable implementation. Storage efficiency is unlikely 
 
 ## 10.1 Editor transaction capture
 
-The selected editor should expose transactions or normalized change events that the application can group into revisions. CodeMirror provides text transactions and change descriptions directly; ProseMirror/Tiptap provides document transactions that would need to be translated into canonical Markdown changes or another stable revision representation.
+The selected editor should expose transactions or normalized change events that the application can group into revisions. CodeMirror provides text transactions and change descriptions directly; ProseMirror/Tiptap provides document transactions that would need to be translated into canonical Markdown changes or another stable revision representation. With Tiptap selected (§6.2), the spike-proven approach is to serialize and line-diff at group-commit time rather than per keystroke: PM steps do not map to Markdown ranges, and an O(document) diff per revision group is acceptable at manuscript scale.
 
 Possible grouping signals:
 
@@ -1485,7 +1487,7 @@ Build macOS artifacts on macOS runners and Linux artifacts on Linux runners. Do 
 
 Answer narrow risks with disposable prototypes:
 
-- A rendered-editor spike comparing CodeMirror live rendering with ProseMirror/Tiptap, including raw-mode switching and revision capture.
+- A rendered-editor spike comparing CodeMirror live rendering with ProseMirror/Tiptap, including raw-mode switching and revision capture. (Done — chose Tiptap; see §6.2.)
 - AI-generated patch application against a base revision.
 - Pi SDK streaming inside Electron.
 - Pandoc DOCX export with footnotes and citations.
@@ -1561,7 +1563,7 @@ A practical default stack, subject to developer preference and spikes:
 - **Desktop shell:** Electron.
 - **Language:** TypeScript.
 - **UI:** React or another familiar web UI framework.
-- **Editor:** choose after a focused spike between CodeMirror 6 live rendering and ProseMirror/Tiptap rendered editing; use an editor adapter and retain a complete raw Markdown mode.
+- **Editor:** Tiptap (ProseMirror) for rendered mode, chosen via the Milestone 0 spike (§6.2); CodeMirror 6 for raw mode; behind an editor adapter, with a complete raw Markdown mode retained.
 - **Local database:** SQLite with FTS5.
 - **Canonical writing format:** Pandoc-oriented Markdown.
 - **References:** CSL JSON-compatible records and Pandoc citation keys.

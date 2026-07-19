@@ -1,7 +1,7 @@
 # Texeris — Implementation Plan: Milestone 1
 
-**Status:** Draft. Editor-dependent sections are marked **CM** / **PM** and stay
-conditional until decision D0 (spike evaluation) is recorded.
+**Status:** Draft. Decision D0 recorded 2026-07-19 (§5): **Tiptap / PM
+variant.** CM-variant notes remain for context only.
 **Feeds into:** Milestones 2–3 sketched in §16.
 
 ---
@@ -59,19 +59,27 @@ them.
 | 9 | Workspace vs project data | Workspace: platform config dir (`~/.config/texeris`, `~/Library/Application Support/texeris`) — `config.json` (model modes), later style profile + archive index. Project: user folder with `.texeris/` (history DB, cache). |
 | 10 | Recoverable autosave | Every revision commit triggers atomic file write (tmp + rename). DB keeps change records + periodic snapshots. Startup reconciles hash mismatches; incomplete tmp writes are cleaned, never silently chosen. |
 
-## 5. Pending decision D0: editor
+## 5. Decision D0: editor — resolved: **Tiptap (ProseMirror)**
 
-Gate before WP2. The owner evaluates `spikes/editor/` against its checklist
-(cursor/selection/deletion near hidden syntax, copy/paste, IME, tables,
-footnotes, mode switching, patch feel). Record the outcome in this section.
+Evaluated by the owner against the spike checklist on 2026-07-19. CM6's
+live-render mode still felt like editing source — most visibly, pipe tables
+never become real tables — while Tiptap's rendered mode felt like a document
+editor. The round-trip boundary is accepted and guarded (§13 PM variant,
+§17). Spike answers recorded: live render survives the full Markdown profile
+(both samples round-trip byte-for-byte, enforced by tests), and Tiptap
+normalization only bites on non-canonical source formatting (cases
+enumerated in the spike README).
 
-- **Prefer CM6** if its rendered mode feels natural enough — canonical text,
-  revisions, and patches stay simple.
-- **Prefer Tiptap** if CM6 still feels like editing source — accept the
-  round-trip boundary and guard it (§13 PM variant).
+Owner feedback from the evaluation, binding for M1:
 
-The spike also answers: does live-render survive our full Markdown profile,
-and where does Tiptap normalization actually bite?
+- Patch proposals were hard to evaluate in the spike: PatchReview must make
+  *what changes where* visually obvious — per-group in-editor indication of
+  the affected ranges, not only text cards — and an accepted patch must be
+  reversible (it commits as its own revision, so undo = restore-as-new-
+  revision, §8). Feeds §12 and WP4's DoD.
+- Citations in rendered mode should stay close to normal text: inline,
+  text-like, editable, distinguished by subtle color/background tint — not
+  opaque pill widgets. Feeds §16 (M3 seam).
 
 ## 6. Application shape
 
@@ -240,8 +248,11 @@ the approval gate for later broad-change jobs.
 // ~/.config/texeris/config.json
 { "modes": {
     "fast": { "provider": "deepseek",   "model": "deepseek-v4-flash" },
-    "deep": { "provider": "moonshotai", "model": "<kimi flagship id — confirm against Moonshot docs at integration time>" } } }
+    "deep": { "provider": "moonshotai", "model": "kimi-k3" } } }
 ```
+
+(`kimi-k3` confirmed as the Moonshot flagship on 2026-07-19: 2.8T MoE,
+1M-token context, $3/$15 per M tokens.)
 
 One `Models` collection registering only `deepseekProvider()` +
 `moonshotaiProvider()` (lazy SDK loading keeps the rest out). Keys from env
@@ -280,6 +291,9 @@ Three regions (spec §9), editor is the visual centre:
   Fast/Deep toggle; proposed patches appear as cards → open PatchReview.
 - **PatchReview:** summary, per-group word diffs with explanations,
   accept/reject per group + accept-all; conflict state when rebased/failed.
+  Selecting a group highlights the affected ranges in the editor — what
+  changes where must be visually obvious (D0 feedback) — and an accepted
+  patch offers one-click undo (restore-as-new-revision).
 - **HistoryPanel:** revision timeline (actor badges, summaries, patch
   linkage), restore button, checkpoint naming.
 
@@ -304,12 +318,12 @@ interface EditorAdapter {
 }
 ```
 
-**CM variant:** `onGroupedChanges` maps transactions → text offsets directly;
-`applyTextChanges` = `dispatch`; raw mode = same state, decoration
-compartment off. Revision capture is lossless.
+**CM variant (not chosen — D0):** `onGroupedChanges` maps transactions →
+text offsets directly; `applyTextChanges` = `dispatch`; raw mode = same
+state, decoration compartment off. Revision capture is lossless.
 
-**PM variant:** grouped commit = serialize → diff against last snapshot to
-derive text changes (approximation — flagged in spike README);
+**PM variant (chosen — D0):** grouped commit = serialize → diff against last
+snapshot to derive text changes (approximation — flagged in spike README);
 `applyTextChanges` = serialize → apply → reparse → remap selection
 approximately; raw mode = separate CM instance; **normalization guard**: the
 round-trip checker becomes a CI test over the golden sample docs, plus a
@@ -322,32 +336,63 @@ Dependencies flow downward; each WP has a definition of done (DoD).
 **WP0 — App skeleton.** `app/` electron-vite project, React, TS strict,
 preload bridge + one round-trip IPC with validation, vitest wired.
 *DoD:* empty window from `pnpm dev`; `pnpm typecheck && pnpm test` green.
+**Done 2026-07-19** — Electron 43 (bundled Node 24.18), sandbox +
+contextIsolation on; DoD verified: window from `pnpm dev`, typecheck clean,
+3 tests green, IPC round trip logged from the renderer.
 
 **WP1 — Storage & domain core (headless).** SQLite layer + migration 0001,
 project service (create/open/format version), document service (atomic
 write), revision engine (§8), checkpoint service. Pure Node tests.
 *DoD:* unit tests green — grouping, atomic write, snapshot replay,
 external-change import, restore-as-new-revision.
+**Done 2026-07-19** — 32 tests green covering every DoD item. Uses Node's
+built-in `node:sqlite` (Electron 43 bundles Node 24.18): no native modules,
+no ABI rebuilds. Startup reconcile (openProject) cleans orphan tmp files
+and imports offline edits as external revisions.
 
 **WP2 — Editor integration.** Editor adapter + D0 winner (ported from spike,
 not imported), rendered + raw modes, commit-on-group over IPC, outline,
 autosave path. *DoD:* type → restart app → content + full revision history
 intact; mode switch creates no revision.
+**Done 2026-07-19** — Tiptap rendered + CM6 raw sessions over one canonical
+text (`renderer/editor/session.ts`); both derive minimal splices per update
+and group them with the §8 rules (idle flush 1 s). Spike round-trip code
+ported (byte-exact on golden samples, CI-enforced); citations now render
+text-like tinted (D0 feedback). Main watches the file and imports external
+edits; editor reloads. `app/scripts/smoke-editor.mjs` (7 CDP steps) green:
+typing commits in both modes, mode switch creates no revision, content +
+history survive restart. Selection scope is live for chat (approximate
+PM→text offset mapping, as planned).
 
 **WP3 — Chat & agent.** Pi adapter (§10), Fast/Deep config + env keys,
 conversation persistence, streaming to renderer, context assembly (§11)
 with manifest, cancel. *DoD:* question about a selection streams an answer;
 conversation + manifest survive restart; cancel stops mid-stream.
+**Done 2026-07-19 (adapted)** — built ahead of WP2; selection scope is a
+wired seam in context assembly (`assembleContext` already slices ranges),
+so the selection-question DoD verifies in WP2. Everything else verified:
+Pi pinned at exact 0.80.10; offline faux provider
+(`TEXERIS_FAUX_PROVIDER=1`) drives the full loop; `app/scripts/smoke.mjs`
+(9 CDP steps against the real app) green — streaming, manifest, cancel,
+restart survival of conversation + manifest. Live-provider smoke pending
+API keys.
 
 **WP4 — Patch pipeline.** `propose_patch` tool → validation → storage →
 review UI (per-group) → application → outcome records → conflict path.
 *DoD:* e2e — ask for a rewrite, partially accept, history shows linked
 agent revision; stale-base patch fails safely with visible conflict.
+**Done 2026-07-19** — `PatchService` (validate against current text,
+auto-rebase on intact anchors, partial acceptance shifts remaining spans),
+review UI with per-group word diffs + in-editor range highlights +
+one-click undo (restore-as-new-revision). `app/scripts/smoke-patch.mjs`
+(offline, scripted) green. Live DeepSeek smoke (`smoke-live.mjs`) green —
+the model exercised the conflict→re-read→regenerate loop (5 propose calls)
+and landed a clean patch.
 
 **WP5 — Hardening & packaging.** Crash recovery, external-change UI, model
 failure retry (context preserved), usage record view, error surfaces,
-electron-builder artifacts for macOS + Linux. *DoD:* e2e suite green;
-installable artifact on both platforms.
+renderer CSP, electron-builder artifacts for macOS + Linux. *DoD:* e2e suite
+green; installable artifact on both platforms.
 
 ## 15. Testing plan
 
@@ -370,9 +415,9 @@ installable artifact on both platforms.
   a workspace/project Markdown file injected by context assembly; outcome
   records from §9 already capture the accept/modify/reject signal.
 - **M3 (archive, citations, export):** FTS5 table + import pipeline in the
-  same DB; `references` table + citation-chip rendering behind editor
-  decorations (both spike-proven); Pandoc in a utility process with golden
-  export tests.
+  same DB; `references` table + citation rendering behind editor decorations
+  — text-like tinted inline citations, editable, not pill widgets (D0
+  feedback); Pandoc in a utility process with golden export tests.
 - Schema discipline: M1 migrations must not preclude `skill_id` on runs,
   `references`, `archive_documents` tables — they simply aren't created yet.
 
@@ -380,8 +425,8 @@ installable artifact on both platforms.
 
 | Risk | Mitigation |
 |------|------------|
-| Editor choice wrong (D0) | Spike evaluation against checklist; adapter isolates blast radius. |
-| Tiptap round-trip drift (if PM) | CI round-trip tests on golden samples; warn badge; raw mode always authoritative-recoverable. |
+| Editor choice wrong (D0) | D0 recorded (§5: Tiptap); adapter isolates the blast radius of a reversal. |
+| Tiptap round-trip drift (now applies) | CI round-trip tests on golden samples; warn badge; raw mode always authoritative-recoverable. |
 | Pi 0.x breaking changes | Pinned versions; adapter boundary; integration notes document gotchas. |
 | Electron Node < 22.19 | Startup assertion; choose Electron version accordingly. |
 | Patch anchors rot on fast-moving text | Short propose→review window; conservative rebase; conflict path asks agent to regenerate. |
