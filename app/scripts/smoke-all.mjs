@@ -26,6 +26,8 @@ for (const script of SMOKE) {
     failed += 1;
     console.log(`=== ${script} FAILED (exit ${result.status}) ===`);
   }
+  // Let Electron instances fully exit before the next smoke attaches.
+  spawnSync('sleep', ['1.5']);
 }
 console.log(failed ? `\n${failed} smoke(s) FAILED` : '\nall smokes passed');
 process.exit(failed ? 1 : 0);

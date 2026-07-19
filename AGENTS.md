@@ -75,7 +75,9 @@ when product or architecture decisions change, update them.
 - `--ozone-platform=headless` segfaults on this box — don't use it; smoke
   launches go to the real display (short `timeout` is fine).
 - gnome-keyring runs and owns `org.freedesktop.secrets`, so Electron
-  `safeStorage` is viable for post-M1 credential storage.
+  `safeStorage` is viable for credential storage — but only with
+  `--password-store=gnome-libsecret` (set in `app/src/main/index.ts`);
+  auto-detection fails under Hyprland.
 
 ## Git
 

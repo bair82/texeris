@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, safeStorage } from 'electron';
 import path from 'node:path';
 import { registerIpcHandlers } from './ipc';
 import { DocChannels } from '../shared/doc-types';
@@ -6,6 +6,7 @@ import { PatchChannels } from '../shared/patch-types';
 import { PiAgentRuntime } from './agent/runtime';
 import { createAppModels, createFauxModels } from './agent/models';
 import { ConversationService } from './services/conversation';
+import { CredentialsService } from './services/credentials';
 import { openDevProject } from './services/devProject';
 import { PatchService } from './services/patch';
 import { loadWorkspaceConfig, type WorkspaceConfig } from './services/settings';
@@ -14,6 +15,13 @@ import type { Models } from '@earendil-works/pi-ai';
 
 /** Pi requires Node >= 22.19; assert the Electron-bundled Node at startup. */
 const MIN_NODE_VERSION = [22, 19, 0] as const;
+
+// Linux (e.g. Omarchy/Hyprland): Electron's safeStorage backend
+// auto-detection can fail without a GNOME/KDE desktop session even when
+// gnome-keyring is running — select libsecret explicitly.
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('password-store', 'gnome-libsecret');
+}
 
 function assertNodeVersion(): void {
   const current = process.versions.node.split('.').map(Number) as [
@@ -85,8 +93,16 @@ app.whenReady().then(() => {
     models = createAppModels();
     config = loadWorkspaceConfig();
   }
-  const runtime = new PiAgentRuntime({ models, config, conversations, project, patches });
-  registerIpcHandlers({ runtime, conversations, project, patches });
+  const credentials = new CredentialsService(safeStorage);
+  const runtime = new PiAgentRuntime({
+    models,
+    config,
+    conversations,
+    project,
+    patches,
+    credentials,
+  });
+  registerIpcHandlers({ runtime, conversations, project, patches, credentials, config });
 
   // External edits (plan §8): import + notify all windows.
   watchProjectFiles(project, (docEvent) => {

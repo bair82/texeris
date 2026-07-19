@@ -19,10 +19,18 @@ import {
   PatchRejectRequestSchema,
   DocRestoreRequestSchema,
 } from '../shared/patch-types';
+import {
+  ClearApiKeyRequestSchema,
+  SetApiKeyRequestSchema,
+  SettingsChannels,
+  type SettingsView,
+} from '../shared/settings-types';
 import type { AgentRuntime } from './agent/runtime';
 import type { ConversationService } from './services/conversation';
+import { CredentialsService } from './services/credentials';
 import type { PatchService } from './services/patch';
 import type { ProjectContext } from './services/project';
+import type { WorkspaceConfig } from './services/settings';
 import { extractHeadings } from './agent/markdown';
 import { ensureDocument } from './services/project';
 
@@ -31,6 +39,8 @@ export interface IpcDeps {
   conversations: ConversationService;
   project: ProjectContext;
   patches: PatchService;
+  credentials: CredentialsService;
+  config: WorkspaceConfig;
 }
 
 export function registerIpcHandlers(deps: IpcDeps): void {
@@ -166,5 +176,32 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const req = Value.Decode(PatchRejectRequestSchema, raw);
     deps.patches.reject(req.patchId, req.groupIds);
     return { rejected: true };
+  });
+
+  ipcMain.handle(SettingsChannels.get, (): SettingsView => {
+    return {
+      modes: deps.config.modes,
+      providers: CredentialsService.knownProviders().map((id) => ({
+        id,
+        label: id === 'deepseek' ? 'DeepSeek' : 'Moonshot AI (Kimi)',
+        keySource: deps.credentials.keySource(id),
+      })),
+      encryptionAvailable: deps.credentials.encryptionAvailable(),
+    };
+  });
+
+  ipcMain.handle(SettingsChannels.setApiKey, (_event, raw: unknown) => {
+    const req = Value.Decode(SetApiKeyRequestSchema, raw);
+    if (!CredentialsService.knownProviders().includes(req.provider)) {
+      throw new Error(`unknown provider: ${req.provider}`);
+    }
+    deps.credentials.setApiKey(req.provider, req.key);
+    return { keySource: deps.credentials.keySource(req.provider) };
+  });
+
+  ipcMain.handle(SettingsChannels.clearApiKey, (_event, raw: unknown) => {
+    const req = Value.Decode(ClearApiKeyRequestSchema, raw);
+    deps.credentials.clearApiKey(req.provider);
+    return { keySource: deps.credentials.keySource(req.provider) };
   });
 }

@@ -94,6 +94,8 @@ export class PiAgentRuntime implements AgentRuntime {
       conversations: ConversationService;
       project: ProjectContext;
       patches: PatchService;
+      /** Per-provider key lookup (stored keychain key wins over env). */
+      credentials?: { getApiKey(provider: string): string | undefined };
     },
   ) {}
 
@@ -194,6 +196,7 @@ export class PiAgentRuntime implements AgentRuntime {
         messages,
       },
       streamFn: (m, c, o) => this.options.models.streamSimple(m, c, o),
+      getApiKey: (provider) => this.options.credentials?.getApiKey(provider),
     });
     this.agents.set(conversationId, agent);
     return agent;

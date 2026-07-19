@@ -53,7 +53,7 @@ them.
 | 3 | Minimum patch schema | Architecture §11.2 as implemented in the spike (`TextChange{from,to,expectedText,insert,prefixContext?,suffixContext?}` inside ordered `PatchGroup`s). |
 | 4 | Agent tools (v1) | §10.2 — six read/propose tools; no fs, no shell, no web. |
 | 5 | Supported Markdown profile | Architecture §17.1 minus YAML metadata: ATX headings, emphasis/strong, lists, blockquotes, links, code spans/blocks, pipe tables, footnotes, Pandoc citations. Same profile as the spike. |
-| 6 | Model credentials | Development: `MOONSHOT_API_KEY` / `DEEPSEEK_API_KEY` env vars via Pi's `CredentialStore` (in-memory). Post-M1: OS keychain via Electron `safeStorage`. Never in project files. |
+| 6 | Model credentials | Development: `MOONSHOT_API_KEY` / `DEEPSEEK_API_KEY` env vars as fallback; **primary: settings UI storing keys via Electron `safeStorage`** (gnome-keyring on the dev box; landed 2026-07-19 with the settings panel). Linux needs `--password-store=gnome-libsecret` under Hyprland (auto-detect fails). Never in project files. |
 | 7 | Pandoc | Not needed in M1 (no export). When reached: configured system Pandoc in dev, bundle for distribution. |
 | 8 | Project identity | `project.json` with `formatVersion`, `projectId` (uuid), `mainDocument`. Documents addressed by uuid in DB, looked up by relative path on open; renames reconcile path→uuid, never re-id. |
 | 9 | Workspace vs project data | Workspace: platform config dir (`~/.config/texeris`, `~/Library/Application Support/texeris`) — `config.json` (model modes), later style profile + archive index. Project: user folder with `.texeris/` (history DB, cache). |

@@ -11,6 +11,7 @@ import {
 } from '../shared/chat-types';
 import { DocChannels, type DocEvent } from '../shared/doc-types';
 import { PatchChannels, type PatchProposedEvent } from '../shared/patch-types';
+import { SettingsChannels } from '../shared/settings-types';
 
 const api: TexerisApi = {
   async getAppInfo() {
@@ -69,6 +70,13 @@ const api: TexerisApi = {
         ipcRenderer.removeListener(PatchChannels.event, listener);
       };
     },
+  },
+  settings: {
+    get: () => ipcRenderer.invoke(SettingsChannels.get),
+    setApiKey: (provider, key) =>
+      ipcRenderer.invoke(SettingsChannels.setApiKey, { provider, key }),
+    clearApiKey: (provider) =>
+      ipcRenderer.invoke(SettingsChannels.clearApiKey, { provider }),
   },
 };
 

@@ -25,9 +25,16 @@ function check(label, condition, detail = '') {
 }
 
 const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'texeris-error-'));
+const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'texeris-error-config-'));
 let app;
 try {
-  const env = { ...process.env, TEXERIS_PROJECT_DIR: projectDir, ELECTRON_ENABLE_LOGGING: '1' };
+  // Isolate the workspace config dir so no stored keychain key is visible.
+  const env = {
+    ...process.env,
+    TEXERIS_PROJECT_DIR: projectDir,
+    XDG_CONFIG_HOME: configDir,
+    ELECTRON_ENABLE_LOGGING: '1',
+  };
   delete env.DEEPSEEK_API_KEY;
   delete env.MOONSHOT_API_KEY;
   app = { proc: spawn(ELECTRON, ['.', '--no-sandbox', '--remote-debugging-port=0'], { cwd: APP_DIR, env }) };
@@ -129,6 +136,7 @@ try {
 } finally {
   app?.proc.kill('SIGKILL');
   fs.rmSync(projectDir, { recursive: true, force: true });
+  fs.rmSync(configDir, { recursive: true, force: true });
 }
 
 console.log(failures ? `\n${failures} step(s) FAILED` : '\nall steps passed');

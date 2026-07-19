@@ -16,6 +16,7 @@ import type {
   PatchProposedEvent,
   PatchRecord,
 } from './patch-types';
+import type { SettingsView } from './settings-types';
 import type { DocumentInfo } from './domain-types';
 
 /**
@@ -66,5 +67,10 @@ export interface TexerisApi {
     ): Promise<{ seq: number; previousSeq: number } | { conflict: PatchConflictItem[] }>;
     reject(patchId: string, groupIds?: string[]): Promise<{ rejected: boolean }>;
     onEvent(callback: (event: PatchProposedEvent) => void): () => void;
+  };
+  settings: {
+    get(): Promise<SettingsView>;
+    setApiKey(provider: string, key: string): Promise<{ keySource: string }>;
+    clearApiKey(provider: string): Promise<{ keySource: string }>;
   };
 }
