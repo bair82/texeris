@@ -367,9 +367,10 @@ text (`renderer/editor/session.ts`); both derive minimal splices per update
 and group them with the §8 rules (idle flush 1 s). Spike round-trip code
 ported (byte-exact on golden samples, CI-enforced); citations now render
 text-like tinted (D0 feedback). Main watches the file and imports external
-edits; editor reloads. `app/scripts/smoke-editor.mjs` (7 CDP steps) green:
+edits; editor reloads. `app/scripts/smoke-editor.mjs` (8 CDP steps) green:
 typing commits in both modes, mode switch creates no revision, content +
-history survive restart. Selection scope is live for chat (approximate
+history survive restart, and raw mode keeps the native caret hidden while
+CodeMirror draws its own. Selection scope is live for chat (approximate
 PM→text offset mapping, as planned).
 
 **WP3 — Chat & agent.** Pi adapter (§10), Fast/Deep config + env keys,
@@ -426,8 +427,9 @@ cross-build dmg from Linux.
   "new chat" starts a fresh conversation (old ones stay in storage).
 - Rendered mode: formatting toolbar (bold/italic/strike/code, H1–H3,
   lists, blockquote, table, link, undo/redo) for Word-style workflows.
-- Raw-mode caret: visible after a specificity battle with CodeMirror's
-  injected base theme; `drawSelection` as belt and braces.
+- Raw mode: CodeMirror is configured with a dark `EditorView.theme`, including
+  an explicit light custom-cursor color. `drawSelection` owns cursor rendering;
+  its transparent native caret must not be overridden by application CSS.
 
 - Rendered mode: formatting toolbar (bold/italic/strike/code, H1–H3,
   lists, blockquote, table, link, undo/redo) for Word-style workflows.
@@ -438,10 +440,8 @@ cross-build dmg from Linux.
   checkpoint create/restore.
 
 **Known remaining gaps (next in line):** chat scopes follow the main
-document only (other documents are agent-readable via tools), macOS
-packaging (needs a Mac), raw-mode caret color still black on the owner's
-build despite the shipped `!important` rules — investigate the actual
-cursor element when it next surfaces.
+document only (other documents are agent-readable via tools), and macOS
+packaging needs a Mac.
 
 ## 15. Testing plan
 

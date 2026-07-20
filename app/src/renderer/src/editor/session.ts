@@ -238,6 +238,17 @@ export class RenderedSession implements EditorSession {
 // ---------------------------------------------------------------------------
 
 const setCmHighlights = StateEffect.define<HighlightRange[]>();
+const rawTheme = EditorView.theme(
+  {
+    '&': {
+      color: '#f5f5f5',
+    },
+    '.cm-cursor': {
+      borderLeftColor: '#f5f5f5',
+    },
+  },
+  { dark: true },
+);
 const cmHighlightField = StateField.define<CMDecorationSet>({
   create: () => CMDecoration.none,
   update(set, tr) {
@@ -276,6 +287,7 @@ export class RawSession implements EditorSession {
           keymap.of([...defaultKeymap, ...historyKeymap]),
           markdownLang(),
           cmHighlightField,
+          rawTheme,
           // Custom-drawn cursor + selection: the native caret can be
           // invisible under Electron/Wayland (owner report).
           drawSelection(),

@@ -119,7 +119,7 @@ async function waitFor(cdp, expression, label, tries = 40) {
 
 const FOCUS_END_JS = `
 (() => {
-  const el = document.querySelector('.tiptap-rendered') || document.querySelector('.cm-raw .cm-content');
+  const el = document.querySelector('.cm-raw .cm-content') || document.querySelector('.tiptap-rendered');
   if (!el) return false;
   el.focus();
   const range = document.createRange();
@@ -170,7 +170,23 @@ try {
   check('raw mode shows the same canonical text', rawText === true);
 
   // type in raw mode too
-  await evaluate(cdp, FOCUS_END_JS);
+  const caretStyles = await evaluate(
+    cdp,
+    `(async () => {
+      const content = document.querySelector('.cm-raw .cm-content');
+      if (!content) return null;
+      content.focus();
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      return {
+        native: getComputedStyle(content).caretColor,
+      };
+    })()`,
+  );
+  check(
+    'raw mode leaves the native caret hidden for custom drawing',
+    caretStyles?.native === 'rgba(0, 0, 0, 0)',
+    JSON.stringify(caretStyles),
+  );
   await cdp.send('Input.insertText', { text: '\n\nRaw edit.' });
   await sleep(6500);
   const afterRaw = await evaluate(cdp, 'window.texeris.doc.getText()');

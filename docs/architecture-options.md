@@ -1563,7 +1563,7 @@ A practical default stack, subject to developer preference and spikes:
 - **Desktop shell:** Electron.
 - **Language:** TypeScript.
 - **UI:** React or another familiar web UI framework.
-- **Editor:** Tiptap (ProseMirror) for rendered mode, chosen via the Milestone 0 spike (§6.2); CodeMirror 6 for raw mode; behind an editor adapter, with a complete raw Markdown mode retained.
+- **Editor:** Tiptap (ProseMirror) for rendered mode, chosen via the Milestone 0 spike (§6.2); CodeMirror 6 for raw mode; behind an editor adapter, with a complete raw Markdown mode retained. The raw editor uses CodeMirror's dark `EditorView.theme` and `drawSelection`; application CSS must leave the native caret transparent so the custom light cursor is the sole caret.
 - **Local database:** SQLite with FTS5.
 - **Canonical writing format:** Pandoc-oriented Markdown.
 - **References:** CSL JSON-compatible records and Pandoc citation keys.
