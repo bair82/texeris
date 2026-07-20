@@ -285,9 +285,9 @@ export default function EditorRegion({
 
   return (
     <section className="editor-region">
-      {showHistory && openDocId && <HistoryPanel documentId={openDocId} />}
       {activeEditor && <Toolbar editor={activeEditor} />}
       <div className="editor-host" ref={hostRef} />
+      {showHistory && openDocId && <HistoryPanel documentId={openDocId} />}
       {notice && (
         <p className="editor-notice" onClick={() => setNotice(null)}>
           {notice.text}
