@@ -252,7 +252,8 @@ describe('PiAgentRuntime', () => {
     });
     await drain(first.runId);
 
-    // user edits between turns: quick → slow (rev 1 → 2)
+    // user edits between turns: quick → slow (revision coalescing amends
+    // the tip: still rev 1, but with new change rows)
     const docId = ensureDocument(ctx, 'manuscript.md');
     ctx.revisions.commit(
       docId,
@@ -272,7 +273,8 @@ describe('PiAgentRuntime', () => {
     // first turn: no previous run → no recent-changes section
     expect(seenPrompts[0]).not.toContain('<recent-changes');
     // second turn: compact diff of what changed since the agent last looked
-    expect(seenPrompts[1]).toContain('<recent-changes since-revision="1" current-revision="2">');
+    // (anchored by change index — the revision number did not move)
+    expect(seenPrompts[1]).toContain('<recent-changes since-revision="1" current-revision="1">');
     expect(seenPrompts[1]).toContain('+"slow"');
   });
 

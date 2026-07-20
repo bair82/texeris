@@ -32,6 +32,19 @@ export function assembleContext(
   const documentId = ensureDocument(project, project.project.mainDocument);
   const text = project.revisions.getCurrentText(documentId);
   const baseRevision = project.revisions.getCurrentRevision(documentId);
+  // Change-row count of the base revision: revision coalescing appends user
+  // typing to the tip, so the next turn's "what changed since you saw this"
+  // is anchored by change index as well as revision number.
+  const baseChangeCount =
+    baseRevision > 0
+      ? (
+          project.db
+            .prepare(
+              'SELECT COUNT(*) AS n FROM revision_changes WHERE document_id = ? AND seq = ?',
+            )
+            .get(documentId, baseRevision) as { n: number }
+        ).n
+      : 0;
   const notices: string[] = [];
   const items: ContextManifest['items'] = [];
 
@@ -103,6 +116,7 @@ export function assembleContext(
       documentId,
       items,
       baseRevision,
+      baseChangeCount,
       truncated,
       notices,
     },

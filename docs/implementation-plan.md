@@ -173,8 +173,22 @@ Grouping rules v1 (from spike, tuned after first real use 2026-07-19): new
 revision on — **5 s** idle after last change (was 1 s; a typing burst is one
 revision) · paste · selection jump across a paragraph boundary ·
 applied patch · mode switch does **not** create one · restore/checkpoint
-does. (M2 candidate: compaction of long runs of consecutive typing
-revisions — snapshots already make it possible.)
+does.
+
+Revision coalescing (owner decision 2026-07-20, option 2 of the revision
+spam discussion): renderer flushes land as often as the rules above say,
+but in main a user-typing commit **amends the tip revision** instead of
+appending when the tip is user/typing on the same document and younger
+than 15 min — one revision per sitting, not per burst. The tip stays
+immutable when it is checkpointed or the base of an unresolved patch
+(status proposed/partial/conflict: the agent's expectedText validation
+must never see its base move). Amending appends to the tip's change list
+and refreshes its snapshot when present, so replay stays exact. The
+agent's between-turns diff (`summarizeChangesSince`) is anchored by
+(revision, change count) via `manifest.baseChangeCount`, since the
+revision number no longer moves under the agent between turns. (M2
+candidate, kept in mind as option 4: fully decouple autosave-to-disk from
+revision creation — semantic revisions only.)
 
 Commit flow: renderer sends grouped text changes → validate against current
 revision → apply to canonical text → atomic write → insert revision + change

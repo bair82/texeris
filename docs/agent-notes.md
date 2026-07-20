@@ -39,3 +39,11 @@ NOT carry over rendered↔raw mode switches — the PM→canonical offset mappin
 (prefix serialization) is approximate and a ±2-char caret makes the next
 keystrokes corrupt text (caught by smoke-editor). Exact mapping needs a
 markdown-out sourcemap — M-later material. EU2–EU7 unclaimed.
+
+**kimi, 2026-07-20** — revision semantics changed (owner decision, option 2):
+consecutive user-typing commits now AMEND the tip revision (15-min window)
+instead of appending — one revision per sitting. Tip stays immutable when
+checkpointed or the base of an unresolved patch (proposed/partial/conflict).
+Agent between-turns diffs anchor on (revision, change count) via
+`manifest.baseChangeCount`. Touchpoints if you work on history/patches:
+`RevisionService.tryAmendTip`, tests in `revision.test.ts` § tip amend.

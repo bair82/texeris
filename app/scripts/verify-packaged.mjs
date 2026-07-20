@@ -100,11 +100,17 @@ if (texerisUp) {
     'document round trip works in packaged app',
     value?.text?.includes('Geometry of Attention') && value?.revision >= 1,
   );
-  const editor = await send('Runtime.evaluate', {
-    expression: `!!document.querySelector('.tiptap-rendered, .cm-raw')`,
-    returnByValue: true,
-  });
-  check('editor mounted in packaged app', editor.result.value === true);
+  // The IPC stack comes up before the editor session mounts — poll.
+  let editorUp = false;
+  for (let i = 0; i < 40 && !editorUp; i++) {
+    const editor = await send('Runtime.evaluate', {
+      expression: `!!document.querySelector('.tiptap-rendered, .cm-raw')`,
+      returnByValue: true,
+    });
+    editorUp = editor.result.value === true;
+    if (!editorUp) await sleep(250);
+  }
+  check('editor mounted in packaged app', editorUp);
 }
 
 proc.kill('SIGTERM');

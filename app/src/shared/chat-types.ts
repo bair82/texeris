@@ -36,6 +36,13 @@ export interface ContextManifest {
   documentId: string;
   items: ContextManifestItem[];
   baseRevision: number;
+  /**
+   * Number of change rows the base revision had when this context was
+   * assembled. Revision coalescing appends user typing to the tip revision,
+   * so "what changed since the run" is tracked by change index, not only by
+   * revision number. Absent in manifests predating coalescing.
+   */
+  baseChangeCount?: number;
   truncated: boolean;
   notices: string[];
 }

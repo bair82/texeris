@@ -3,7 +3,7 @@
  * provider; no API keys). Verifies the DoD:
  *  1. typing in the rendered editor commits a revision (idle flush)
  *  2. switching rendered → raw → rendered creates NO revision
- *  3. typing in raw mode commits as well
+ *  3. typing in raw mode coalesces into the same sitting's revision
  *  4. restart → content and full revision history intact
  *
  * Usage: pnpm build first, then: node scripts/smoke-editor.mjs
@@ -191,9 +191,9 @@ try {
   await sleep(6500);
   const afterRaw = await evaluate(cdp, 'window.texeris.doc.getText()');
   check(
-    'typing in raw mode committed a revision',
-    afterRaw.revision === baseRevision + 2 && afterRaw.text.includes('Raw edit.'),
-    `revision ${afterRaw.revision}, want ${baseRevision + 2}`,
+    'typing in raw mode coalesced into the same revision',
+    afterRaw.revision === baseRevision + 1 && afterRaw.text.includes('Raw edit.'),
+    `revision ${afterRaw.revision}, want ${baseRevision + 1} (coalesced)`,
   );
 
   await evaluate(
@@ -205,8 +205,8 @@ try {
   const afterSwitch = await evaluate(cdp, 'window.texeris.doc.getText()');
   check(
     'mode switching created no revision of its own',
-    afterSwitch.revision === baseRevision + 2,
-    `revision ${afterSwitch.revision}, want ${baseRevision + 2}`,
+    afterSwitch.revision === baseRevision + 1,
+    `revision ${afterSwitch.revision}, want ${baseRevision + 1}`,
   );
 
   // 4. restart → content + history intact
@@ -223,8 +223,8 @@ try {
   );
   check(
     'revision history survives restart',
-    afterRestart.revision === baseRevision + 2,
-    `revision ${afterRestart.revision}, want ${baseRevision + 2}`,
+    afterRestart.revision === baseRevision + 1,
+    `revision ${afterRestart.revision}, want ${baseRevision + 1}`,
   );
 
   app.proc.kill('SIGTERM');

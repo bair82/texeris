@@ -128,15 +128,18 @@ export class PiAgentRuntime implements AgentRuntime {
     // Between turns the agent gets a compact diff of what changed since the
     // last revision it saw (plan §11) — not a blind full re-read.
     const lastRun = this.options.conversations.latestRun(input.conversationId);
-    const lastSeen =
-      lastRun?.manifest?.documentId === assembled.manifest.documentId
-        ? lastRun.manifest.baseRevision
-        : undefined;
+    const sameDoc = lastRun?.manifest?.documentId === assembled.manifest.documentId;
+    const lastSeen = sameDoc ? lastRun?.manifest?.baseRevision : undefined;
     let changeSummary: ChangeSummary | 'unchanged' | null = null;
-    if (lastSeen !== undefined) {
+    if (lastSeen !== undefined && lastRun?.manifest) {
+      // Revision coalescing appends user typing to the tip revision, so the
+      // diff anchor is (revision, change count). Manifests from before
+      // coalescing carry no count: MAX keeps the old seq-only behavior —
+      // the full current text is in the context anyway.
       changeSummary =
-        summarizeChangesSince(project.db, assembled.manifest.documentId, lastSeen) ??
-        'unchanged';
+        summarizeChangesSince(project.db, assembled.manifest.documentId, lastSeen, {
+          sinceChangeCount: lastRun.manifest.baseChangeCount ?? Number.MAX_SAFE_INTEGER,
+        }) ?? 'unchanged';
     }
     agent.state.systemPrompt = buildSystemPrompt(assembled, changeSummary);
     agent.state.model = model;

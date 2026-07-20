@@ -17,6 +17,15 @@ import { atomicWriteText, hashText } from './document';
 /** Full-text snapshot is stored on every SNAPSHOT_EVERY-th revision (§7.2). */
 export const SNAPSHOT_EVERY = 25;
 
+/**
+ * Revision coalescing (owner decision 2026-07-20, M1.5): a user-typing
+ * commit amends the tip revision instead of appending a new one when the
+ * tip is a recent user-typing revision on the same document — one revision
+ * per sitting rather than one per typing burst. The window bounds how long
+ * one revision keeps absorbing edits.
+ */
+export const TIP_AMEND_WINDOW_MS = 15 * 60 * 1000;
+
 export interface CommitMeta {
   actor: Actor;
   source: RevisionSource;
@@ -65,6 +74,8 @@ export class RevisionService {
    * Commit a group of splices as one revision. Validates against the
    * current text, writes the file atomically, records revision + changes
    * (+ snapshot when due) in a transaction, returns the new seq.
+   * User-typing commits coalesce into the tip revision when possible
+   * (see TIP_AMEND_WINDOW_MS) — then the tip's seq is returned unchanged.
    */
   commit(documentId: string, splices: readonly TextSplice[], meta: CommitMeta): number {
     if (splices.length === 0) {
@@ -73,8 +84,15 @@ export class RevisionService {
     const doc = this.documentRow(documentId);
     const baseText = fs.readFileSync(this.filePath(doc), 'utf8');
     // Throws on any mismatch; the file is untouched in that case.
-    if (applySplices(baseText, splices) === baseText) {
+    const newText = applySplices(baseText, splices);
+    if (newText === baseText) {
       return doc.current_revision; // no-op change group, nothing to record
+    }
+    if (meta.actor === 'user' && meta.source.kind === 'typing') {
+      const amended = this.tryAmendTip(doc, newText, splices, meta);
+      if (amended !== null) {
+        return amended;
+      }
     }
     return this.commitInternal(doc, baseText, splices, meta, { writeFile: true });
   }
@@ -301,6 +319,129 @@ export class RevisionService {
       this.commitDepth -= 1;
     }
     return newSeq;
+  }
+
+  /**
+   * Revision coalescing: amend the tip revision with another user-typing
+   * change group, or return null when the tip must stay immutable — it is
+   * not a recent user-typing revision, it is checkpointed, or it is the
+   * base of an unresolved patch (the agent's expectedText validation must
+   * never see its base move). Amending appends to the tip's change list
+   * and refreshes its snapshot when it has one, so replay stays exact.
+   */
+  private tryAmendTip(
+    doc: DocumentRow,
+    newText: string,
+    splices: readonly TextSplice[],
+    meta: CommitMeta,
+  ): number | null {
+    if (doc.current_revision === 0) {
+      return null;
+    }
+    const tip = this.db
+      .prepare(
+        `SELECT actor, source_json, created_at, snapshot_text FROM revisions
+         WHERE document_id = ? AND seq = ?`,
+      )
+      .get(doc.id, doc.current_revision) as
+      | { actor: string; source_json: string; created_at: string; snapshot_text: string | null }
+      | undefined;
+    if (!tip || tip.actor !== 'user') {
+      return null;
+    }
+    const source = JSON.parse(tip.source_json) as RevisionSource;
+    if (source.kind !== 'typing') {
+      return null;
+    }
+    if (Date.now() - Date.parse(tip.created_at) > TIP_AMEND_WINDOW_MS) {
+      return null;
+    }
+    const checkpointed =
+      this.db
+        .prepare(
+          'SELECT 1 AS x FROM checkpoints WHERE document_id = ? AND revision_seq = ? LIMIT 1',
+        )
+        .get(doc.id, doc.current_revision) !== undefined;
+    const patchBase =
+      this.db
+        .prepare(
+          `SELECT 1 AS x FROM patches
+           WHERE document_id = ? AND base_revision = ?
+             AND status IN ('proposed', 'partial', 'conflict') LIMIT 1`,
+        )
+        .get(doc.id, doc.current_revision) !== undefined;
+    if (checkpointed || patchBase) {
+      return null;
+    }
+
+    const newHash = hashText(newText);
+    const prior = this.db
+      .prepare(
+        `SELECT from_off, to_off, deleted_text, inserted_text FROM revision_changes
+         WHERE document_id = ? AND seq = ? ORDER BY idx`,
+      )
+      .all(doc.id, doc.current_revision) as Array<{
+      from_off: number;
+      to_off: number;
+      deleted_text: string;
+      inserted_text: string;
+    }>;
+    const allSplices: TextSplice[] = [
+      ...prior.map((c) => ({
+        from: c.from_off,
+        to: c.to_off,
+        deletedText: c.deleted_text,
+        insertedText: c.inserted_text,
+      })),
+      ...splices,
+    ];
+
+    this.commitDepth += 1;
+    try {
+      atomicWriteText(this.filePath(doc), newText);
+      this.db.exec('BEGIN');
+      try {
+        const insertChange = this.db.prepare(
+          `INSERT INTO revision_changes
+             (document_id, seq, idx, from_off, to_off, deleted_text, inserted_text)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        );
+        splices.forEach((splice, i) => {
+          insertChange.run(
+            doc.id,
+            doc.current_revision,
+            prior.length + i,
+            splice.from,
+            splice.to,
+            splice.deletedText,
+            splice.insertedText,
+          );
+        });
+        this.db
+          .prepare(
+            `UPDATE revisions SET summary = ?, content_hash = ?,
+               snapshot_text = CASE WHEN snapshot_text IS NOT NULL THEN ? ELSE snapshot_text END
+             WHERE document_id = ? AND seq = ?`,
+          )
+          .run(
+            meta.summary ?? summarizeSplices(allSplices),
+            newHash,
+            newText,
+            doc.id,
+            doc.current_revision,
+          );
+        this.db
+          .prepare('UPDATE documents SET content_hash = ? WHERE id = ?')
+          .run(newHash, doc.id);
+        this.db.exec('COMMIT');
+      } catch (err) {
+        this.db.exec('ROLLBACK');
+        throw err;
+      }
+    } finally {
+      this.commitDepth -= 1;
+    }
+    return doc.current_revision;
   }
 
   private documentRow(documentId: string): DocumentRow {
