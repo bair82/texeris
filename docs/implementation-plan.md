@@ -430,9 +430,6 @@ cross-build dmg from Linux.
 - Raw mode: CodeMirror is configured with a dark `EditorView.theme`, including
   an explicit light custom-cursor color. `drawSelection` owns cursor rendering;
   its transparent native caret must not be overridden by application CSS.
-
-- Rendered mode: formatting toolbar (bold/italic/strike/code, H1–H3,
-  lists, blockquote, table, link, undo/redo) for Word-style workflows.
 - Projects: first-run flow — picker with recents + open/create/switch
   (`ProjectManager` + native folder dialogs; dev harness now only via
   `TEXERIS_PROJECT_DIR`). History: HistoryPanel with the revision
