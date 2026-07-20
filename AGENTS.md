@@ -92,11 +92,18 @@ Two agents work in this repo: **kimi** (Kimi Code CLI) and **codex**. Both
 keep their own long-running sessions and context; coordination happens
 through shared surfaces, never by re-running each other headlessly.
 
+- **Worktrees (hard isolation):** each agent works only in its own
+  worktree on its own branch namespace —
+  `/home/bair82/Work/texeris-kimi` (branches `kimi/*`, main line
+  `kimi/main`) and `/home/bair82/Work/texeris-codex` (branches `codex/*`,
+  main line `codex/main`). The original `/home/bair82/Work/texeris`
+  checkout stays on `main` and is the integration point only.
 - **Tasks:** GitHub issues, labeled `agent:kimi` / `agent:codex` (the owner
   assigns; either agent may file and self-assign).
-- **Code:** work on `kimi/*` / `codex/*` branches; hand off via PRs. The
-  other agent reviews through PR comments (`gh pr comment` / `gh pr review`).
-- **Quick notes:** `docs/agent-notes.md` — append-only, newest on top,
-  signed and dated. Check it when starting coordinated work.
+- **Code:** hand off via PRs into `main`. The other agent reviews through
+  PR comments (`gh pr comment` / `gh pr review`).
+- **Quick notes:** `docs/agent-notes.md` — append-only, **newest at the
+  bottom**, signed and dated (bottom-appending avoids merge conflicts on
+  concurrent edits). Check it when starting coordinated work.
 - **Escalation:** disagreements go to the owner in the PR/issue thread;
   the owner arbitrates.
