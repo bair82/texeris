@@ -320,7 +320,8 @@ export default function EditorRegion({
         </div>
         <div className="status-right">
           <span className="status-chip">
-            {revision !== null ? `rev ${revision}` : '…'} · {saveState}
+            {revision !== null ? `rev ${revision}` : '…'} ·{' '}
+            {saveState === 'dirty' ? 'unsaved' : saveState}
           </span>
           <button
             className="history-toggle"
