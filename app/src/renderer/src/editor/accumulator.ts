@@ -1,14 +1,13 @@
 /**
  * Turns a stream of editor updates into grouped, sequential splices:
  * one minimal splice per update, grouped by the §8 rules (idle, paste,
- * line jump), flushed on group close or after `idleMs` of quiet.
+ * caret jump), flushed on group close or after `idleMs` of quiet.
  * DOM-free and shared by both editor sessions.
  */
 
 import type { TextSplice } from '../../../shared/domain-types';
 import { RevisionGrouper } from '../../../shared/grouping';
 import { minimalSplice } from '../../../shared/text-splice';
-import { firstChangedLine, lineDiff } from './lib/diff';
 
 /** Default idle period after which pending changes are flushed (§8). */
 export const IDLE_FLUSH_MS = 5000;
@@ -31,12 +30,11 @@ export class ChangeAccumulator {
       return;
     }
     const splice = minimalSplice(prevText, newText);
-    const changedLine = firstChangedLine(lineDiff(prevText, newText)) - 1; // 0-based
     if (
       this.grouper.shouldStartNewGroup({
         kind: kind === 'paste' ? 'paste' : 'typing',
         at: Date.now(),
-        changedLine: Math.max(0, changedLine),
+        from: splice.from,
       }) &&
       this.pending.length > 0
     ) {

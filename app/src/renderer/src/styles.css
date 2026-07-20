@@ -431,6 +431,9 @@ body.col-resizing {
 .status-chip {
   font-size: 12px;
   color: var(--text-muted);
+  /* fixed floor for "rev N · saving" so state changes never vibrate layout */
+  min-width: 15ch;
+  text-align: right;
 }
 
 .history-toggle {

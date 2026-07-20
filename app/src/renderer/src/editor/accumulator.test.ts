@@ -68,4 +68,18 @@ describe('ChangeAccumulator', () => {
     expect(flushes[0][1]).toMatchObject({ deletedText: '', insertedText: 'new ' });
     acc.dispose();
   });
+
+  it('keeps paragraph typing at the document end in one group (regression: line-number shifts)', async () => {
+    // Enter at the end shifts line numbering by up to two per keystroke —
+    // the old line-based jump rule broke the group every other keystroke.
+    const { acc, flushes } = collect();
+    acc.record('abc\n', 'abc\n\n', 'typing'); // Enter
+    acc.record('abc\n\n', 'abc\n\nx', 'typing'); // first char on the new line
+    acc.record('abc\n\nx', 'abc\n\nx\n\n', 'typing'); // Enter again
+    acc.record('abc\n\nx\n\n', 'abc\n\nx\n\ny', 'typing');
+    acc.flush();
+    expect(flushes).toHaveLength(1);
+    expect(flushes[0]).toHaveLength(4);
+    acc.dispose();
+  });
 });

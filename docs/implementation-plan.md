@@ -171,7 +171,10 @@ feeds style learning and product signals (spec §18.1).
 
 Grouping rules v1 (from spike, tuned after first real use 2026-07-19): new
 revision on — **5 s** idle after last change (was 1 s; a typing burst is one
-revision) · paste · selection jump across a paragraph boundary ·
+revision) · paste · caret jump (**>8 chars** between consecutive change
+starts; was a >1-line rule until 2026-07-20 — line numbering near the
+document end shifts by two per Enter, which broke groups every other
+keystroke and made the save-state chip flap at several Hz) ·
 applied patch · mode switch does **not** create one · restore/checkpoint
 does.
 
