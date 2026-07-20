@@ -59,3 +59,21 @@ export function registerReloadHandler(handler: () => void): () => void {
 export function reloadEditor(): void {
   reloadHandler?.();
 }
+
+/** Outline navigation (EU2): ProjectNav asks the editor to jump to a heading. */
+let navigateHandler: ((headingText: string) => void) | null = null;
+
+export function registerNavigateHandler(
+  handler: (headingText: string) => void,
+): () => void {
+  navigateHandler = handler;
+  return () => {
+    if (navigateHandler === handler) {
+      navigateHandler = null;
+    }
+  };
+}
+
+export function navigateToHeading(headingText: string): void {
+  navigateHandler?.(headingText);
+}

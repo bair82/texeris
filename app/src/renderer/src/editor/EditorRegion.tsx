@@ -5,10 +5,12 @@ import type { EditorMode, EditorSession } from './session';
 import { RawSession, RenderedSession } from './session';
 import {
   registerHighlightHandler,
+  registerNavigateHandler,
   registerReloadHandler,
   registerSelectionGetter,
 } from './editorBridge';
 import HistoryPanel from './HistoryPanel';
+import SearchPanel from './SearchPanel';
 import Toolbar from './Toolbar';
 
 type SaveState = 'loading' | 'saved' | 'dirty' | 'saving' | 'error';
@@ -29,14 +31,17 @@ interface EditorRegionProps {
   /** Report cursor/scroll for a document (debounced IPC persistence). */
   onDocState(docId: string, patch: UiStateDoc): void;
   onModeChange(mode: EditorMode): void;
+  /** Report the committed revision (drives the nav outline refresh). */
+  onRevisionChange(revision: number): void;
 }
 
 /**
  * The editor region (plan §12): rendered mode default with a raw toggle,
- * commit-on-group over IPC (autosave), external-change reload, and a status
- * bar with revision + save state. Document selection lives in the shell
- * (M1.5 EU1); this region opens whatever document it is handed and reports
- * view state (cursor, scroll) back for persistence.
+ * commit-on-group over IPC (autosave), external-change reload, find &
+ * replace (EU2), and a status bar with revision + save state. Document
+ * selection lives in the shell (M1.5 EU1); this region opens whatever
+ * document it is handed and reports view state (cursor, scroll) back for
+ * persistence.
  */
 export default function EditorRegion({
   openDocId,
@@ -44,6 +49,7 @@ export default function EditorRegion({
   initialMode,
   onDocState,
   onModeChange,
+  onRevisionChange,
 }: EditorRegionProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sessionRef = useRef<EditorSession | null>(null);
@@ -53,6 +59,7 @@ export default function EditorRegion({
   const [notice, setNotice] = useState<EditorNotice | null>(null);
   const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const dirtyRef = useRef(false);
   const loadedDocIdRef = useRef<string | null>(null);
   const openSeqRef = useRef(0);
@@ -64,6 +71,8 @@ export default function EditorRegion({
   docStatesRef.current = docStates;
   const onDocStateRef = useRef(onDocState);
   onDocStateRef.current = onDocState;
+  const onRevisionChangeRef = useRef(onRevisionChange);
+  onRevisionChangeRef.current = onRevisionChange;
 
   /** The element that actually scrolls (CM scrolls its own scroller). */
   const scrollerOf = (): HTMLElement | null => {
@@ -116,6 +125,7 @@ export default function EditorRegion({
             .then(({ seq }) => {
               dirtyRef.current = false;
               setRevision(seq);
+              onRevisionChangeRef.current(seq);
               setSaveState('saved');
             })
             .catch((err: unknown) => {
@@ -176,7 +186,9 @@ export default function EditorRegion({
       }
       dirtyRef.current = false;
       setRevision(doc.revision);
+      onRevisionChangeRef.current(doc.revision);
       setSaveState('saved');
+      setSearchOpen(false);
       loadedDocIdRef.current = documentId;
       destroySession();
       createSession(doc.text, modeRef.current, documentId, docStatesRef.current[documentId]);
@@ -206,6 +218,13 @@ export default function EditorRegion({
   // Selection bridge for the chat's selection scope.
   useEffect(() => {
     return registerSelectionGetter(() => sessionRef.current?.getSelection() ?? null);
+  }, []);
+
+  // Outline navigation bridge (EU2): the nav asks us to jump to a heading.
+  useEffect(() => {
+    return registerNavigateHandler((headingText) => {
+      sessionRef.current?.navigateToHeading(headingText);
+    });
   }, []);
 
   // Patch-review bridges: highlight ranges, reload after apply/undo.
@@ -279,13 +298,25 @@ export default function EditorRegion({
     destroySession();
     setMode(next);
     modeRef.current = next;
+    setSearchOpen(false);
     createSession(text, next, docId, restore);
     onModeChange(next);
   };
 
   return (
-    <section className="editor-region">
+    <section
+      className="editor-region"
+      onKeyDownCapture={(e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+          e.preventDefault();
+          setSearchOpen(true);
+        }
+      }}
+    >
       {activeEditor && <Toolbar editor={activeEditor} />}
+      {searchOpen && sessionRef.current && (
+        <SearchPanel session={sessionRef.current} onClose={() => setSearchOpen(false)} />
+      )}
       <div className="editor-host" ref={hostRef} />
       {showHistory && openDocId && <HistoryPanel documentId={openDocId} />}
       {notice && (
@@ -323,6 +354,13 @@ export default function EditorRegion({
             {revision !== null ? `rev ${revision}` : '…'} ·{' '}
             {saveState === 'dirty' ? 'unsaved' : saveState}
           </span>
+          <button
+            className="history-toggle find-toggle"
+            title="Find in document (Ctrl+F)"
+            onClick={() => setSearchOpen(true)}
+          >
+            Find
+          </button>
           <button
             className="history-toggle"
             title="Revision history"

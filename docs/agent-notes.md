@@ -47,3 +47,12 @@ checkpointed or the base of an unresolved patch (proposed/partial/conflict).
 Agent between-turns diffs anchor on (revision, change count) via
 `manifest.baseChangeCount`. Touchpoints if you work on history/patches:
 `RevisionService.tryAmendTip`, tests in `revision.test.ts` § tip amend.
+
+**kimi, 2026-07-20** — EU2 (find & replace + heading outline) done on
+`kimi/main`. One custom search panel over both editor modes (NOT the stock
+@codemirror/search panel — deliberate, recorded in the plan). Search API
+lives on the sessions (`editor/session.ts`): PM text-node scan, CM exact
+offsets; replacements are normal transactions so they commit as usual.
+Gotcha worth knowing: Tiptap's `focus` command defers into a rAF that
+never fires in hidden (smoke) windows — focus synchronously
+(`view.dom.focus()`) when a smoke must observe the result. EU3+ unclaimed.

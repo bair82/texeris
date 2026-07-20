@@ -5,6 +5,7 @@ import type { UiState, UiStateDoc } from '../../../shared/ui-types';
 import ChatPanel from '../ChatPanel';
 import PatchReview from '../PatchReview';
 import EditorRegion from '../editor/EditorRegion';
+import { navigateToHeading } from '../editor/editorBridge';
 import type { EditorMode } from '../editor/session';
 import ActivityBar from './ActivityBar';
 import ProjectNav from './ProjectNav';
@@ -30,6 +31,7 @@ export default function AppShell({ onOpenSettings }: { onOpenSettings: () => voi
   const [ui, setUi] = useState<UiState | null>(null);
   const [docs, setDocs] = useState<DocumentInfo[]>([]);
   const [openDocId, setOpenDocId] = useState<string | null>(null);
+  const [openDocRevision, setOpenDocRevision] = useState(0);
   const uiRef = useRef<UiState>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -136,6 +138,10 @@ export default function AppShell({ onOpenSettings }: { onOpenSettings: () => voi
     [patchUi],
   );
 
+  const onRevisionChange = useCallback((revision: number) => {
+    setOpenDocRevision(revision);
+  }, []);
+
   const startDrag =
     (which: 'nav' | 'side') =>
     (e: ReactMouseEvent): void => {
@@ -183,8 +189,10 @@ export default function AppShell({ onOpenSettings }: { onOpenSettings: () => voi
             width={navWidth}
             docs={docs}
             openDocId={openDocId}
+            openDocRevision={openDocRevision}
             onOpenDoc={openDoc}
             onCreateDoc={createDoc}
+            onNavigate={navigateToHeading}
           />
           <div
             className="split-handle"
@@ -200,6 +208,7 @@ export default function AppShell({ onOpenSettings }: { onOpenSettings: () => voi
         initialMode={ui.editorMode ?? 'rendered'}
         onDocState={onDocState}
         onModeChange={onModeChange}
+        onRevisionChange={onRevisionChange}
       />
       {sideVisible && (
         <>

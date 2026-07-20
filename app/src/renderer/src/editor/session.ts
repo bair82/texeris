@@ -11,7 +11,7 @@
  */
 
 import { Editor, Extension } from '@tiptap/core';
-import { Plugin, PluginKey, Selection } from '@tiptap/pm/state';
+import { Plugin, PluginKey, Selection, TextSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import {
@@ -34,6 +34,11 @@ import { markdownOut } from './lib/markdown-out';
 
 export type EditorMode = 'rendered' | 'raw';
 
+export interface SearchMatch {
+  from: number;
+  to: number;
+}
+
 export interface EditorSession {
   readonly mode: EditorMode;
   mount(el: HTMLElement): void;
@@ -50,6 +55,18 @@ export interface EditorSession {
   flush(): void;
   /** Temporarily mark ranges in the editor (patch review indication, D0). */
   setHighlights(ranges: HighlightRange[]): void;
+  /** Find matches of `query` (empty array for an empty query). */
+  search(query: string, caseSensitive: boolean): SearchMatch[];
+  /** Highlight matches; `current` is the active index (-1 clears). */
+  setSearchHighlights(matches: SearchMatch[], current: number): void;
+  /** Select a match and scroll it into view. */
+  revealMatch(match: SearchMatch): void;
+  /** Replace one match (flows through the normal update→commit path). */
+  replaceMatch(match: SearchMatch, replacement: string): void;
+  /** Replace all matches in one transaction (one revision group). */
+  replaceAll(matches: SearchMatch[], replacement: string): void;
+  /** Select a heading's text and scroll to it (outline navigation, EU2). */
+  navigateToHeading(headingText: string): boolean;
   focus(): void;
 }
 
@@ -126,6 +143,49 @@ function findTextRange(doc: PMNode, search: string): { from: number; to: number 
 }
 
 // ---------------------------------------------------------------------------
+// Search (EU2): match + current-match decorations
+// ---------------------------------------------------------------------------
+
+const searchKey = new PluginKey<DecorationSet>('searchHighlight');
+
+const searchHighlightExtension = Extension.create({
+  name: 'searchHighlight',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: searchKey,
+        state: {
+          init: () => DecorationSet.empty,
+          apply(tr, set) {
+            const meta = tr.getMeta(searchKey) as
+              | { matches: SearchMatch[]; current: number }
+              | undefined;
+            if (meta) {
+              return DecorationSet.create(
+                tr.doc,
+                meta.matches
+                  .filter((m) => m.to > m.from && m.to <= tr.doc.content.size)
+                  .map((m, i) =>
+                    Decoration.inline(m.from, m.to, {
+                      class: i === meta.current ? 'search-match-current' : 'search-match',
+                    }),
+                  ),
+              );
+            }
+            return set.map(tr.mapping, tr.doc);
+          },
+        },
+        props: {
+          decorations(state) {
+            return searchKey.getState(state);
+          },
+        },
+      }),
+    ];
+  },
+});
+
+// ---------------------------------------------------------------------------
 // Rendered mode: Tiptap
 // ---------------------------------------------------------------------------
 
@@ -142,7 +202,7 @@ export class RenderedSession implements EditorSession {
     this.accumulator = new ChangeAccumulator(options.onFlush, options.onDirty);
     this.snapshot = options.text;
     this.editor = new Editor({
-      extensions: [...buildExtensions(), highlightExtension],
+      extensions: [...buildExtensions(), highlightExtension, searchHighlightExtension],
       content: markdownIn(options.text),
       onUpdate: ({ editor }) => {
         const text = markdownOut(editor.getJSON() as PMNodeJSON);
@@ -239,6 +299,79 @@ export class RenderedSession implements EditorSession {
     return this.toCanonicalOffset(this.editor.state.selection.head);
   }
 
+  search(query: string, caseSensitive: boolean): SearchMatch[] {
+    if (!query) {
+      return [];
+    }
+    const needle = caseSensitive ? query : query.toLowerCase();
+    const matches: SearchMatch[] = [];
+    this.editor.state.doc.descendants((node, pos) => {
+      if (!node.isText || !node.text) {
+        return true;
+      }
+      const hay = caseSensitive ? node.text : node.text.toLowerCase();
+      let idx = hay.indexOf(needle);
+      while (idx >= 0) {
+        matches.push({ from: pos + idx, to: pos + idx + needle.length });
+        idx = hay.indexOf(needle, idx + needle.length);
+      }
+      return true;
+    });
+    return matches;
+  }
+
+  setSearchHighlights(matches: SearchMatch[], current: number): void {
+    const tr = this.editor.state.tr.setMeta(searchKey, { matches, current });
+    this.editor.view.dispatch(tr);
+  }
+
+  revealMatch(match: SearchMatch): void {
+    this.editor.chain().setTextSelection(match).scrollIntoView().run();
+  }
+
+  replaceMatch(match: SearchMatch, replacement: string): void {
+    const tr = this.editor.state.tr.insertText(replacement, match.from, match.to);
+    this.editor.view.dispatch(tr);
+  }
+
+  replaceAll(matches: SearchMatch[], replacement: string): void {
+    // descending order keeps earlier positions valid within one transaction
+    const tr = this.editor.state.tr;
+    for (const match of [...matches].sort((a, b) => b.from - a.from)) {
+      tr.insertText(replacement, match.from, match.to);
+    }
+    this.editor.view.dispatch(tr);
+  }
+
+  navigateToHeading(headingText: string): boolean {
+    // IIFE: TS's flow analysis treats closure-assigned lets as never after
+    // a truthiness guard — keep the walk inside a typed function instead.
+    const range = ((): { from: number; to: number } | null => {
+      let found: { from: number; to: number } | null = null;
+      this.editor.state.doc.descendants((node, pos) => {
+        if (found) {
+          return false;
+        }
+        if (node.type.name === 'heading' && node.textContent === headingText) {
+          found = { from: pos + 1, to: pos + 1 + node.content.size };
+          return false;
+        }
+        return true;
+      });
+      return found;
+    })();
+    if (!range) {
+      return false;
+    }
+    // Focus synchronously: Tiptap's focus command defers into a rAF, which
+    // never fires in a hidden window (smoke runs), leaving focus behind.
+    const { view } = this.editor;
+    view.dom.focus();
+    const sel = TextSelection.create(view.state.doc, range.from, range.to);
+    view.dispatch(view.state.tr.setSelection(sel).scrollIntoView());
+    return true;
+  }
+
   setCursor(offset: number): void {
     // Invert toCanonicalOffset by binary search: the largest PM position
     // whose canonical prefix fits within `offset`. Approximate but stable.
@@ -267,6 +400,30 @@ export class RenderedSession implements EditorSession {
 // ---------------------------------------------------------------------------
 
 const setCmHighlights = StateEffect.define<HighlightRange[]>();
+const setCmSearch = StateEffect.define<{ matches: SearchMatch[]; current: number }>();
+const cmSearchField = StateField.define<CMDecorationSet>({
+  create: () => CMDecoration.none,
+  update(set, tr) {
+    let next = set.map(tr.changes);
+    for (const effect of tr.effects) {
+      if (effect.is(setCmSearch)) {
+        const { matches, current } = effect.value;
+        next = CMDecoration.set(
+          matches
+            .filter((m) => m.to > m.from && m.to <= tr.state.doc.length)
+            .map((m, i) =>
+              CMDecoration.mark({
+                class: i === current ? 'search-match-current' : 'search-match',
+              }).range(m.from, m.to),
+            ),
+          true,
+        );
+      }
+    }
+    return next;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
 const rawTheme = EditorView.theme(
   {
     '&': {
@@ -316,6 +473,7 @@ export class RawSession implements EditorSession {
           keymap.of([...defaultKeymap, ...historyKeymap]),
           markdownLang(),
           cmHighlightField,
+          cmSearchField,
           rawTheme,
           // Custom-drawn cursor + selection: the native caret can be
           // invisible under Electron/Wayland (owner report).
@@ -383,6 +541,66 @@ export class RawSession implements EditorSession {
 
   getCursor(): number {
     return this.view.state.selection.main.head;
+  }
+
+  // Raw mode IS canonical text — search offsets are exact.
+
+  search(query: string, caseSensitive: boolean): SearchMatch[] {
+    if (!query) {
+      return [];
+    }
+    const text = this.view.state.doc.toString();
+    const hay = caseSensitive ? text : text.toLowerCase();
+    const needle = caseSensitive ? query : query.toLowerCase();
+    const matches: SearchMatch[] = [];
+    let idx = hay.indexOf(needle);
+    while (idx >= 0) {
+      matches.push({ from: idx, to: idx + needle.length });
+      idx = hay.indexOf(needle, idx + needle.length);
+    }
+    return matches;
+  }
+
+  setSearchHighlights(matches: SearchMatch[], current: number): void {
+    this.view.dispatch({ effects: setCmSearch.of({ matches, current }) });
+  }
+
+  revealMatch(match: SearchMatch): void {
+    this.view.dispatch({
+      selection: { anchor: match.from, head: match.to },
+      effects: EditorView.scrollIntoView(match.from, { y: 'center' }),
+    });
+  }
+
+  replaceMatch(match: SearchMatch, replacement: string): void {
+    this.view.dispatch({
+      changes: { from: match.from, to: match.to, insert: replacement },
+    });
+  }
+
+  replaceAll(matches: SearchMatch[], replacement: string): void {
+    // matches are ascending and non-overlapping — valid as one CM change set
+    this.view.dispatch({
+      changes: matches.map((m) => ({ from: m.from, to: m.to, insert: replacement })),
+    });
+  }
+
+  navigateToHeading(headingText: string): boolean {
+    const doc = this.view.state.doc;
+    for (let i = 1; i <= doc.lines; i++) {
+      const line = doc.line(i);
+      const m = /^(#{1,6})\s+(.*)$/.exec(line.text);
+      if (m && m[2].trim() === headingText) {
+        const from = line.from + m[1].length + 1;
+        this.view.focus();
+        this.view.dispatch({
+          selection: { anchor: from, head: line.to },
+          effects: EditorView.scrollIntoView(from, { y: 'center' }),
+        });
+        return true;
+      }
+    }
+    return false;
   }
 
   setCursor(offset: number): void {

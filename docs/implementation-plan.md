@@ -478,10 +478,20 @@ latest conversation, and there is no picker to switch until EU3.
 *DoD:* full workspace state survives relaunch; smokes green (incl. new
 `smoke-ui.mjs`).
 
-**EU2 — Find & replace + heading navigation.** Custom search panel over
-the PM doc (rendered), `@codemirror/search` (raw); case toggle, next/prev,
-replace one/all. ProjectNav heading outline with click-to-scroll.
-*DoD:* CDP smoke: search → cycle → replace one; outline click scrolls.
+**EU2 — Find & replace + heading navigation.** ✅ done 2026-07-20 (kimi).
+One custom search panel over BOTH editor modes (deviation from the plan
+text's `@codemirror/search` for raw — a single UX, no new dependency):
+case toggle, next/prev (Enter/Shift+Enter), replace one/all; replacements
+are ordinary editor transactions, so they commit through the normal path.
+Session search API in `editor/session.ts` (PM text-node scan + CM exact
+offsets); match + current-match decorations in both modes. Ctrl/Cmd+F or
+the status-bar Find button opens it. ProjectNav shows the open document's
+heading outline with click-to-scroll (selects the heading text, focuses
+the editor — synchronously, since Tiptap's focus command defers into a
+rAF that never fires in hidden/smoke windows). Outline refetches on doc
+switch and after commits (debounced via EditorRegion's onRevisionChange).
+*DoD:* `smoke-find.mjs`: search → cycle → replace one; outline click
+selects/reveals the heading.
 
 **EU3 — Document & conversation management.** rename (never re-id),
 delete-to-trash + confirm, duplicate, import .md, set-main, reveal in file
