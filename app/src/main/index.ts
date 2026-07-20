@@ -1,4 +1,4 @@
-import { app, BrowserWindow, safeStorage } from 'electron';
+import { app, BrowserWindow, safeStorage, session } from 'electron';
 import path from 'node:path';
 import { registerIpcHandlers, projectInfo } from './ipc';
 import { DocChannels } from '../shared/doc-types';
@@ -94,6 +94,16 @@ app.whenReady().then(() => {
   }
   const credentials = new CredentialsService(safeStorage);
   const manager = new ProjectManager();
+
+  // Spellcheck preference (M1.5 EU4): apply before any window is created.
+  session.defaultSession.setSpellCheckerEnabled(config.spellcheck.enabled);
+  if (config.spellcheck.enabled) {
+    const available = session.defaultSession.availableSpellCheckerLanguages;
+    const language = available.includes(config.spellcheck.language)
+      ? config.spellcheck.language
+      : (available[0] ?? 'en-US');
+    session.defaultSession.setSpellCheckerLanguages([language]);
+  }
 
   let runtime: PiAgentRuntime | null = null;
   let conversations: ConversationService | null = null;

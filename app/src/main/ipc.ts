@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron';
 import path from 'node:path';
 import { Value } from '@sinclair/typebox/value';
 import {
@@ -43,6 +43,7 @@ import {
 import {
   ClearApiKeyRequestSchema,
   SetApiKeyRequestSchema,
+  SetSpellcheckRequestSchema,
   SettingsChannels,
   type SettingsView,
 } from '../shared/settings-types';
@@ -56,6 +57,7 @@ import type { PatchService } from './services/patch';
 import type { ProjectContext } from './services/project';
 import type { ProjectManager } from './services/projectManager';
 import type { WorkspaceConfig } from './services/settings';
+import { saveWorkspaceConfig } from './services/settings';
 import { extractHeadings } from './agent/markdown';
 import {
   duplicateDocument,
@@ -399,7 +401,29 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         keySource: deps.credentials.keySource(id),
       })),
       encryptionAvailable: deps.credentials.encryptionAvailable(),
+      spellcheck: {
+        enabled: deps.config.spellcheck.enabled,
+        language: deps.config.spellcheck.language,
+        availableLanguages: session.defaultSession.availableSpellCheckerLanguages,
+      },
     };
+  });
+
+  /** Spellcheck (M1.5 EU4): applied to the default session immediately and
+   * persisted to the workspace config. */
+  ipcMain.handle(SettingsChannels.setSpellcheck, (_event, raw: unknown) => {
+    const req = Value.Decode(SetSpellcheckRequestSchema, raw);
+    const available = session.defaultSession.availableSpellCheckerLanguages;
+    const language = available.includes(req.language)
+      ? req.language
+      : (available[0] ?? 'en-US');
+    session.defaultSession.setSpellCheckerEnabled(req.enabled);
+    if (req.enabled) {
+      session.defaultSession.setSpellCheckerLanguages([language]);
+    }
+    deps.config.spellcheck = { enabled: req.enabled, language };
+    saveWorkspaceConfig(deps.config);
+    return { enabled: req.enabled, language };
   });
 
   ipcMain.handle(SettingsChannels.setApiKey, (_event, raw: unknown) => {

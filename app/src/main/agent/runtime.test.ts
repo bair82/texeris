@@ -29,6 +29,7 @@ const CONFIG = {
     fast: { provider: 'faux', model: 'faux-model' },
     deep: { provider: 'faux', model: 'faux-model' },
   },
+  spellcheck: { enabled: true, language: 'en-US' },
 };
 
 function makeRuntime(): PiAgentRuntime {

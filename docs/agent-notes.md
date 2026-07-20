@@ -65,3 +65,7 @@ trashed docs keep their row + revision history (file at
 view/restore builds on this. Conversations now list/rename/delete and
 auto-title from the first user message; ui state persists the active one
 (`openConversationId`). EU4+ unclaimed.
+
+**kimi, 2026-07-20** — EU4 (spellcheck + word/selection counts) done on
+`kimi/main`. `WorkspaceConfig` gained a `spellcheck` field (config.json);
+Settings IPC has `setSpellcheck`. EU5+ unclaimed.

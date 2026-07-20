@@ -12,6 +12,12 @@ export interface ProviderSettingsView {
   keySource: 'keychain' | 'env' | 'none';
 }
 
+export interface SpellcheckView {
+  enabled: boolean;
+  language: string;
+  availableLanguages: string[];
+}
+
 export interface SettingsView {
   modes: {
     fast: { provider: string; model: string };
@@ -19,6 +25,7 @@ export interface SettingsView {
   };
   providers: ProviderSettingsView[];
   encryptionAvailable: boolean;
+  spellcheck: SpellcheckView;
 }
 
 export const SetApiKeyRequestSchema = Type.Object({
@@ -32,8 +39,15 @@ export const ClearApiKeyRequestSchema = Type.Object({
 });
 export type ClearApiKeyRequest = Static<typeof ClearApiKeyRequestSchema>;
 
+export const SetSpellcheckRequestSchema = Type.Object({
+  enabled: Type.Boolean(),
+  language: Type.String(),
+});
+export type SetSpellcheckRequest = Static<typeof SetSpellcheckRequestSchema>;
+
 export const SettingsChannels = {
   get: 'texeris:settings-get',
   setApiKey: 'texeris:settings-set-api-key',
   clearApiKey: 'texeris:settings-clear-api-key',
+  setSpellcheck: 'texeris:settings-set-spellcheck',
 } as const;

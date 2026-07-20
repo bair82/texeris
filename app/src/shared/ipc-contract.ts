@@ -89,6 +89,10 @@ export interface TexerisApi {
     get(): Promise<SettingsView>;
     setApiKey(provider: string, key: string): Promise<{ keySource: string }>;
     clearApiKey(provider: string): Promise<{ keySource: string }>;
+    setSpellcheck(input: {
+      enabled: boolean;
+      language: string;
+    }): Promise<{ enabled: boolean; language: string }>;
   };
   ui: {
     get(): Promise<UiState>;

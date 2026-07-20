@@ -15,6 +15,18 @@ import Toolbar from './Toolbar';
 
 type SaveState = 'loading' | 'saved' | 'dirty' | 'saving' | 'error';
 
+/** Word count that ignores Markdown syntax tokens (headings, pipes, rules). */
+function countWords(text: string): number {
+  const tokens = text.match(/\S+/g) ?? [];
+  let count = 0;
+  for (const token of tokens) {
+    if (/[\p{L}\p{N}]/u.test(token)) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
 interface EditorNotice {
   text: string;
   actionLabel?: string;
@@ -60,6 +72,9 @@ export default function EditorRegion({
   const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [wordCount, setWordCount] = useState<number | null>(null);
+  const [selStats, setSelStats] = useState<{ words: number; chars: number } | null>(null);
+  const lastCountedTextRef = useRef<string | null>(null);
   const dirtyRef = useRef(false);
   const loadedDocIdRef = useRef<string | null>(null);
   const openSeqRef = useRef(0);
@@ -220,6 +235,28 @@ export default function EditorRegion({
     return registerSelectionGetter(() => sessionRef.current?.getSelection() ?? null);
   }, []);
 
+  // Document statistics (M1.5 EU4): word count recomputed on change,
+  // selection count continuously, both polled lightly (sessions have no
+  // selection-change events of their own).
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const session = sessionRef.current;
+      if (!session) {
+        return;
+      }
+      const text = session.getText();
+      if (text !== lastCountedTextRef.current) {
+        lastCountedTextRef.current = text;
+        setWordCount(countWords(text));
+      }
+      const selection = session.getSelectionText();
+      setSelStats(
+        selection ? { words: countWords(selection), chars: selection.length } : null,
+      );
+    }, 500);
+    return () => clearInterval(timer);
+  }, []);
+
   // Outline navigation bridge (EU2): the nav asks us to jump to a heading.
   useEffect(() => {
     return registerNavigateHandler((headingText) => {
@@ -349,6 +386,11 @@ export default function EditorRegion({
             </button>
           ))}
         </div>
+        <span className="word-count">
+          {wordCount !== null && `${wordCount.toLocaleString('en-US')} words`}
+          {selStats &&
+            ` · ${selStats.words.toLocaleString('en-US')} words, ${selStats.chars.toLocaleString('en-US')} chars selected`}
+        </span>
         <div className="status-right">
           <span className="status-chip">
             {revision !== null ? `rev ${revision}` : '…'} ·{' '}

@@ -61,6 +61,7 @@ export function createFauxModels(scripted: string): { models: Models; config: Wo
         fast: { provider: 'faux', model: 'faux-model' },
         deep: { provider: 'faux', model: 'faux-model' },
       },
+      spellcheck: { enabled: true, language: 'en-US' },
     },
   };
 }

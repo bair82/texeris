@@ -94,6 +94,8 @@ const api: TexerisApi = {
       ipcRenderer.invoke(SettingsChannels.setApiKey, { provider, key }),
     clearApiKey: (provider) =>
       ipcRenderer.invoke(SettingsChannels.clearApiKey, { provider }),
+    setSpellcheck: (input) =>
+      ipcRenderer.invoke(SettingsChannels.setSpellcheck, input),
   },
   ui: {
     get: () => ipcRenderer.invoke(UiChannels.get),

@@ -568,6 +568,16 @@ body.col-resizing {
   gap: 10px;
 }
 
+.word-count {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-faint);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .status-chip {
   font-size: 12px;
   color: var(--text-muted);
@@ -1592,6 +1602,20 @@ body.col-resizing {
   color: var(--green);
   font-size: 12px;
   margin: 4px 0;
+}
+
+.settings-spellcheck {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0;
+}
+
+.settings-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
 }
 
 /* ----------------------------- project picker ----------------------------- */

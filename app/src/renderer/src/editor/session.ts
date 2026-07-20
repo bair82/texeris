@@ -47,6 +47,8 @@ export interface EditorSession {
   getText(): string;
   /** Approximate canonical-text selection offsets (null when empty). */
   getSelection(): { from: number; to: number } | null;
+  /** Text of the current selection (null when empty). */
+  getSelectionText(): string | null;
   /** Canonical-text caret offset (approximate in rendered mode). */
   getCursor(): number;
   /** Move the caret near a canonical-text offset (best-effort; no scroll). */
@@ -284,6 +286,14 @@ export class RenderedSession implements EditorSession {
       return null;
     }
     return { from: this.toCanonicalOffset(from), to: this.toCanonicalOffset(to) };
+  }
+
+  getSelectionText(): string | null {
+    const selection = this.editor.state.selection;
+    if (selection.empty) {
+      return null;
+    }
+    return this.editor.state.doc.textBetween(selection.from, selection.to, ' ', ' ');
   }
 
   /**
@@ -548,6 +558,11 @@ export class RawSession implements EditorSession {
   getSelection(): { from: number; to: number } | null {
     const { from, to } = this.view.state.selection.main;
     return from === to ? null : { from, to };
+  }
+
+  getSelectionText(): string | null {
+    const selection = this.view.state.selection.main;
+    return selection.empty ? null : this.view.state.sliceDoc(selection.from, selection.to);
   }
 
   getCursor(): number {

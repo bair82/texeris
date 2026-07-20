@@ -59,6 +59,41 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
           </dd>
         </dl>
 
+        <h3>Spellcheck</h3>
+        <div className="settings-spellcheck">
+          <label className="settings-check">
+            <input
+              type="checkbox"
+              checked={settings.spellcheck.enabled}
+              onChange={(e) => {
+                void window.texeris.settings
+                  .setSpellcheck({
+                    enabled: e.target.checked,
+                    language: settings.spellcheck.language,
+                  })
+                  .then(refresh);
+              }}
+            />
+            Enable spellcheck
+          </label>
+          <select
+            className="scope-select"
+            disabled={!settings.spellcheck.enabled}
+            value={settings.spellcheck.language}
+            onChange={(e) => {
+              void window.texeris.settings
+                .setSpellcheck({ enabled: true, language: e.target.value })
+                .then(refresh);
+            }}
+          >
+            {settings.spellcheck.availableLanguages.map((lang) => (
+              <option key={lang} value={lang}>
+                {lang}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <h3>API keys</h3>
         {!settings.encryptionAvailable && (
           <p className="chat-error">

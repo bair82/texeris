@@ -14,11 +14,17 @@ export interface ModelModeConfig {
   model: string;
 }
 
+export interface SpellcheckConfig {
+  enabled: boolean;
+  language: string;
+}
+
 export interface WorkspaceConfig {
   modes: {
     fast: ModelModeConfig;
     deep: ModelModeConfig;
   };
+  spellcheck: SpellcheckConfig;
 }
 
 export const DEFAULT_CONFIG: WorkspaceConfig = {
@@ -26,6 +32,7 @@ export const DEFAULT_CONFIG: WorkspaceConfig = {
     fast: { provider: 'deepseek', model: 'deepseek-v4-flash' },
     deep: { provider: 'moonshotai', model: 'kimi-k3' },
   },
+  spellcheck: { enabled: true, language: 'en-US' },
 };
 
 export function workspaceDir(): string {
@@ -51,5 +58,14 @@ export function loadWorkspaceConfig(dir = workspaceDir()): WorkspaceConfig {
       fast: parsed.modes?.fast ?? DEFAULT_CONFIG.modes.fast,
       deep: parsed.modes?.deep ?? DEFAULT_CONFIG.modes.deep,
     },
+    spellcheck: {
+      enabled: parsed.spellcheck?.enabled ?? DEFAULT_CONFIG.spellcheck.enabled,
+      language: parsed.spellcheck?.language ?? DEFAULT_CONFIG.spellcheck.language,
+    },
   };
+}
+
+/** Persist the full config back to config.json (spellcheck lives here). */
+export function saveWorkspaceConfig(config: WorkspaceConfig, dir = workspaceDir()): void {
+  atomicWriteText(configPath(dir), JSON.stringify(config, null, 2) + '\n');
 }
