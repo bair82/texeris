@@ -440,6 +440,54 @@ cross-build dmg from Linux.
 document only (other documents are agent-readable via tools), and macOS
 packaging needs a Mac.
 
+---
+
+## M1.5 — Daily-use ergonomics
+
+Approved 2026-07-20 (plan file `plans/…/psylocke-batgirl-groot.md`; codex's
+12-item review + kimi's list reconciled). Fills the product-spec §11.1 gaps
+("Search and replace", "Navigate by headings") before M2. Out of scope:
+selection quick actions, ghost text, whole-project search, figures (M2+).
+
+**EU1 — Layout rehaul + persistent workspace.** Three-region plan §12
+layout (ProjectNav | editor | side column) with resizable/collapsible
+panes; per-project UI state (pane sizes, open doc, mode, cursor/scroll,
+conversation) in the `settings` table; focus mode; chat copy buttons.
+*DoD:* full workspace state survives relaunch; smokes green.
+
+**EU2 — Find & replace + heading navigation.** Custom search panel over
+the PM doc (rendered), `@codemirror/search` (raw); case toggle, next/prev,
+replace one/all. ProjectNav heading outline with click-to-scroll.
+*DoD:* CDP smoke: search → cycle → replace one; outline click scrolls.
+
+**EU3 — Document & conversation management.** rename (never re-id),
+delete-to-trash + confirm, duplicate, import .md, set-main, reveal in file
+manager; conversation picker (reopen/rename/delete).
+*DoD:* unit tests incl. trash; smoke: rename doc, reopen renamed
+conversation.
+
+**EU4 — Proofreading & statistics.** Electron spellcheck + language in
+settings; word count + selection count in the status bar.
+*DoD:* wavy underline in both modes; counts update live.
+
+**EU5 — Keyboard UX.** App menu (File/Edit/View/Help) over a shared
+renderer command registry; Ctrl+K command palette; shortcuts overlay.
+*DoD:* every menu action reachable via palette; smoke runs one command.
+
+**EU6 — Structural editing + surface preferences.** Table row/col
+add+delete, footnote insert, link edit; font family/size, editor width,
+dark/light/system theme.
+*DoD:* table ops round-trip; theme repaints without reload; prefs persist.
+
+**EU7 — Recovery & onboarding.** Trash view with restore; `welcome.md`
+seeded into new projects explaining autosave/modes/scopes/patches/
+checkpoints.
+*DoD:* delete → trash → restore works; new project opens on welcome.md.
+
+Execution order: EU1 → EU7, one commit per package. Coordination:
+`agent:kimi` / `agent:codex` issues per package (codex picks what it
+wants; notes on the board).
+
 ## 15. Testing plan
 
 - **Unit (vitest, node env):** revision grouping/replay, patch

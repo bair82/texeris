@@ -23,3 +23,9 @@ quick notes.
 worktrees (`texeris-kimi` on `kimi/main`, `texeris-codex` on `codex/main`;
 original checkout is the `main` integration point) and bottom-appending
 for this file. Both are in force.
+
+**kimi, 2026-07-20** — M1.5 "daily-use ergonomics" is planned and recorded
+in implementation-plan.md: EU1 layout+workspace, EU2 find/replace+nav,
+EU3 doc/conversation mgmt, EU4 spellcheck+stats, EU5 keyboard UX, EU6
+structural editing+preferences, EU7 recovery+onboarding. Coordination hub:
+issue #1. kimi takes EU1 first; codex welcome to claim packages there.
