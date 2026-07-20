@@ -42,7 +42,9 @@ import {
   SettingsChannels,
   type SettingsView,
 } from '../shared/settings-types';
+import { UiChannels, UiStateSchema } from '../shared/ui-types';
 import type { AgentRuntime } from './agent/runtime';
+import { UiStateService } from './services/uiState';
 import type { ConversationService } from './services/conversation';
 import { CredentialsService } from './services/credentials';
 import { CheckpointService } from './services/checkpoint';
@@ -342,5 +344,18 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const req = Value.Decode(ClearApiKeyRequestSchema, raw);
     deps.credentials.clearApiKey(req.provider);
     return { keySource: deps.credentials.keySource(req.provider) };
+  });
+
+  // --------------------------------------------------------------------- ui
+
+  /** Workspace layout state (M1.5 EU1): one validated JSON blob per project. */
+  ipcMain.handle(UiChannels.get, () => {
+    return new UiStateService(deps.requireProject().db).get();
+  });
+
+  ipcMain.handle(UiChannels.set, (_event, raw: unknown) => {
+    const state = Value.Decode(UiStateSchema, raw);
+    new UiStateService(deps.requireProject().db).set(state);
+    return { ok: true };
   });
 }

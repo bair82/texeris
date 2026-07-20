@@ -13,6 +13,7 @@ const SMOKE = [
   'scripts/smoke-recovery.mjs',
   'scripts/smoke-error.mjs',
   'scripts/smoke-project.mjs',
+  'scripts/smoke-ui.mjs',
 ];
 
 let failed = 0;

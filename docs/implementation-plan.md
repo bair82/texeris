@@ -449,11 +449,17 @@ Approved 2026-07-20 (plan file `plans/…/psylocke-batgirl-groot.md`; codex's
 ("Search and replace", "Navigate by headings") before M2. Out of scope:
 selection quick actions, ghost text, whole-project search, figures (M2+).
 
-**EU1 — Layout rehaul + persistent workspace.** Three-region plan §12
-layout (ProjectNav | editor | side column) with resizable/collapsible
-panes; per-project UI state (pane sizes, open doc, mode, cursor/scroll,
-conversation) in the `settings` table; focus mode; chat copy buttons.
-*DoD:* full workspace state survives relaunch; smokes green.
+**EU1 — Layout rehaul + persistent workspace.** ✅ done 2026-07-20 (kimi).
+Three-region plan §12 layout (ProjectNav | editor | side column) with
+drag-resizable/collapsible regions and an always-visible activity rail
+(files/assistant/focus toggles + settings); per-project UI state (pane
+sizes, visibility, open doc, editor mode, per-doc cursor/scroll) as one
+JSON blob in the `settings` table over `ui:get`/`ui:set`; focus mode; chat
+copy buttons. Deviation from the original bullet: open-conversation
+persistence dropped — `getOrCreateConversation` already restores the
+latest conversation, and there is no picker to switch until EU3.
+*DoD:* full workspace state survives relaunch; smokes green (incl. new
+`smoke-ui.mjs`).
 
 **EU2 — Find & replace + heading navigation.** Custom search panel over
 the PM doc (rendered), `@codemirror/search` (raw); case toggle, next/prev,

@@ -37,6 +37,7 @@ export default function ChatPanel() {
   const [manifest, setManifest] = useState<ContextManifest | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastTurn, setLastTurn] = useState<LastTurn | null>(null);
+  const [copiedSeq, setCopiedSeq] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -232,7 +233,23 @@ export default function ChatPanel() {
                 {m.isError ? '⚠' : '⚙'} {m.toolName}
               </span>
             ) : (
-              <MarkdownView text={m.text} />
+              <>
+                <MarkdownView text={m.text} />
+                <button
+                  className="msg-copy"
+                  title="Copy message text"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(m.text);
+                    setCopiedSeq(m.seq);
+                    setTimeout(
+                      () => setCopiedSeq((s) => (s === m.seq ? null : s)),
+                      1200,
+                    );
+                  }}
+                >
+                  {copiedSeq === m.seq ? 'copied' : 'copy'}
+                </button>
+              </>
             )}
           </div>
         ))}

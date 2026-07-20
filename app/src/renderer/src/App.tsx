@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { AppInfo } from '../../shared/ipc-contract';
 import type { ProjectInfo } from '../../shared/project-types';
-import ChatPanel from './ChatPanel';
-import EditorRegion from './editor/EditorRegion';
-import PatchReview from './PatchReview';
+import AppShell from './layout/AppShell';
 import ProjectPicker from './ProjectPicker';
 import SettingsPanel from './SettingsPanel';
 
@@ -30,19 +28,13 @@ export default function App() {
 
   return (
     <main className="app-shell">
-      <div className="app-columns">
-        <EditorRegion />
-        <div className="side-column">
-          <PatchReview />
-          <ChatPanel />
-        </div>
-      </div>
+      <AppShell onOpenSettings={() => setShowSettings(true)} />
       <footer className="app-footer">
         <span className="project-chip" title={project.root}>
           {project.root.split('/').pop()}
         </span>
         <button
-          className="settings-button"
+          className="footer-button"
           title="Switch project"
           onClick={() => {
             void (async () => {
@@ -56,10 +48,9 @@ export default function App() {
         >
           switch
         </button>
-        {info && `Texeris · Electron ${info.electronVersion} · Node ${info.nodeVersion}`}
-        <button className="settings-button" onClick={() => setShowSettings(true)}>
-          ⚙ Settings
-        </button>
+        <span className="footer-version">
+          {info && `Texeris · Electron ${info.electronVersion} · Node ${info.nodeVersion}`}
+        </span>
       </footer>
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
     </main>

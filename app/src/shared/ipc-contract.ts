@@ -17,6 +17,7 @@ import type {
   PatchRecord,
 } from './patch-types';
 import type { SettingsView } from './settings-types';
+import type { UiState } from './ui-types';
 import type { CheckpointInfo, DocumentInfo, RevisionInfo } from './domain-types';
 import type { ProjectInfo } from './project-types';
 
@@ -75,6 +76,10 @@ export interface TexerisApi {
     get(): Promise<SettingsView>;
     setApiKey(provider: string, key: string): Promise<{ keySource: string }>;
     clearApiKey(provider: string): Promise<{ keySource: string }>;
+  };
+  ui: {
+    get(): Promise<UiState>;
+    set(state: UiState): Promise<{ ok: boolean }>;
   };
   project: {
     current(): Promise<ProjectInfo | null>;

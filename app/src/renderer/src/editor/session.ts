@@ -11,7 +11,7 @@
  */
 
 import { Editor, Extension } from '@tiptap/core';
-import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Plugin, PluginKey, Selection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import {
@@ -42,6 +42,10 @@ export interface EditorSession {
   getText(): string;
   /** Approximate canonical-text selection offsets (null when empty). */
   getSelection(): { from: number; to: number } | null;
+  /** Canonical-text caret offset (approximate in rendered mode). */
+  getCursor(): number;
+  /** Move the caret near a canonical-text offset (best-effort; no scroll). */
+  setCursor(offset: number): void;
   /** Commit any pending changes now (mode switch, patch application). */
   flush(): void;
   /** Temporarily mark ranges in the editor (patch review indication, D0). */
@@ -216,16 +220,41 @@ export class RenderedSession implements EditorSession {
     if (from === to) {
       return null;
     }
-    // Approximate canonical offsets (plan §13 PM variant): serialize the doc
-    // prefix up to each PM position. O(doc) per call, exact enough for
-    // context slicing.
+    return { from: this.toCanonicalOffset(from), to: this.toCanonicalOffset(to) };
+  }
+
+  /**
+   * Canonical offset of a PM position via prefix serialization (plan §13 PM
+   * variant, approximate): serialize the doc prefix up to the position.
+   * O(doc) per call, exact enough for context slicing and cursor restore.
+   */
+  private toCanonicalOffset(pos: number): number {
     const doc = this.editor.state.doc;
     const topType = this.editor.schema.topNodeType;
-    const toOffset = (pos: number): number => {
-      const slice = topType.create(null, doc.slice(0, pos).content);
-      return markdownOut(slice.toJSON() as PMNodeJSON).length;
-    };
-    return { from: toOffset(from), to: toOffset(to) };
+    const slice = topType.create(null, doc.slice(0, pos).content);
+    return markdownOut(slice.toJSON() as PMNodeJSON).length;
+  }
+
+  getCursor(): number {
+    return this.toCanonicalOffset(this.editor.state.selection.head);
+  }
+
+  setCursor(offset: number): void {
+    // Invert toCanonicalOffset by binary search: the largest PM position
+    // whose canonical prefix fits within `offset`. Approximate but stable.
+    const doc = this.editor.state.doc;
+    let lo = 0;
+    let hi = doc.content.size;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (this.toCanonicalOffset(mid) <= offset) {
+        lo = mid;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    const sel = Selection.near(doc.resolve(lo), 1);
+    this.editor.view.dispatch(this.editor.state.tr.setSelection(sel));
   }
 
   focus(): void {
@@ -350,6 +379,15 @@ export class RawSession implements EditorSession {
   getSelection(): { from: number; to: number } | null {
     const { from, to } = this.view.state.selection.main;
     return from === to ? null : { from, to };
+  }
+
+  getCursor(): number {
+    return this.view.state.selection.main.head;
+  }
+
+  setCursor(offset: number): void {
+    const anchor = Math.max(0, Math.min(offset, this.view.state.doc.length));
+    this.view.dispatch({ selection: { anchor } });
   }
 
   focus(): void {

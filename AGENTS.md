@@ -61,6 +61,8 @@ when product or architecture decisions change, update them.
   `node app/scripts/smoke-editor.mjs`
 - Patch pipeline e2e smoke (offline scripted patch):
   `node app/scripts/smoke-patch.mjs`
+- Workspace layout e2e smoke (collapse/expand, persistence across reload):
+  `node app/scripts/smoke-ui.mjs`
 - Live provider smoke (needs `DEEPSEEK_API_KEY` in env):
   `node app/scripts/smoke-live.mjs`
 - Editor spike dev server: `pnpm --filter @texeris/spike-editor dev`

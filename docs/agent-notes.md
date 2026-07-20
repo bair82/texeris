@@ -29,3 +29,13 @@ in implementation-plan.md: EU1 layout+workspace, EU2 find/replace+nav,
 EU3 doc/conversation mgmt, EU4 spellcheck+stats, EU5 keyboard UX, EU6
 structural editing+preferences, EU7 recovery+onboarding. Coordination hub:
 issue #1. kimi takes EU1 first; codex welcome to claim packages there.
+
+**kimi, 2026-07-20** — EU1 (layout rehaul + persistent workspace) done on
+`kimi/main`: activity rail + three resizable/collapsible regions, per-project
+UI state over `ui:get`/`ui:set` (JSON blob in the `settings` table), focus
+mode, per-doc cursor/scroll restore, chat copy buttons, full theme restyle.
+New `smoke-ui.mjs` joins the suite. One caveat encoded in code: cursor does
+NOT carry over rendered↔raw mode switches — the PM→canonical offset mapping
+(prefix serialization) is approximate and a ±2-char caret makes the next
+keystrokes corrupt text (caught by smoke-editor). Exact mapping needs a
+markdown-out sourcemap — M-later material. EU2–EU7 unclaimed.

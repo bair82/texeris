@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/core';
-import type { DocumentInfo } from '../../../shared/domain-types';
+import type { UiStateDoc } from '../../../shared/ui-types';
 import type { EditorMode, EditorSession } from './session';
 import { RawSession, RenderedSession } from './session';
 import {
@@ -19,40 +19,89 @@ interface EditorNotice {
   onAction?: () => void;
 }
 
+interface EditorRegionProps {
+  /** The document to show; the region (re)opens whenever this changes. */
+  openDocId: string | null;
+  /** Per-document view state (cursor/scroll) restored when opening a doc. */
+  docStates: Record<string, UiStateDoc>;
+  /** Mode at mount; afterwards the region owns it and reports changes. */
+  initialMode: EditorMode;
+  /** Report cursor/scroll for a document (debounced IPC persistence). */
+  onDocState(docId: string, patch: UiStateDoc): void;
+  onModeChange(mode: EditorMode): void;
+}
+
 /**
  * The editor region (plan §12): rendered mode default with a raw toggle,
- * commit-on-group over IPC (autosave), external-change reload, a document
- * switcher with new-document creation, and a status bar with revision +
- * save state. The session abstraction owns the two editing modes over one
- * canonical text.
+ * commit-on-group over IPC (autosave), external-change reload, and a status
+ * bar with revision + save state. Document selection lives in the shell
+ * (M1.5 EU1); this region opens whatever document it is handed and reports
+ * view state (cursor, scroll) back for persistence.
  */
-export default function EditorRegion() {
+export default function EditorRegion({
+  openDocId,
+  docStates,
+  initialMode,
+  onDocState,
+  onModeChange,
+}: EditorRegionProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sessionRef = useRef<EditorSession | null>(null);
-  const [mode, setMode] = useState<EditorMode>('rendered');
-  const [docs, setDocs] = useState<DocumentInfo[]>([]);
-  const [openDocId, setOpenDocId] = useState<string | null>(null);
+  const [mode, setMode] = useState<EditorMode>(initialMode);
   const [revision, setRevision] = useState<number | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('loading');
   const [notice, setNotice] = useState<EditorNotice | null>(null);
-  const [newDocName, setNewDocName] = useState<string | null>(null);
   const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const dirtyRef = useRef(false);
-  const openDocIdRef = useRef<string | null>(null);
-  openDocIdRef.current = openDocId;
+  const loadedDocIdRef = useRef<string | null>(null);
+  const openSeqRef = useRef(0);
+  const scrollCleanupRef = useRef<(() => void) | null>(null);
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+  const docStatesRef = useRef(docStates);
+  docStatesRef.current = docStates;
+  const onDocStateRef = useRef(onDocState);
+  onDocStateRef.current = onDocState;
 
-  const refreshDocs = useCallback(async () => {
-    setDocs(await window.texeris.doc.list());
+  /** The element that actually scrolls (CM scrolls its own scroller). */
+  const scrollerOf = (): HTMLElement | null => {
+    const host = hostRef.current;
+    if (!host) {
+      return null;
+    }
+    return (host.querySelector('.cm-scroller') as HTMLElement | null) ?? host;
+  };
+
+  /** Capture cursor + scroll for the currently open document. */
+  const snapshotDocState = useCallback(() => {
+    const docId = loadedDocIdRef.current;
+    const session = sessionRef.current;
+    const scroller = scrollerOf();
+    if (!docId || !session || !scroller) {
+      return;
+    }
+    const range = scroller.scrollHeight - scroller.clientHeight;
+    onDocStateRef.current(docId, {
+      cursor: session.getCursor(),
+      scrollFraction: range > 0 ? scroller.scrollTop / range : 0,
+    });
   }, []);
 
   const destroySession = useCallback(() => {
+    scrollCleanupRef.current?.();
+    scrollCleanupRef.current = null;
+    if (scrollTimerRef.current) {
+      clearTimeout(scrollTimerRef.current);
+      scrollTimerRef.current = null;
+    }
     sessionRef.current?.destroy();
     sessionRef.current = null;
   }, []);
 
   const createSession = useCallback(
-    (text: string, forMode: EditorMode, documentId: string) => {
+    (text: string, forMode: EditorMode, documentId: string, restore?: UiStateDoc) => {
       const host = hostRef.current;
       if (!host) {
         return;
@@ -86,40 +135,73 @@ export default function EditorRegion() {
       session.mount(host);
       sessionRef.current = session;
       setActiveEditor(session instanceof RenderedSession ? session.getEditor() : null);
+      if (restore?.cursor !== undefined) {
+        session.setCursor(restore.cursor);
+      }
+      if (restore?.scrollFraction !== undefined) {
+        const fraction = restore.scrollFraction;
+        // Wait for layout before applying the scroll position.
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            const scroller = scrollerOf();
+            if (scroller) {
+              const range = scroller.scrollHeight - scroller.clientHeight;
+              scroller.scrollTop = fraction * Math.max(0, range);
+            }
+          });
+        });
+      }
+      // Persist view state as the user scrolls (debounced).
+      const scroller = scrollerOf();
+      if (scroller) {
+        const onScroll = () => {
+          if (scrollTimerRef.current) {
+            clearTimeout(scrollTimerRef.current);
+          }
+          scrollTimerRef.current = setTimeout(snapshotDocState, 350);
+        };
+        scroller.addEventListener('scroll', onScroll, { passive: true });
+        scrollCleanupRef.current = () => scroller.removeEventListener('scroll', onScroll);
+      }
     },
-    [],
+    [snapshotDocState],
   );
 
   const openDocument = useCallback(
     async (documentId: string) => {
+      const seq = ++openSeqRef.current;
       const doc = await window.texeris.doc.getText(documentId);
+      if (seq !== openSeqRef.current) {
+        return; // superseded by a newer open while awaiting
+      }
       dirtyRef.current = false;
       setRevision(doc.revision);
       setSaveState('saved');
-      setOpenDocId(documentId);
+      loadedDocIdRef.current = documentId;
       destroySession();
-      createSession(doc.text, mode, documentId);
+      createSession(doc.text, modeRef.current, documentId, docStatesRef.current[documentId]);
     },
-    [createSession, destroySession, mode],
+    [createSession, destroySession],
   );
 
   const reload = useCallback(async () => {
-    if (openDocIdRef.current) {
-      await openDocument(openDocIdRef.current);
+    if (loadedDocIdRef.current) {
+      await openDocument(loadedDocIdRef.current);
     }
   }, [openDocument]);
 
-  // Initial load: document list + main document.
+  // Open whatever document the shell hands down. Before leaving a document,
+  // flush pending edits and snapshot its view state.
   useEffect(() => {
-    void (async () => {
-      const list = await window.texeris.doc.list();
-      setDocs(list);
-      if (list[0]) {
-        await openDocument(list[0].id);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!openDocId || openDocId === loadedDocIdRef.current) {
+      return;
+    }
+    if (loadedDocIdRef.current) {
+      sessionRef.current?.flush();
+      snapshotDocState();
+    }
+    void openDocument(openDocId);
+  }, [openDocId, openDocument, snapshotDocState]);
 
   // Selection bridge for the chat's selection scope.
   useEffect(() => {
@@ -145,8 +227,7 @@ export default function EditorRegion() {
   // uncommitted buffer — never a silent loss, plan §8) or keep editing.
   useEffect(() => {
     return window.texeris.doc.onEvent((event) => {
-      void refreshDocs();
-      if (event.documentId !== openDocIdRef.current) {
+      if (event.documentId !== loadedDocIdRef.current) {
         return;
       }
       if (event.type === 'external-import') {
@@ -174,96 +255,40 @@ export default function EditorRegion() {
         });
       }
     });
-  }, [reload, refreshDocs]);
+  }, [reload]);
 
   const switchMode = (next: EditorMode) => {
-    if (next === mode || !sessionRef.current || !openDocId) {
+    const docId = loadedDocIdRef.current;
+    if (next === mode || !sessionRef.current || !docId) {
       return;
     }
     // Mode switch is not a revision: pending text changes flush as a normal
     // commit; the switch itself only swaps the view over the same text.
+    // Scroll carries over so the user stays where they were. The cursor
+    // does NOT carry over: the PM→canonical offset mapping is approximate
+    // (prefix serialization), and a caret landing ±2 chars off would make
+    // the next keystrokes corrupt text. Rendered→rendered restore across
+    // restarts is self-consistent (binary-search inverse), so it stays.
     sessionRef.current.flush();
     const text = sessionRef.current.getText();
+    const scroller = scrollerOf();
+    const range = scroller ? scroller.scrollHeight - scroller.clientHeight : 0;
+    const restore: UiStateDoc = {
+      scrollFraction: scroller && range > 0 ? scroller.scrollTop / range : 0,
+    };
     destroySession();
     setMode(next);
-    createSession(text, next, openDocId);
-  };
-
-  const switchDocument = (documentId: string) => {
-    if (documentId === openDocId) {
-      return;
-    }
-    sessionRef.current?.flush();
-    void openDocument(documentId);
-  };
-
-  const createNewDocument = async () => {
-    const name = (newDocName ?? '').trim();
-    if (!name) {
-      setNewDocName(null);
-      return;
-    }
-    try {
-      const created = await window.texeris.doc.create(name.endsWith('.md') ? name : `${name}.md`);
-      setNewDocName(null);
-      await refreshDocs();
-      const list = await window.texeris.doc.list();
-      const createdDoc = list.find((d) => d.id === created.id);
-      if (createdDoc) {
-        switchDocument(createdDoc.id);
-      }
-    } catch (err) {
-      setNotice({ text: err instanceof Error ? err.message : String(err) });
-    }
+    modeRef.current = next;
+    createSession(text, next, docId, restore);
+    onModeChange(next);
   };
 
   return (
     <section className="editor-region">
-      <div className="doc-bar">
-        <select
-          className="doc-select"
-          value={openDocId ?? ''}
-          onChange={(e) => switchDocument(e.target.value)}
-        >
-          {docs.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.path}
-            </option>
-          ))}
-        </select>
-        {newDocName === null ? (
-          <button className="doc-new" title="New document" onClick={() => setNewDocName('')}>
-            + New
-          </button>
-        ) : (
-          <span className="doc-new-form">
-            <input
-              autoFocus
-              placeholder="notes.md"
-              value={newDocName}
-              onChange={(e) => setNewDocName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  void createNewDocument();
-                } else if (e.key === 'Escape') {
-                  setNewDocName(null);
-                }
-              }}
-            />
-            <button onClick={() => void createNewDocument()}>Create</button>
-          </span>
-        )}
-        <button
-          className="doc-new history-toggle"
-          title="Revision history"
-          onClick={() => setShowHistory((v) => !v)}
-        >
-          History
-        </button>
-      </div>
       {showHistory && openDocId && <HistoryPanel documentId={openDocId} />}
       {activeEditor && <Toolbar editor={activeEditor} />}
-      <div className="editor-host" ref={hostRef} />      {notice && (
+      <div className="editor-host" ref={hostRef} />
+      {notice && (
         <p className="editor-notice" onClick={() => setNotice(null)}>
           {notice.text}
           {notice.actionLabel && (
@@ -293,9 +318,18 @@ export default function EditorRegion() {
             </button>
           ))}
         </div>
-        <span className="status-chip">
-          {revision !== null ? `rev ${revision}` : '…'} · {saveState}
-        </span>
+        <div className="status-right">
+          <span className="status-chip">
+            {revision !== null ? `rev ${revision}` : '…'} · {saveState}
+          </span>
+          <button
+            className="history-toggle"
+            title="Revision history"
+            onClick={() => setShowHistory((v) => !v)}
+          >
+            History
+          </button>
+        </div>
       </footer>
     </section>
   );

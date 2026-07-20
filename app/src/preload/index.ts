@@ -12,6 +12,7 @@ import {
 import { DocChannels, type DocEvent } from '../shared/doc-types';
 import { PatchChannels, type PatchProposedEvent } from '../shared/patch-types';
 import { SettingsChannels } from '../shared/settings-types';
+import { UiChannels } from '../shared/ui-types';
 import { ProjectChannels, type ProjectInfo } from '../shared/project-types';
 import { HistoryChannels } from '../shared/doc-types';
 
@@ -82,6 +83,10 @@ const api: TexerisApi = {
       ipcRenderer.invoke(SettingsChannels.setApiKey, { provider, key }),
     clearApiKey: (provider) =>
       ipcRenderer.invoke(SettingsChannels.clearApiKey, { provider }),
+  },
+  ui: {
+    get: () => ipcRenderer.invoke(UiChannels.get),
+    set: (state) => ipcRenderer.invoke(UiChannels.set, state),
   },
   project: {
     current: () => ipcRenderer.invoke(ProjectChannels.current),
