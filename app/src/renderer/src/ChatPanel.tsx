@@ -3,6 +3,7 @@ import type {
   AgentRunRecord,
   ContextManifest,
   ContextScope,
+  ConversationListItem,
   ModelMode,
   NormalizedAgentEvent,
   UiMessage,
@@ -24,8 +25,23 @@ interface LastTurn {
   scope: ContextScope;
 }
 
-export default function ChatPanel() {
+interface ChatPanelProps {
+  /** Conversation to reopen at mount (persisted workspace state, EU1/EU3). */
+  initialConversationId?: string | null;
+  /** Report the active conversation so the shell can persist it. */
+  onConversationChange?(conversationId: string): void;
+}
+
+export default function ChatPanel({
+  initialConversationId = null,
+  onConversationChange,
+}: ChatPanelProps) {
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<ConversationListItem[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameText, setRenameText] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [runs, setRuns] = useState<AgentRunRecord[]>([]);
   const [showUsage, setShowUsage] = useState(false);
@@ -39,20 +55,102 @@ export default function ChatPanel() {
   const [lastTurn, setLastTurn] = useState<LastTurn | null>(null);
   const [copiedSeq, setCopiedSeq] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  const refreshConversations = useCallback(async () => {
+    setConversations(await window.texeris.chat.listConversations());
+  }, []);
 
   useEffect(() => {
     void (async () => {
-      const { conversationId: id } = await window.texeris.chat.getOrCreateConversation();
+      let id = initialConversationId;
+      if (id) {
+        const list = await window.texeris.chat.listConversations();
+        setConversations(list);
+        if (!list.some((c) => c.id === id)) {
+          id = null;
+        }
+      } else {
+        await refreshConversations();
+      }
+      if (!id) {
+        ({ conversationId: id } = await window.texeris.chat.getOrCreateConversation());
+      }
       setConversationId(id);
       setMessages(await window.texeris.chat.listMessages(id));
       setRuns(await window.texeris.chat.listRuns(id));
       setHeadings(await window.texeris.doc.outline());
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streaming]);
+
+  // Close the picker on any outside click.
+  useEffect(() => {
+    if (!pickerOpen) {
+      return;
+    }
+    const close = (e: MouseEvent) => {
+      if (!pickerRef.current?.contains(e.target as Node)) {
+        setPickerOpen(false);
+        setRenamingId(null);
+        setConfirmDeleteId(null);
+      }
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [pickerOpen]);
+
+  const switchConversation = useCallback(
+    async (id: string) => {
+      if (id === conversationId) {
+        return;
+      }
+      setConversationId(id);
+      setMessages(await window.texeris.chat.listMessages(id));
+      setRuns(await window.texeris.chat.listRuns(id));
+      setManifest(null);
+      setError(null);
+      setStreaming(null);
+      onConversationChange?.(id);
+    },
+    [conversationId, onConversationChange],
+  );
+
+  const newConversation = useCallback(async () => {
+    const { conversationId: id } = await window.texeris.chat.newConversation();
+    setConversationId(id);
+    setMessages([]);
+    setRuns([]);
+    setManifest(null);
+    setError(null);
+    await refreshConversations();
+    onConversationChange?.(id);
+  }, [onConversationChange, refreshConversations]);
+
+  const submitRename = async () => {
+    if (!renamingId) {
+      return;
+    }
+    const title = renameText.trim();
+    if (title) {
+      await window.texeris.chat.renameConversation(renamingId, title);
+      await refreshConversations();
+    }
+    setRenamingId(null);
+  };
+
+  const confirmDelete = async (id: string) => {
+    setConfirmDeleteId(null);
+    await window.texeris.chat.deleteConversation(id);
+    await refreshConversations();
+    if (id === conversationId) {
+      await newConversation();
+    }
+  };
 
   useEffect(() => {
     return window.texeris.chat.onEvent((event: NormalizedAgentEvent) => {
@@ -178,18 +276,92 @@ export default function ChatPanel() {
             {manifest.truncated ? ' · truncated' : ''}
           </span>
         )}
+        <div className="conv-picker-wrap" ref={pickerRef}>
+          <button
+            className="usage-toggle conv-toggle"
+            title="Conversations"
+            onClick={() => {
+              setPickerOpen((v) => !v);
+              if (!pickerOpen) {
+                void refreshConversations();
+              }
+            }}
+          >
+            {conversations.find((c) => c.id === conversationId)?.title ?? 'Chats'} ▾
+          </button>
+          {pickerOpen && (
+            <div className="conv-picker">
+              <ul className="conv-list">
+                {conversations.map((c) => (
+                  <li key={c.id} className={c.id === conversationId ? 'active' : ''}>
+                    {renamingId === c.id ? (
+                      <input
+                        autoFocus
+                        className="conv-rename-input"
+                        value={renameText}
+                        onChange={(e) => setRenameText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            void submitRename();
+                          } else if (e.key === 'Escape') {
+                            setRenamingId(null);
+                          }
+                        }}
+                      />
+                    ) : confirmDeleteId === c.id ? (
+                      <span className="conv-confirm">
+                        <span className="conv-confirm-text">Delete?</span>
+                        <button className="conv-confirm-yes" onClick={() => void confirmDelete(c.id)}>
+                          Delete
+                        </button>
+                        <button className="conv-confirm-no" onClick={() => setConfirmDeleteId(null)}>
+                          Keep
+                        </button>
+                      </span>
+                    ) : (
+                      <>
+                        <button
+                          className="conv-open"
+                          title={`${c.messageCount} message(s)`}
+                          onClick={() => {
+                            void switchConversation(c.id);
+                            setPickerOpen(false);
+                          }}
+                        >
+                          <span className="conv-title">{c.title}</span>
+                          <span className="conv-meta">{c.messageCount} ✉</span>
+                        </button>
+                        <button
+                          className="conv-row-action"
+                          title="Rename"
+                          onClick={() => {
+                            setRenamingId(c.id);
+                            setRenameText(c.title);
+                          }}
+                        >
+                          ✎
+                        </button>
+                        <button
+                          className="conv-row-action conv-delete"
+                          title="Delete conversation"
+                          onClick={() => setConfirmDeleteId(c.id)}
+                        >
+                          ×
+                        </button>
+                      </>
+                    )}
+                  </li>
+                ))}
+                {conversations.length === 0 && <li className="conv-empty">no conversations</li>}
+              </ul>
+            </div>
+          )}
+        </div>
         <button
           className="usage-toggle"
           title="Start a fresh conversation (the old one stays in history storage)"
           onClick={() => {
-            void (async () => {
-              const { conversationId: id } = await window.texeris.chat.newConversation();
-              setConversationId(id);
-              setMessages([]);
-              setRuns([]);
-              setManifest(null);
-              setError(null);
-            })();
+            void newConversation();
           }}
         >
           new chat

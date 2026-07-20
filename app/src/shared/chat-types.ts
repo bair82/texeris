@@ -121,6 +121,9 @@ export type ConversationRequest = Static<typeof ConversationRequestSchema>;
 export const ChatChannels = {
   getOrCreateConversation: 'texeris:chat-get-or-create-conversation',
   newConversation: 'texeris:chat-new-conversation',
+  listConversations: 'texeris:chat-list-conversations',
+  renameConversation: 'texeris:chat-rename-conversation',
+  deleteConversation: 'texeris:chat-delete-conversation',
   listMessages: 'texeris:chat-list-messages',
   listRuns: 'texeris:chat-list-runs',
   startTurn: 'texeris:chat-start-turn',
@@ -128,3 +131,17 @@ export const ChatChannels = {
   /** main → renderer push channel for NormalizedAgentEvent */
   event: 'texeris:chat-event',
 } as const;
+
+/** One row of the conversation picker (M1.5 EU3). */
+export interface ConversationListItem {
+  id: string;
+  title: string;
+  createdAt: string;
+  messageCount: number;
+}
+
+export const RenameConversationRequestSchema = Type.Object({
+  conversationId: Type.String(),
+  title: Type.String({ minLength: 1 }),
+});
+export type RenameConversationRequest = Static<typeof RenameConversationRequestSchema>;

@@ -28,7 +28,7 @@ export default function App() {
 
   return (
     <main className="app-shell">
-      <AppShell onOpenSettings={() => setShowSettings(true)} />
+      <AppShell onOpenSettings={() => setShowSettings(true)} mainDocument={project.mainDocument} />
       <footer className="app-footer">
         <span className="project-chip" title={project.root}>
           {project.root.split('/').pop()}

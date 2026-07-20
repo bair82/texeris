@@ -27,11 +27,18 @@ const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(mi
  * persists per project through the ui:get/ui:set IPC channel, so a relaunch
  * restores the desk exactly as it was left.
  */
-export default function AppShell({ onOpenSettings }: { onOpenSettings: () => void }) {
+export default function AppShell({
+  onOpenSettings,
+  mainDocument,
+}: {
+  onOpenSettings: () => void;
+  mainDocument: string;
+}) {
   const [ui, setUi] = useState<UiState | null>(null);
   const [docs, setDocs] = useState<DocumentInfo[]>([]);
   const [openDocId, setOpenDocId] = useState<string | null>(null);
   const [openDocRevision, setOpenDocRevision] = useState(0);
+  const [mainPath, setMainPath] = useState(mainDocument);
   const uiRef = useRef<UiState>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -108,13 +115,20 @@ export default function AppShell({ onOpenSettings }: { onOpenSettings: () => voi
     );
   const toggleFocus = () => patchUi({ focusMode: !focusMode }, true);
 
-  const openDoc = (documentId: string) => {
-    if (documentId === openDocId) {
-      return;
-    }
-    setOpenDocId(documentId);
-    patchUi({ openDocumentId: documentId }, true);
-  };
+  const openDoc = useCallback(
+    (documentId: string) => {
+      if (documentId === openDocId) {
+        return;
+      }
+      setOpenDocId(documentId);
+      patchUi({ openDocumentId: documentId }, true);
+    },
+    [openDocId, patchUi],
+  );
+
+  const refreshDocs = useCallback(async () => {
+    setDocs(await window.texeris.doc.list());
+  }, []);
 
   const createDoc = async (name: string) => {
     const created = await window.texeris.doc.create(
@@ -123,6 +137,60 @@ export default function AppShell({ onOpenSettings }: { onOpenSettings: () => voi
     setDocs(await window.texeris.doc.list());
     openDoc(created.id);
   };
+
+  // -------------------------------------------------- document management
+
+  const onRenameDoc = useCallback(
+    async (documentId: string, name: string) => {
+      const oldPath = docs.find((d) => d.id === documentId)?.path;
+      const renamed = await window.texeris.doc.rename(documentId, name);
+      await refreshDocs();
+      if (oldPath === mainPath) {
+        setMainPath(renamed.path);
+      }
+    },
+    [docs, refreshDocs, mainPath],
+  );
+
+  const onTrashDoc = useCallback(
+    async (documentId: string) => {
+      await window.texeris.doc.trash(documentId);
+      const list = await window.texeris.doc.list();
+      setDocs(list);
+      if (openDocId === documentId) {
+        const next = list[0]?.id ?? null;
+        setOpenDocId(next);
+        patchUi({ openDocumentId: next }, true);
+      }
+    },
+    [openDocId, patchUi],
+  );
+
+  const onDuplicateDoc = useCallback(
+    async (documentId: string) => {
+      const dup = await window.texeris.doc.duplicate(documentId);
+      setDocs(await window.texeris.doc.list());
+      openDoc(dup.id);
+    },
+    [openDoc],
+  );
+
+  const onImportDoc = useCallback(async () => {
+    const imported = await window.texeris.doc.importDialog();
+    if (imported) {
+      setDocs(await window.texeris.doc.list());
+      openDoc(imported.id);
+    }
+  }, [openDoc]);
+
+  const onSetMainDoc = useCallback(async (documentId: string) => {
+    const info = await window.texeris.doc.setMain(documentId);
+    setMainPath(info.mainDocument);
+  }, []);
+
+  const onRevealDoc = useCallback(async (documentId: string) => {
+    await window.texeris.doc.reveal(documentId);
+  }, []);
 
   const onDocState = useCallback(
     (docId: string, patch: UiStateDoc) => {
@@ -189,9 +257,16 @@ export default function AppShell({ onOpenSettings }: { onOpenSettings: () => voi
             width={navWidth}
             docs={docs}
             openDocId={openDocId}
+            mainPath={mainPath}
             openDocRevision={openDocRevision}
             onOpenDoc={openDoc}
             onCreateDoc={createDoc}
+            onRenameDoc={onRenameDoc}
+            onTrashDoc={onTrashDoc}
+            onDuplicateDoc={onDuplicateDoc}
+            onImportDoc={onImportDoc}
+            onSetMainDoc={onSetMainDoc}
+            onRevealDoc={onRevealDoc}
             onNavigate={navigateToHeading}
           />
           <div
@@ -220,7 +295,10 @@ export default function AppShell({ onOpenSettings }: { onOpenSettings: () => voi
           />
           <div className="side-column" style={{ width: sideWidth }}>
             <PatchReview />
-            <ChatPanel />
+            <ChatPanel
+              initialConversationId={ui.openConversationId ?? null}
+              onConversationChange={(id) => patchUi({ openConversationId: id })}
+            />
           </div>
         </>
       )}

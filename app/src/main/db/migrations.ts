@@ -124,4 +124,9 @@ export const migrations: ReadonlyArray<(db: DatabaseSync) => void> = [
       );
     `);
   },
+  // 0002: document trash (M1.5 EU3) — trashed docs keep their rows (and
+  // revision history) so a later trash view can restore them; NULL = live.
+  (db) => {
+    db.exec('ALTER TABLE documents ADD COLUMN trashed_at TEXT');
+  },
 ];

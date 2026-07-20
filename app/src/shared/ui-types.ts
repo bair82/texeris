@@ -25,6 +25,7 @@ export const UiStateSchema = Type.Object({
     Type.Union([Type.Literal('rendered'), Type.Literal('raw')]),
   ),
   openDocumentId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  openConversationId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   /** Per-document view state, keyed by document id. */
   documents: Type.Optional(Type.Record(Type.String(), UiStateDocSchema)),
 });

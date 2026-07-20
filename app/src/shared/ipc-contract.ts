@@ -1,6 +1,7 @@
 import { Type, type Static } from '@sinclair/typebox';
 import type {
   AgentRunRecord,
+  ConversationListItem,
   NormalizedAgentEvent,
   StartTurnRequest,
   UiMessage,
@@ -46,6 +47,12 @@ export interface TexerisApi {
   chat: {
     getOrCreateConversation(): Promise<{ conversationId: string }>;
     newConversation(): Promise<{ conversationId: string }>;
+    listConversations(): Promise<ConversationListItem[]>;
+    renameConversation(
+      conversationId: string,
+      title: string,
+    ): Promise<{ renamed: boolean }>;
+    deleteConversation(conversationId: string): Promise<{ deleted: boolean }>;
     listMessages(conversationId: string): Promise<UiMessage[]>;
     listRuns(conversationId: string): Promise<AgentRunRecord[]>;
     startTurn(request: StartTurnRequest): Promise<{ runId: string }>;
@@ -60,6 +67,12 @@ export interface TexerisApi {
     commit(request: DocCommitRequest): Promise<{ seq: number }>;
     restore(revision: number, documentId?: string): Promise<{ seq: number }>;
     create(name: string): Promise<{ id: string; path: string; title: string }>;
+    rename(documentId: string, name: string): Promise<{ id: string; path: string; title: string }>;
+    trash(documentId: string): Promise<{ trashed: boolean }>;
+    duplicate(documentId: string): Promise<{ id: string; path: string; title: string }>;
+    importDialog(): Promise<{ id: string; path: string; title: string } | null>;
+    setMain(documentId: string): Promise<ProjectInfo>;
+    reveal(documentId: string): Promise<{ revealed: boolean }>;
     onEvent(callback: (event: DocEvent) => void): () => void;
   };
   patch: {

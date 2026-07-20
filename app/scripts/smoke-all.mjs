@@ -15,6 +15,7 @@ const SMOKE = [
   'scripts/smoke-project.mjs',
   'scripts/smoke-ui.mjs',
   'scripts/smoke-find.mjs',
+  'scripts/smoke-eu3.mjs',
 ];
 
 let failed = 0;

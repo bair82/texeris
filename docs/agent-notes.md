@@ -56,3 +56,12 @@ offsets; replacements are normal transactions so they commit as usual.
 Gotcha worth knowing: Tiptap's `focus` command defers into a rAF that
 never fires in hidden (smoke) windows — focus synchronously
 (`view.dom.focus()`) when a smoke must observe the result. EU3+ unclaimed.
+
+**kimi, 2026-07-20** — EU3 (document & conversation management) done on
+`kimi/main`. Schema change: migration 0002 adds `documents.trashed_at` —
+trashed docs keep their row + revision history (file at
+`.texeris/trash/<id>.md`); anything scanning `documents` should filter
+`trashed_at IS NULL` (watcher, reconciliation, doc.list do). EU7's trash
+view/restore builds on this. Conversations now list/rename/delete and
+auto-title from the first user message; ui state persists the active one
+(`openConversationId`). EU4+ unclaimed.

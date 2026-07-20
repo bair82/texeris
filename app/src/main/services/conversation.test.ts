@@ -104,3 +104,52 @@ describe('ConversationService', () => {
     expect(runs[0].endedAt).toBeTruthy();
   });
 });
+
+describe('conversation management (EU3)', () => {
+  it('lists conversations newest-first with message counts', () => {
+    const a = conversations.startNewConversation();
+    conversations.appendMessages(a, [userMessage('first question')]);
+    const b = conversations.startNewConversation();
+    conversations.appendMessages(b, [userMessage('second'), userMessage('follow-up')]);
+    const list = conversations.listConversations();
+    expect(list.map((c) => c.id)).toEqual([b, a]);
+    expect(list[0].messageCount).toBe(2);
+    expect(list[1].messageCount).toBe(1);
+  });
+
+  it('auto-titles from the first user message while the default stands', () => {
+    const id = conversations.startNewConversation();
+    conversations.appendMessages(id, [
+      userMessage('can you tighten the introduction of my attention paper?'),
+    ]);
+    const [conv] = conversations.listConversations();
+    expect(conv.title).toBe('can you tighten the introduction of my attention…');
+    // renamed conversations keep their title
+    conversations.renameConversation(id, 'intro work');
+    conversations.appendMessages(id, [userMessage('another question')]);
+    expect(conversations.listConversations()[0].title).toBe('intro work');
+  });
+
+  it('renames and rejects empty titles', () => {
+    const id = conversations.startNewConversation();
+    conversations.renameConversation(id, 'methodology');
+    expect(conversations.listConversations()[0].title).toBe('methodology');
+    expect(() => conversations.renameConversation(id, '   ')).toThrow(/empty/);
+  });
+
+  it('deletes a conversation with its messages and runs', () => {
+    const id = conversations.startNewConversation();
+    conversations.appendMessages(id, [userMessage('hello')]);
+    conversations.startRun({
+      conversationId: id,
+      modelMode: 'fast',
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      manifest,
+    });
+    conversations.deleteConversation(id);
+    expect(conversations.listConversations()).toHaveLength(0);
+    expect(conversations.listUiMessages(id)).toHaveLength(0);
+    expect(conversations.listRuns(id)).toHaveLength(0);
+  });
+});

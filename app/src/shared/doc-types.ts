@@ -35,6 +35,18 @@ export const DocCreateRequestSchema = Type.Object({
 });
 export type DocCreateRequest = Static<typeof DocCreateRequestSchema>;
 
+/** Document-management requests (M1.5 EU3) — all id-addressed, never path. */
+export const DocRenameRequestSchema = Type.Object({
+  documentId: Type.String(),
+  name: Type.String({ minLength: 1 }),
+});
+export type DocRenameRequest = Static<typeof DocRenameRequestSchema>;
+
+export const DocIdRequestSchema = Type.Object({
+  documentId: Type.String(),
+});
+export type DocIdRequest = Static<typeof DocIdRequestSchema>;
+
 export const DocRevisionsRequestSchema = Type.Object({
   documentId: Type.Optional(Type.String()),
 });
@@ -89,5 +101,11 @@ export const DocChannels = {
   commit: 'texeris:doc-commit',
   restore: 'texeris:doc-restore',
   create: 'texeris:doc-create',
+  rename: 'texeris:doc-rename',
+  trash: 'texeris:doc-trash',
+  duplicate: 'texeris:doc-duplicate',
+  importDialog: 'texeris:doc-import-dialog',
+  setMain: 'texeris:doc-set-main',
+  reveal: 'texeris:doc-reveal',
   event: 'texeris:doc-event',
 } as const;

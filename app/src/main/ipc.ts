@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import path from 'node:path';
 import { Value } from '@sinclair/typebox/value';
 import {
   AppInfoSchema,
@@ -9,6 +10,7 @@ import {
   CancelRequestSchema,
   ChatChannels,
   ConversationRequestSchema,
+  RenameConversationRequestSchema,
   StartTurnRequestSchema,
 } from '../shared/chat-types';
 import {
@@ -19,7 +21,9 @@ import {
   DocCommitRequestSchema,
   DocCreateRequestSchema,
   DocGetTextRequestSchema,
+  DocIdRequestSchema,
   DocOutlineRequestSchema,
+  DocRenameRequestSchema,
   DocRevisionsRequestSchema,
   HistoryChannels,
 } from '../shared/doc-types';
@@ -53,6 +57,13 @@ import type { ProjectContext } from './services/project';
 import type { ProjectManager } from './services/projectManager';
 import type { WorkspaceConfig } from './services/settings';
 import { extractHeadings } from './agent/markdown';
+import {
+  duplicateDocument,
+  importDocumentFile,
+  renameDocument,
+  setMainDocument,
+  trashDocument,
+} from './services/documents';
 import { createDocument, ensureDocument } from './services/project';
 
 export interface IpcDeps {
@@ -154,6 +165,22 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     conversationId: deps.requireConversations().startNewConversation(),
   }));
 
+  ipcMain.handle(ChatChannels.listConversations, () =>
+    deps.requireConversations().listConversations(),
+  );
+
+  ipcMain.handle(ChatChannels.renameConversation, (_event, raw: unknown) => {
+    const req = Value.Decode(RenameConversationRequestSchema, raw);
+    deps.requireConversations().renameConversation(req.conversationId, req.title);
+    return { renamed: true };
+  });
+
+  ipcMain.handle(ChatChannels.deleteConversation, (_event, raw: unknown) => {
+    const req = Value.Decode(ConversationRequestSchema, raw);
+    deps.requireConversations().deleteConversation(req.conversationId);
+    return { deleted: true };
+  });
+
   ipcMain.handle(ChatChannels.listMessages, (_event, raw: unknown) => {
     const req = Value.Decode(ConversationRequestSchema, raw);
     return deps.requireConversations().listUiMessages(req.conversationId);
@@ -190,7 +217,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   ipcMain.handle(DocChannels.list, () => {
     const rows = deps.requireProject().db
       .prepare(
-        'SELECT id, path, title, current_revision, content_hash FROM documents ORDER BY path',
+        'SELECT id, path, title, current_revision, content_hash FROM documents WHERE trashed_at IS NULL ORDER BY path',
       )
       .all() as Array<{
       id: string;
@@ -257,6 +284,50 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   ipcMain.handle(DocChannels.create, (_event, raw: unknown) => {
     const req = Value.Decode(DocCreateRequestSchema, raw);
     return createDocument(deps.requireProject(), req.name);
+  });
+
+  // ---------------------------------------------------- document management
+
+  ipcMain.handle(DocChannels.rename, (_event, raw: unknown) => {
+    const req = Value.Decode(DocRenameRequestSchema, raw);
+    return renameDocument(deps.requireProject(), req.documentId, req.name);
+  });
+
+  ipcMain.handle(DocChannels.trash, (_event, raw: unknown) => {
+    const req = Value.Decode(DocIdRequestSchema, raw);
+    trashDocument(deps.requireProject(), req.documentId);
+    return { trashed: true };
+  });
+
+  ipcMain.handle(DocChannels.duplicate, (_event, raw: unknown) => {
+    const req = Value.Decode(DocIdRequestSchema, raw);
+    return duplicateDocument(deps.requireProject(), req.documentId);
+  });
+
+  ipcMain.handle(DocChannels.importDialog, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Import a Markdown file',
+      filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'txt'] }],
+      properties: ['openFile'],
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+    return importDocumentFile(deps.requireProject(), result.filePaths[0]);
+  });
+
+  ipcMain.handle(DocChannels.setMain, (_event, raw: unknown) => {
+    const req = Value.Decode(DocIdRequestSchema, raw);
+    setMainDocument(deps.requireProject(), req.documentId);
+    return projectInfo(deps.requireProject());
+  });
+
+  ipcMain.handle(DocChannels.reveal, (_event, raw: unknown) => {
+    const req = Value.Decode(DocIdRequestSchema, raw);
+    const project = deps.requireProject();
+    shell.showItemInFolder(path.join(project.root, docPath(project, req.documentId)));
+    return { revealed: true };
   });
 
   // ---------------------------------------------------------------- history

@@ -119,7 +119,7 @@ export function openProject(root: string): ProjectContext {
 
   cleanOrphanTmpFiles(root);
   const docs = db
-    .prepare('SELECT id, path FROM documents')
+    .prepare('SELECT id, path FROM documents WHERE trashed_at IS NULL')
     .all() as Array<{ id: string; path: string }>;
   for (const doc of docs) {
     cleanOrphanTmpFiles(path.dirname(path.join(root, doc.path)));

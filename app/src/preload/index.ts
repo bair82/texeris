@@ -26,6 +26,11 @@ const api: TexerisApi = {
     getOrCreateConversation: () =>
       ipcRenderer.invoke(ChatChannels.getOrCreateConversation),
     newConversation: () => ipcRenderer.invoke(ChatChannels.newConversation),
+    listConversations: () => ipcRenderer.invoke(ChatChannels.listConversations),
+    renameConversation: (conversationId, title) =>
+      ipcRenderer.invoke(ChatChannels.renameConversation, { conversationId, title }),
+    deleteConversation: (conversationId) =>
+      ipcRenderer.invoke(ChatChannels.deleteConversation, { conversationId }),
     listMessages: (conversationId) =>
       ipcRenderer.invoke(ChatChannels.listMessages, { conversationId }),
     listRuns: (conversationId) =>
@@ -50,6 +55,12 @@ const api: TexerisApi = {
     restore: (revision, documentId) =>
       ipcRenderer.invoke(DocChannels.restore, { revision, documentId }),
     create: (name) => ipcRenderer.invoke(DocChannels.create, { name }),
+    rename: (documentId, name) => ipcRenderer.invoke(DocChannels.rename, { documentId, name }),
+    trash: (documentId) => ipcRenderer.invoke(DocChannels.trash, { documentId }),
+    duplicate: (documentId) => ipcRenderer.invoke(DocChannels.duplicate, { documentId }),
+    importDialog: () => ipcRenderer.invoke(DocChannels.importDialog),
+    setMain: (documentId) => ipcRenderer.invoke(DocChannels.setMain, { documentId }),
+    reveal: (documentId) => ipcRenderer.invoke(DocChannels.reveal, { documentId }),
     onEvent: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
         callback(payload as DocEvent);

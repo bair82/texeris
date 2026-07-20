@@ -18,8 +18,9 @@ export function watchProjectFiles(
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   const check = () => {
+    // trashed documents are skipped — their files legitimately don't exist
     const docs = project.db
-      .prepare('SELECT id FROM documents')
+      .prepare('SELECT id FROM documents WHERE trashed_at IS NULL')
       .all() as unknown as Array<{ id: string }>;
     for (const doc of docs) {
       const result = project.revisions.importExternalChange(doc.id);

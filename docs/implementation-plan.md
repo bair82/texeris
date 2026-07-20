@@ -502,11 +502,23 @@ limitation: editor-local undo history is per session — mode or document
 switches recreate the session and lose it (PM history state is not
 serializable; carrying it across sessions is a separate project).
 
-**EU3 — Document & conversation management.** rename (never re-id),
-delete-to-trash + confirm, duplicate, import .md, set-main, reveal in file
-manager; conversation picker (reopen/rename/delete).
-*DoD:* unit tests incl. trash; smoke: rename doc, reopen renamed
-conversation.
+**EU3 — Document & conversation management.** ✅ done 2026-07-20 (kimi).
+Documents (all id-addressed, ids never change): rename (moves the file,
+updates project.json when it's the main doc), trash (file →
+`.texeris/trash/<id>.md`, row + revision history kept under a new
+`trashed_at` column — migration 0002 — so EU7 can restore; the main doc
+cannot be trashed; watcher/reconciliation/list skip trashed), duplicate
+(`<name> copy.md` + own history), import `.md` via file dialog (conflict
+→ numbered), set-main (project.json), reveal in file manager
+(`shell.showItemInFolder`). Nav rows get a hover ⋯ menu; rename and
+delete are inline in the row (no native dialogs). Conversations: picker
+in the chat header (switch/rename/delete with inline confirms),
+auto-title from the first user message, active conversation persisted in
+ui state (`openConversationId`, used at last). Deleting cascades
+messages + runs.
+*DoD:* unit tests incl. trash (13 docs + 7 conversation cases);
+`smoke-eu3.mjs`: rename doc through the menu, set-main, duplicate,
+trash, rename a conversation and reopen it after starting a new one.
 
 **EU4 — Proofreading & statistics.** Electron spellcheck + language in
 settings; word count + selection count in the status bar.

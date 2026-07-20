@@ -73,6 +73,54 @@ export class ConversationService {
     return id;
   }
 
+  /** All conversations, newest first, for the picker (M1.5 EU3). */
+  listConversations(): Array<{
+    id: string;
+    title: string;
+    createdAt: string;
+    messageCount: number;
+  }> {
+    const rows = this.db
+      .prepare(
+        `SELECT c.id, c.title, c.created_at, COUNT(m.id) AS message_count
+         FROM conversations c
+         LEFT JOIN messages m ON m.conversation_id = c.id
+         GROUP BY c.id
+         ORDER BY c.created_at DESC, c.rowid DESC`,
+      )
+      .all() as Array<{ id: string; title: string; created_at: string; message_count: number }>;
+    return rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      createdAt: row.created_at,
+      messageCount: row.message_count,
+    }));
+  }
+
+  renameConversation(conversationId: string, title: string): void {
+    const trimmed = title.trim();
+    if (!trimmed) {
+      throw new Error('conversation title cannot be empty');
+    }
+    this.db
+      .prepare('UPDATE conversations SET title = ? WHERE id = ?')
+      .run(trimmed, conversationId);
+  }
+
+  /** Delete a conversation with its messages and run records. */
+  deleteConversation(conversationId: string): void {
+    this.db.exec('BEGIN');
+    try {
+      this.db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(conversationId);
+      this.db.prepare('DELETE FROM agent_runs WHERE conversation_id = ?').run(conversationId);
+      this.db.prepare('DELETE FROM conversations WHERE id = ?').run(conversationId);
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+  }
+
   /** Append messages verbatim; returns the first assigned seq. */
   appendMessages(conversationId: string, messages: readonly AgentMessage[]): number {
     const maxSeq = (
@@ -94,6 +142,19 @@ export class ConversationService {
         new Date().toISOString(),
       );
     });
+    // Auto-title from the first user message while the default title stands.
+    const conv = this.db
+      .prepare('SELECT title FROM conversations WHERE id = ?')
+      .get(conversationId) as { title: string } | undefined;
+    if (conv?.title === 'Conversation') {
+      const firstUser = messages.find((m) => m.role === 'user');
+      const text = firstUser ? userText(firstUser.content).trim() : '';
+      if (text) {
+        this.db
+          .prepare('UPDATE conversations SET title = ? WHERE id = ?')
+          .run(text.length > 48 ? `${text.slice(0, 48)}…` : text, conversationId);
+      }
+    }
     return maxSeq + 1;
   }
 
