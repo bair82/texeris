@@ -145,6 +145,16 @@ try {
   );
   check('replace one committed as a revision', true);
 
+  // Ctrl+Z while the panel has focus (target outside the inputs) undoes the
+  // replacement in the editor — and the revert commits through as well.
+  await evaluate(`document.querySelector('.search-panel').dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true })); true`);
+  await waitFor(
+    `window.texeris.doc.getText().then(d => d.text.includes('Grassmann') && !d.text.includes('Stiefel'))`,
+    'undo never committed',
+    48,
+  );
+  check('Ctrl+Z with panel focus reverts the replacement', true);
+
   // outline navigation selects and reveals the heading
   const outlineHasMethod = await evaluate(
     `[...document.querySelectorAll('.nav-heading')].some(b => b.textContent === 'Method')`,

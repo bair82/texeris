@@ -11,6 +11,7 @@ interface SearchPanelProps {
  * session owns searching, highlighting, and replacing (replacements are
  * ordinary editor transactions, so they commit through the normal path).
  * Matches re-scan periodically while the panel is open so they track edits.
+ * Bottom-docked and toggled from the status bar like the history panel.
  */
 export default function SearchPanel({ session, onClose }: SearchPanelProps) {
   const [query, setQuery] = useState('');
@@ -18,15 +19,25 @@ export default function SearchPanel({ session, onClose }: SearchPanelProps) {
   const [caseSensitive, setCaseSensitive] = useState(false);
   const [matches, setMatches] = useState<SearchMatch[]>([]);
   const [current, setCurrent] = useState(0);
+  // The rescan interval reads the index through a ref — a state closure
+  // would keep re-applying the stale index from effect-creation time
+  // (the "next jumps back to the first match" bug).
+  const currentRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const setCurrentTracked = (index: number) => {
+    currentRef.current = index;
+    setCurrent(index);
+  };
 
   // Scan on query/case change and periodically (edits shift matches).
   useEffect(() => {
     const scan = () => {
       const found = session.search(query, caseSensitive);
+      const index = found.length === 0 ? -1 : Math.min(currentRef.current, found.length - 1);
       setMatches(found);
-      setCurrent((c) => Math.min(c, Math.max(0, found.length - 1)));
-      session.setSearchHighlights(found, found.length === 0 ? -1 : Math.min(current, found.length - 1));
+      setCurrentTracked(Math.max(0, index));
+      session.setSearchHighlights(found, index);
     };
     scan();
     const timer = setInterval(scan, 400);
@@ -34,8 +45,6 @@ export default function SearchPanel({ session, onClose }: SearchPanelProps) {
       clearInterval(timer);
       session.setSearchHighlights([], -1);
     };
-    // `current` intentionally read inside scan without re-arming the interval
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, caseSensitive, session]);
 
   useEffect(() => {
@@ -48,7 +57,7 @@ export default function SearchPanel({ session, onClose }: SearchPanelProps) {
       return;
     }
     const clamped = ((index % list.length) + list.length) % list.length;
-    setCurrent(clamped);
+    setCurrentTracked(clamped);
     session.setSearchHighlights(list, clamped);
     session.revealMatch(list[clamped]);
   };
@@ -61,11 +70,11 @@ export default function SearchPanel({ session, onClose }: SearchPanelProps) {
     // rescan immediately so indices stay valid
     const found = session.search(query, caseSensitive);
     setMatches(found);
-    const next = Math.min(current, Math.max(0, found.length - 1));
-    setCurrent(next);
-    session.setSearchHighlights(found, found.length === 0 ? -1 : next);
+    const next = found.length === 0 ? -1 : Math.min(current, found.length - 1);
+    setCurrentTracked(Math.max(0, next));
+    session.setSearchHighlights(found, next);
     if (found.length > 0) {
-      session.revealMatch(found[next]);
+      session.revealMatch(found[Math.max(0, next)]);
     }
   };
 
@@ -75,12 +84,32 @@ export default function SearchPanel({ session, onClose }: SearchPanelProps) {
     }
     session.replaceAll(matches, replacement);
     setMatches([]);
-    setCurrent(0);
+    setCurrentTracked(0);
     session.setSearchHighlights([], -1);
   };
 
   return (
-    <div className="search-panel" onKeyDown={(e) => e.stopPropagation()}>
+    <div
+      className="search-panel"
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        // Undo/redo belongs to the editor even while the panel has focus —
+        // except inside the text inputs, which keep their native undo.
+        if (
+          (e.ctrlKey || e.metaKey) &&
+          !(e.target instanceof HTMLInputElement)
+        ) {
+          const key = e.key.toLowerCase();
+          if (key === 'z' && !e.shiftKey) {
+            e.preventDefault();
+            session.undo();
+          } else if (key === 'y' || (key === 'z' && e.shiftKey)) {
+            e.preventDefault();
+            session.redo();
+          }
+        }
+      }}
+    >
       <input
         ref={inputRef}
         className="search-input"
@@ -130,9 +159,6 @@ export default function SearchPanel({ session, onClose }: SearchPanelProps) {
       </button>
       <button className="search-action" disabled={matches.length === 0} onClick={replaceAll}>
         All
-      </button>
-      <button className="search-close" title="Close (Esc)" onClick={onClose}>
-        ×
       </button>
     </div>
   );

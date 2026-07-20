@@ -314,11 +314,11 @@ export default function EditorRegion({
       }}
     >
       {activeEditor && <Toolbar editor={activeEditor} />}
+      <div className="editor-host" ref={hostRef} />
+      {showHistory && openDocId && <HistoryPanel documentId={openDocId} />}
       {searchOpen && sessionRef.current && (
         <SearchPanel session={sessionRef.current} onClose={() => setSearchOpen(false)} />
       )}
-      <div className="editor-host" ref={hostRef} />
-      {showHistory && openDocId && <HistoryPanel documentId={openDocId} />}
       {notice && (
         <p className="editor-notice" onClick={() => setNotice(null)}>
           {notice.text}
@@ -354,15 +354,18 @@ export default function EditorRegion({
             {revision !== null ? `rev ${revision}` : '…'} ·{' '}
             {saveState === 'dirty' ? 'unsaved' : saveState}
           </span>
+          {/* Document panels (find, history, …) dock at the bottom and are
+              toggled by their status-bar button — keep that pattern for
+              future panels. */}
           <button
-            className="history-toggle find-toggle"
+            className={`history-toggle find-toggle ${searchOpen ? 'active' : ''}`}
             title="Find in document (Ctrl+F)"
-            onClick={() => setSearchOpen(true)}
+            onClick={() => setSearchOpen((v) => !v)}
           >
             Find
           </button>
           <button
-            className="history-toggle"
+            className={`history-toggle ${showHistory ? 'active' : ''}`}
             title="Revision history"
             onClick={() => setShowHistory((v) => !v)}
           >

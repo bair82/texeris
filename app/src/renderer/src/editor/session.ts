@@ -23,7 +23,7 @@ import {
   lineNumbers,
 } from '@codemirror/view';
 import { EditorState, StateEffect, StateField } from '@codemirror/state';
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { defaultKeymap, history, historyKeymap, redo as cmRedo, undo as cmUndo } from '@codemirror/commands';
 import { markdown as markdownLang } from '@codemirror/lang-markdown';
 import type { TextSplice } from '../../../shared/domain-types';
 import { ChangeAccumulator } from './accumulator';
@@ -67,6 +67,9 @@ export interface EditorSession {
   replaceAll(matches: SearchMatch[], replacement: string): void;
   /** Select a heading's text and scroll to it (outline navigation, EU2). */
   navigateToHeading(headingText: string): boolean;
+  /** Editor-local undo/redo (per-session history; lost on session swap). */
+  undo(): boolean;
+  redo(): boolean;
   focus(): void;
 }
 
@@ -372,6 +375,14 @@ export class RenderedSession implements EditorSession {
     return true;
   }
 
+  undo(): boolean {
+    return this.editor.commands.undo();
+  }
+
+  redo(): boolean {
+    return this.editor.commands.redo();
+  }
+
   setCursor(offset: number): void {
     // Invert toCanonicalOffset by binary search: the largest PM position
     // whose canonical prefix fits within `offset`. Approximate but stable.
@@ -601,6 +612,14 @@ export class RawSession implements EditorSession {
       }
     }
     return false;
+  }
+
+  undo(): boolean {
+    return cmUndo(this.view);
+  }
+
+  redo(): boolean {
+    return cmRedo(this.view);
   }
 
   setCursor(offset: number): void {

@@ -454,6 +454,12 @@ body.col-resizing {
   border-color: var(--border-strong);
 }
 
+.history-toggle.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: transparent;
+}
+
 /* -------------------------------- toolbar -------------------------------- */
 
 .toolbar {
@@ -517,7 +523,7 @@ body.col-resizing {
   gap: 6px;
   align-items: center;
   padding: 6px 12px;
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
   background: var(--bg-panel);
   flex-wrap: wrap;
 }
@@ -550,8 +556,7 @@ body.col-resizing {
 
 .search-toggle,
 .search-nav,
-.search-action,
-.search-close {
+.search-action {
   background: none;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -564,8 +569,7 @@ body.col-resizing {
 
 .search-toggle:hover,
 .search-nav:hover,
-.search-action:hover,
-.search-close:hover {
+.search-action:hover {
   color: var(--text);
   border-color: var(--border-strong);
 }
@@ -579,13 +583,6 @@ body.col-resizing {
 .search-action:disabled {
   opacity: 0.4;
   cursor: default;
-}
-
-.search-close {
-  border: none;
-  font-size: 15px;
-  padding: 2px 7px;
-  margin-left: auto;
 }
 
 /* match decorations in both editor modes */

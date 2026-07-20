@@ -493,6 +493,15 @@ switch and after commits (debounced via EditorRegion's onRevisionChange).
 *DoD:* `smoke-find.mjs`: search → cycle → replace one; outline click
 selects/reveals the heading.
 
+Follow-ups (2026-07-20, owner feedback): the find panel docks at the
+bottom and toggles from the status-bar Find button (the pattern for all
+document panels: bottom-docked, status-bar toggle, active state).
+Ctrl/Cmd+Z / Ctrl+Shift+Z / Ctrl+Y are forwarded to the editor's undo
+while the panel has focus (text inputs keep native undo). Known
+limitation: editor-local undo history is per session — mode or document
+switches recreate the session and lose it (PM history state is not
+serializable; carrying it across sessions is a separate project).
+
 **EU3 — Document & conversation management.** rename (never re-id),
 delete-to-trash + confirm, duplicate, import .md, set-main, reveal in file
 manager; conversation picker (reopen/rename/delete).
