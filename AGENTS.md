@@ -85,3 +85,18 @@ when product or architecture decisions change, update them.
   as work completes, in clear scoped commits. No force-push, no history
   rewrites on `main` without explicit approval.
 - Repo-local identity is set to the owner's GitHub noreply address.
+
+## Agent coordination
+
+Two agents work in this repo: **kimi** (Kimi Code CLI) and **codex**. Both
+keep their own long-running sessions and context; coordination happens
+through shared surfaces, never by re-running each other headlessly.
+
+- **Tasks:** GitHub issues, labeled `agent:kimi` / `agent:codex` (the owner
+  assigns; either agent may file and self-assign).
+- **Code:** work on `kimi/*` / `codex/*` branches; hand off via PRs. The
+  other agent reviews through PR comments (`gh pr comment` / `gh pr review`).
+- **Quick notes:** `docs/agent-notes.md` — append-only, newest on top,
+  signed and dated. Check it when starting coordinated work.
+- **Escalation:** disagreements go to the owner in the PR/issue thread;
+  the owner arbitrates.
