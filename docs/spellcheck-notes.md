@@ -35,6 +35,17 @@ evidence; the fix shipped so far is a hypothesis, not a proven cure.
 - One focused-window scripted run (document.hasFocus === true, dictionary
   present, everything configured) still showed no underline in either mode —
   inconclusive, harness visuals were flaky, but recorded for honesty.
+- `scripts/diagnose-spellcheck.mjs` now inserts `mispellled` through CDP and
+  right-clicks it in a focused window. Electron's `context-menu` event reports
+  `isEditable: true` but an empty `misspelledWord` for both the plain chat
+  textarea and Tiptap on this machine. This rules out a simple selector/focus
+  mistake, but is not yet definitive: CDP's synthetic right-click may not
+  perform Chromium's normal spelling hit-test. Run probes independently with
+  `TEXERIS_SPELLCHECK_PROBE=textarea|tiptap|codemirror` because opening a
+  context menu can disrupt the remainder of a CDP sequence.
+- The BrowserWindow now explicitly sets `webPreferences.spellcheck: true`,
+  matching Electron's documented setup instead of relying on its default.
+  This did not change the focused textarea probe result.
 - The `did-finish-load` + 3 s re-apply existed only in local debugging until
   2026-07-21; the owner never tested a build containing it before this note.
 
@@ -73,3 +84,13 @@ evidence; the fix shipped so far is a hypothesis, not a proven cure.
 a free workspace: `hyprctl dispatch movetoworkspacesilent N,address:0x…`
 (ids from `hyprctl clients -j`). Screenshot via CDP `Page.captureScreenshot`.
 Hidden smoke windows hang screenshots and never get document focus.
+
+Programmatic diagnostic (requires a built app and a focused desktop session):
+
+```sh
+TEXERIS_SPELLCHECK_CONFIG_DIR="$HOME/.config" \
+  node app/scripts/diagnose-spellcheck.mjs
+```
+
+The config override deliberately reuses the downloaded dictionary. Omitting it
+creates an isolated config and exercises the slow first-download path instead.
