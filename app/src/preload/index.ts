@@ -5,6 +5,7 @@ import {
   IpcChannels,
   type TexerisApi,
 } from '../shared/ipc-contract';
+import { MenuCommandChannel } from '../shared/commands';
 import {
   ChatChannels,
   type NormalizedAgentEvent,
@@ -21,6 +22,15 @@ const api: TexerisApi = {
     const payload: unknown = await ipcRenderer.invoke(IpcChannels.getAppInfo);
     // Validate whatever came across the bridge before handing it to the page.
     return Value.Decode(AppInfoSchema, payload);
+  },
+  onMenuCommand: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, id: unknown) => {
+      callback(id as string);
+    };
+    ipcRenderer.on(MenuCommandChannel, listener);
+    return () => {
+      ipcRenderer.removeListener(MenuCommandChannel, listener);
+    };
   },
   chat: {
     getOrCreateConversation: () =>

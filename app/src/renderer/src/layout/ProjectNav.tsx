@@ -10,6 +10,8 @@ interface ProjectNavProps {
   mainPath: string;
   /** Committed revision of the open doc — the outline refetches on change. */
   openDocRevision: number;
+  /** Increment to open the new-document form (command registry, EU5). */
+  newDocRequested: number;
   onOpenDoc(documentId: string): void;
   /** Create a document and open it; throws on failure (shown inline). */
   onCreateDoc(name: string): Promise<void>;
@@ -54,6 +56,7 @@ export default function ProjectNav({
   openDocId,
   mainPath,
   openDocRevision,
+  newDocRequested,
   onOpenDoc,
   onCreateDoc,
   onRenameDoc,
@@ -71,6 +74,13 @@ export default function ProjectNav({
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [confirmTrashId, setConfirmTrashId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // The command registry opens the new-document form via a counter.
+  useEffect(() => {
+    if (newDocRequested > 0) {
+      setCreating('');
+    }
+  }, [newDocRequested]);
 
   // Refetch the outline on doc switch and after commits (debounced).
   useEffect(() => {

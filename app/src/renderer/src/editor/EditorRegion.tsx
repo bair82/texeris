@@ -4,6 +4,7 @@ import type { UiStateDoc } from '../../../shared/ui-types';
 import type { EditorMode, EditorSession } from './session';
 import { RawSession, RenderedSession } from './session';
 import {
+  registerEditorCommands,
   registerHighlightHandler,
   registerNavigateHandler,
   registerReloadHandler,
@@ -264,6 +265,18 @@ export default function EditorRegion({
     });
   }, []);
 
+  // Command surface (EU5): undo/redo/search/history/mode for the registry.
+  useEffect(() => {
+    return registerEditorCommands({
+      undo: () => sessionRef.current?.undo() ?? false,
+      redo: () => sessionRef.current?.redo() ?? false,
+      openSearch: () => setSearchOpen(true),
+      toggleHistory: () => setShowHistory((v) => !v),
+      toggleMode: () =>
+        switchModeRef.current(modeRef.current === 'rendered' ? 'raw' : 'rendered'),
+    });
+  }, []);
+
   // Patch-review bridges: highlight ranges, reload after apply/undo.
   useEffect(() => {
     const offHighlight = registerHighlightHandler((ranges) => {
@@ -339,6 +352,9 @@ export default function EditorRegion({
     createSession(text, next, docId, restore);
     onModeChange(next);
   };
+
+  const switchModeRef = useRef(switchMode);
+  switchModeRef.current = switchMode;
 
   return (
     <section

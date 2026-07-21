@@ -9,7 +9,7 @@ import type {
   UiMessage,
 } from '../../shared/chat-types';
 import type { HeadingInfo } from '../../shared/doc-types';
-import { getEditorSelection } from './editor/editorBridge';
+import { getEditorSelection, registerChatCommands } from './editor/editorBridge';
 import MarkdownView from './MarkdownView';
 
 interface StreamingState {
@@ -130,6 +130,15 @@ export default function ChatPanel({
     await refreshConversations();
     onConversationChange?.(id);
   }, [onConversationChange, refreshConversations]);
+
+  // Command surface (EU5): the registry can start a fresh conversation.
+  useEffect(() => {
+    return registerChatCommands({
+      newConversation: () => {
+        void newConversation();
+      },
+    });
+  }, [newConversation]);
 
   const submitRename = async () => {
     if (!renamingId) {

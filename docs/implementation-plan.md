@@ -537,9 +537,19 @@ count, spellcheck setting round-trips over IPC and persists. (The wavy
 underline itself is not covered by this smoke; the original underline DoD is
 not met. See `spellcheck-notes.md`.)
 
-**EU5 — Keyboard UX.** App menu (File/Edit/View/Help) over a shared
-renderer command registry; Ctrl+K command palette; shortcuts overlay.
-*DoD:* every menu action reachable via palette; smoke runs one command.
+**EU5 — Keyboard UX.** ✅ done 2026-07-21 (kimi). Shared command
+definitions in `shared/commands.ts` feed three surfaces that cannot
+drift: the Electron app menu (File/Edit/View/Chat/Help + quit;
+accelerators fire with the menu bar hidden), the Ctrl+K command palette
+(token filter, arrows/Enter/Esc), and the shortcuts overlay (Ctrl+/).
+Menu clicks forward the command id to the renderer's registry
+(`texeris:menu-command`); the registry drives panels via AppShell and
+the editor/chat via bridge command surfaces (`registerEditorCommands`,
+`registerChatCommands`). Undo/redo deliberately have no menu accelerator
+(the editors own Ctrl+Z natively); Ctrl+K also works via a renderer
+fallback for environments where menu accelerators don't fire.
+*DoD:* `smoke-eu5.mjs`: palette opens, filter narrows, commands run
+(find panel, focus mode, mode toggle).
 
 **EU6 — Structural editing + surface preferences.** Table row/col
 add+delete, footnote insert, link edit; font family/size, editor width,

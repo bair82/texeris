@@ -5,10 +5,16 @@ import type { UiState, UiStateDoc } from '../../../shared/ui-types';
 import ChatPanel from '../ChatPanel';
 import PatchReview from '../PatchReview';
 import EditorRegion from '../editor/EditorRegion';
-import { navigateToHeading } from '../editor/editorBridge';
+import {
+  getChatCommands,
+  getEditorCommands,
+  navigateToHeading,
+} from '../editor/editorBridge';
 import type { EditorMode } from '../editor/session';
 import ActivityBar from './ActivityBar';
+import CommandPalette from './CommandPalette';
 import ProjectNav from './ProjectNav';
+import ShortcutsOverlay from './ShortcutsOverlay';
 
 const DEFAULT_NAV_WIDTH = 232;
 const DEFAULT_SIDE_WIDTH = 400;
@@ -39,6 +45,9 @@ export default function AppShell({
   const [openDocId, setOpenDocId] = useState<string | null>(null);
   const [openDocRevision, setOpenDocRevision] = useState(0);
   const [mainPath, setMainPath] = useState(mainDocument);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [newDocRequested, setNewDocRequested] = useState(0);
   const uiRef = useRef<UiState>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -106,14 +115,20 @@ export default function AppShell({
   const navWidth = ui?.navWidth ?? DEFAULT_NAV_WIDTH;
   const sideWidth = ui?.sideWidth ?? DEFAULT_SIDE_WIDTH;
 
-  const toggleNav = () =>
-    patchUi(focusMode ? { focusMode: false, navVisible: true } : { navVisible: !navVisible }, true);
-  const toggleSide = () =>
-    patchUi(
-      focusMode ? { focusMode: false, sideVisible: true } : { sideVisible: !sideVisible },
-      true,
-    );
-  const toggleFocus = () => patchUi({ focusMode: !focusMode }, true);
+  const toggleNav = useCallback(() => {
+    const focus = uiRef.current.focusMode ?? false;
+    const nav = !focus && (uiRef.current.navVisible ?? true);
+    patchUi(focus ? { focusMode: false, navVisible: true } : { navVisible: !nav }, true);
+  }, [patchUi]);
+  const toggleSide = useCallback(() => {
+    const focus = uiRef.current.focusMode ?? false;
+    const side = !focus && (uiRef.current.sideVisible ?? true);
+    patchUi(focus ? { focusMode: false, sideVisible: true } : { sideVisible: !side }, true);
+  }, [patchUi]);
+  const toggleFocus = useCallback(
+    () => patchUi({ focusMode: !(uiRef.current.focusMode ?? false) }, true),
+    [patchUi],
+  );
 
   const openDoc = useCallback(
     (documentId: string) => {
@@ -192,6 +207,85 @@ export default function AppShell({
     await window.texeris.doc.reveal(documentId);
   }, []);
 
+  // ------------------------------------------------------- command registry
+
+  /** Every app-menu / palette command (M1.5 EU5) routes through here. */
+  const runCommand = useCallback(
+    (id: string) => {
+      const editor = getEditorCommands();
+      switch (id) {
+        case 'file:new-document': {
+          // the new-doc form lives in the nav — make sure it is visible
+          const focus = uiRef.current.focusMode ?? false;
+          const nav = !focus && (uiRef.current.navVisible ?? true);
+          if (!nav) {
+            patchUi({ focusMode: false, navVisible: true }, true);
+          }
+          setNewDocRequested((n) => n + 1);
+          break;
+        }
+        case 'file:import-document':
+          void onImportDoc();
+          break;
+        case 'file:switch-project':
+          void window.texeris.project.openDialog().catch(() => {
+            /* cancelled */
+          });
+          break;
+        case 'edit:undo':
+          editor?.undo();
+          break;
+        case 'edit:redo':
+          editor?.redo();
+          break;
+        case 'edit:find':
+          editor?.openSearch();
+          break;
+        case 'view:command-palette':
+          setPaletteOpen((v) => !v);
+          break;
+        case 'view:toggle-mode':
+          editor?.toggleMode();
+          break;
+        case 'view:toggle-nav':
+          toggleNav();
+          break;
+        case 'view:toggle-side':
+          toggleSide();
+          break;
+        case 'view:toggle-focus':
+          toggleFocus();
+          break;
+        case 'view:toggle-history':
+          editor?.toggleHistory();
+          break;
+        case 'chat:new':
+          getChatCommands()?.newConversation();
+          break;
+        case 'help:shortcuts':
+          setShortcutsOpen((v) => !v);
+          break;
+      }
+    },
+    [onImportDoc, patchUi, toggleNav, toggleSide, toggleFocus],
+  );
+
+  // App-menu commands from main.
+  useEffect(() => window.texeris.onMenuCommand(runCommand), [runCommand]);
+
+  // Ctrl+K / Ctrl+P fallback for environments where menu accelerators don't
+  // fire (menu accelerators win when both work — the key never reaches us).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'k' || e.key === 'p')) {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const onDocState = useCallback(
     (docId: string, patch: UiStateDoc) => {
       const documents = { ...uiRef.current.documents };
@@ -259,6 +353,7 @@ export default function AppShell({
             openDocId={openDocId}
             mainPath={mainPath}
             openDocRevision={openDocRevision}
+            newDocRequested={newDocRequested}
             onOpenDoc={openDoc}
             onCreateDoc={createDoc}
             onRenameDoc={onRenameDoc}
@@ -302,6 +397,10 @@ export default function AppShell({
           </div>
         </>
       )}
+      {paletteOpen && (
+        <CommandPalette onRun={runCommand} onClose={() => setPaletteOpen(false)} />
+      )}
+      {shortcutsOpen && <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />}
     </div>
   );
 }

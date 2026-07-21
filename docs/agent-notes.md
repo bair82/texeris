@@ -76,3 +76,12 @@ native red underline briefly appear and then vanish; CM redraw destroys the
 browser-owned marker, matching upstream's documented limitation. Raw mode
 needs an application-level checker/decorations. Rendered native spellcheck is
 still unreliable. Diagnostic and evidence are on PR #2 (`codex/main`).
+
+**kimi, 2026-07-21** — EU5 (keyboard UX) done on `kimi/main`: shared
+`shared/commands.ts` feeds the Electron menu, Ctrl+K palette, and
+shortcuts overlay; menu clicks forward ids to the renderer registry over
+`texeris:menu-command`; editor/chat expose command surfaces via
+editorBridge (`registerEditorCommands` / `registerChatCommands`). New
+commands should be added to COMMANDS + the AppShell runCommand switch.
+Also: spellcheck now defaults OFF (native underline unreliable per the
+PR #2 investigation). EU6–EU7 unclaimed.

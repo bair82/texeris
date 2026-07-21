@@ -77,3 +77,50 @@ export function registerNavigateHandler(
 export function navigateToHeading(headingText: string): void {
   navigateHandler?.(headingText);
 }
+
+/**
+ * Editor command surface (M1.5 EU5): the command registry drives the
+ * editor region through these handlers.
+ */
+export interface EditorCommands {
+  undo(): boolean;
+  redo(): boolean;
+  openSearch(): void;
+  toggleHistory(): void;
+  toggleMode(): void;
+}
+
+let editorCommands: EditorCommands | null = null;
+
+export function registerEditorCommands(commands: EditorCommands): () => void {
+  editorCommands = commands;
+  return () => {
+    if (editorCommands === commands) {
+      editorCommands = null;
+    }
+  };
+}
+
+export function getEditorCommands(): EditorCommands | null {
+  return editorCommands;
+}
+
+/** Chat command surface (EU5). */
+export interface ChatCommands {
+  newConversation(): void;
+}
+
+let chatCommands: ChatCommands | null = null;
+
+export function registerChatCommands(commands: ChatCommands): () => void {
+  chatCommands = commands;
+  return () => {
+    if (chatCommands === commands) {
+      chatCommands = null;
+    }
+  };
+}
+
+export function getChatCommands(): ChatCommands | null {
+  return chatCommands;
+}

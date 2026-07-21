@@ -1,6 +1,7 @@
-import { app, BrowserWindow, safeStorage, session } from 'electron';
+import { app, BrowserWindow, Menu, safeStorage, session } from 'electron';
 import path from 'node:path';
 import { registerIpcHandlers, projectInfo } from './ipc';
+import { COMMANDS, MenuCommandChannel } from '../shared/commands';
 import { DocChannels } from '../shared/doc-types';
 import { PatchChannels } from '../shared/patch-types';
 import { ProjectChannels } from '../shared/project-types';
@@ -45,6 +46,32 @@ function assertNodeVersion(): void {
     );
     app.exit(1);
   }
+}
+
+/**
+ * App menu (M1.5 EU5): built from the shared command definitions; menu
+ * clicks forward the command id to the renderer's registry. Accelerators
+ * fire even with the menu bar hidden (autoHideMenuBar).
+ */
+function buildAppMenu(): void {
+  const send = (id: string) => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    win?.webContents.send(MenuCommandChannel, id);
+  };
+  const pick = (section: string) =>
+    COMMANDS.filter((c) => c.section === section).map((c) => ({
+      label: c.title,
+      accelerator: c.accelerator,
+      click: () => send(c.id),
+    }));
+  const template: Electron.MenuItemConstructorOptions[] = [
+    { label: 'File', submenu: [...pick('File'), { type: 'separator' }, { role: 'quit' }] },
+    { label: 'Edit', submenu: pick('Edit') },
+    { label: 'View', submenu: pick('View') },
+    { label: 'Chat', submenu: pick('Chat') },
+    { label: 'Help', submenu: pick('Help') },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
 function createWindow(): void {
@@ -209,6 +236,8 @@ app.whenReady().then(() => {
     manager,
     adoptProject,
   });
+
+  buildAppMenu();
 
   // Boot project: smoke/dev override → most recent project → picker.
   if (process.env.TEXERIS_PROJECT_DIR) {

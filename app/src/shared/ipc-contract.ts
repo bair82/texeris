@@ -44,6 +44,8 @@ export type AppInfo = Static<typeof AppInfoSchema>;
 /** The narrow API the preload bridge exposes as `window.texeris`. */
 export interface TexerisApi {
   getAppInfo(): Promise<AppInfo>;
+  /** Subscribe to app-menu commands; returns an unsubscribe fn. */
+  onMenuCommand(callback: (commandId: string) => void): () => void;
   chat: {
     getOrCreateConversation(): Promise<{ conversationId: string }>;
     newConversation(): Promise<{ conversationId: string }>;
