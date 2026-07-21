@@ -25,6 +25,7 @@ export interface WorkspaceConfig {
     deep: ModelModeConfig;
   };
   spellcheck: SpellcheckConfig;
+  appearance: import('../../shared/settings-types').AppearanceConfig;
 }
 
 export const DEFAULT_CONFIG: WorkspaceConfig = {
@@ -33,6 +34,12 @@ export const DEFAULT_CONFIG: WorkspaceConfig = {
     deep: { provider: 'moonshotai', model: 'kimi-k3' },
   },
   spellcheck: { enabled: false, language: 'en-US' },
+  appearance: {
+    theme: 'dark',
+    fontFamily: 'serif',
+    fontSize: 16.5,
+    editorWidth: 'comfortable',
+  },
 };
 
 export function workspaceDir(): string {
@@ -61,6 +68,12 @@ export function loadWorkspaceConfig(dir = workspaceDir()): WorkspaceConfig {
     spellcheck: {
       enabled: parsed.spellcheck?.enabled ?? DEFAULT_CONFIG.spellcheck.enabled,
       language: parsed.spellcheck?.language ?? DEFAULT_CONFIG.spellcheck.language,
+    },
+    appearance: {
+      theme: parsed.appearance?.theme ?? DEFAULT_CONFIG.appearance.theme,
+      fontFamily: parsed.appearance?.fontFamily ?? DEFAULT_CONFIG.appearance.fontFamily,
+      fontSize: parsed.appearance?.fontSize ?? DEFAULT_CONFIG.appearance.fontSize,
+      editorWidth: parsed.appearance?.editorWidth ?? DEFAULT_CONFIG.appearance.editorWidth,
     },
   };
 }

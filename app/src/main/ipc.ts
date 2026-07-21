@@ -43,8 +43,10 @@ import {
 import {
   ClearApiKeyRequestSchema,
   SetApiKeyRequestSchema,
+  SetAppearanceRequestSchema,
   SetSpellcheckRequestSchema,
   SettingsChannels,
+  type AppearanceConfig,
   type SettingsView,
 } from '../shared/settings-types';
 import { UiChannels, UiStateSchema } from '../shared/ui-types';
@@ -406,7 +408,21 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         language: deps.config.spellcheck.language,
         availableLanguages: session.defaultSession.availableSpellCheckerLanguages,
       },
+      appearance: deps.config.appearance,
     };
+  });
+
+  /** Appearance prefs (M1.5 EU6): merge, persist, and broadcast so every
+   * window repaints immediately — no reload. */
+  ipcMain.handle(SettingsChannels.setAppearance, (_event, raw: unknown) => {
+    const req = Value.Decode(SetAppearanceRequestSchema, raw);
+    const appearance: AppearanceConfig = { ...deps.config.appearance, ...req };
+    deps.config.appearance = appearance;
+    saveWorkspaceConfig(deps.config);
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send(SettingsChannels.appearanceChanged, appearance);
+    }
+    return appearance;
   });
 
   /** Spellcheck (M1.5 EU4): applied to the default session immediately and

@@ -18,6 +18,36 @@ export interface SpellcheckView {
   availableLanguages: string[];
 }
 
+export type AppearanceTheme = 'dark' | 'light' | 'system';
+export type AppearanceFont = 'serif' | 'sans' | 'mono';
+export type AppearanceWidth = 'comfortable' | 'wide' | 'full';
+
+export interface AppearanceConfig {
+  theme: AppearanceTheme;
+  fontFamily: AppearanceFont;
+  /** Rendered-mode body font size in px. */
+  fontSize: number;
+  editorWidth: AppearanceWidth;
+}
+
+export const AppearanceConfigSchema = Type.Object({
+  theme: Type.Union([
+    Type.Literal('dark'),
+    Type.Literal('light'),
+    Type.Literal('system'),
+  ]),
+  fontFamily: Type.Union([Type.Literal('serif'), Type.Literal('sans'), Type.Literal('mono')]),
+  fontSize: Type.Number({ minimum: 12, maximum: 24 }),
+  editorWidth: Type.Union([
+    Type.Literal('comfortable'),
+    Type.Literal('wide'),
+    Type.Literal('full'),
+  ]),
+});
+
+export const SetAppearanceRequestSchema = Type.Partial(AppearanceConfigSchema);
+export type SetAppearanceRequest = Static<typeof SetAppearanceRequestSchema>;
+
 export interface SettingsView {
   modes: {
     fast: { provider: string; model: string };
@@ -26,6 +56,7 @@ export interface SettingsView {
   providers: ProviderSettingsView[];
   encryptionAvailable: boolean;
   spellcheck: SpellcheckView;
+  appearance: AppearanceConfig;
 }
 
 export const SetApiKeyRequestSchema = Type.Object({
@@ -50,4 +81,7 @@ export const SettingsChannels = {
   setApiKey: 'texeris:settings-set-api-key',
   clearApiKey: 'texeris:settings-clear-api-key',
   setSpellcheck: 'texeris:settings-set-spellcheck',
+  setAppearance: 'texeris:settings-set-appearance',
+  /** main → renderer push: appearance changed, repaint now (EU6). */
+  appearanceChanged: 'texeris:settings-appearance-changed',
 } as const;

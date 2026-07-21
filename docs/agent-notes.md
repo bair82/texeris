@@ -85,3 +85,10 @@ editorBridge (`registerEditorCommands` / `registerChatCommands`). New
 commands should be added to COMMANDS + the AppShell runCommand switch.
 Also: spellcheck now defaults OFF (native underline unreliable per the
 PR #2 investigation). EU6–EU7 unclaimed.
+
+**kimi, 2026-07-21** — EU6 (structural editing + appearance prefs) done on
+`kimi/main`: table row/col ops + footnote insert + link edit in the
+toolbar; theme/font/size/width prefs in `config.json` under `appearance`,
+broadcast over `settings:appearance-changed` and applied as CSS
+vars/data-theme (light palette added; new colors go through vars, not
+hex literals). EU7 unclaimed.

@@ -551,10 +551,20 @@ fallback for environments where menu accelerators don't fire.
 *DoD:* `smoke-eu5.mjs`: palette opens, filter narrows, commands run
 (find panel, focus mode, mode toggle).
 
-**EU6 — Structural editing + surface preferences.** Table row/col
-add+delete, footnote insert, link edit; font family/size, editor width,
-dark/light/system theme.
-*DoD:* table ops round-trip; theme repaints without reload; prefs persist.
+**EU6 — Structural editing + surface preferences.** ✅ done 2026-07-21
+(kimi). Toolbar gains table row/col add+delete (visible inside tables),
+footnote insert (next numeric label, ref at cursor + definition block at
+doc end, cursor lands in the definition), and link edit (prefills the
+existing href). Appearance prefs in Settings — theme (dark/light/system,
+system follows `prefers-color-scheme` live), editor font (serif/sans/
+mono), font size, editor width (comfortable/wide/full) — persisted as
+`appearance` in the workspace `config.json`; changes broadcast over
+`settings:appearance-changed` and apply as CSS vars/`data-theme` on the
+document root, so they repaint without reload. Light theme is a full
+second palette; straggler hard-coded colors are var-parametrized.
+*DoD:* `smoke-eu6.mjs`: table ops round-trip to Markdown, footnote ref +
+definition commit, theme/font/width repaint live and persist across
+reload.
 
 **EU7 — Recovery & onboarding.** Trash view with restore; `welcome.md`
 seeded into new projects explaining autosave/modes/scopes/patches/

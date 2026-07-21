@@ -24,6 +24,46 @@ export default function Toolbar({ editor }: { editor: Editor }) {
   const active = (name: string, attrs?: Record<string, unknown>) =>
     editor.isActive(name, attrs) ? 'active' : '';
 
+  /** Insert a footnote ref at the cursor + a definition block at the doc
+   * end, and land the cursor inside the definition (M1.5 EU6). */
+  const insertFootnote = () => {
+    let max = 0;
+    editor.state.doc.descendants((node) => {
+      if (node.type.name === 'footnoteRef' || node.type.name === 'footnoteDef') {
+        const n = Number.parseInt(String(node.attrs.label), 10);
+        if (Number.isFinite(n)) {
+          max = Math.max(max, n);
+        }
+      }
+      return true;
+    });
+    const label = String(max + 1);
+    chain().insertContent({ type: 'footnoteRef', attrs: { label } }).run();
+    editor
+      .chain()
+      .insertContentAt(editor.state.doc.content.size, {
+        type: 'footnoteDef',
+        attrs: { label },
+        content: [{ type: 'paragraph' }],
+      })
+      .run();
+    // cursor into the fresh definition's paragraph
+    const target = ((): number | null => {
+      let found: number | null = null;
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'footnoteDef' && String(node.attrs.label) === label) {
+          found = pos + 2;
+          return false;
+        }
+        return true;
+      });
+      return found;
+    })();
+    if (target !== null) {
+      chain().setTextSelection(target).scrollIntoView().run();
+    }
+  };
+
   const applyLink = () => {
     const href = linkUrl.trim();
     if (href) {
@@ -80,6 +120,28 @@ export default function Toolbar({ editor }: { editor: Editor }) {
       >
         ⊞
       </button>
+      {editor.isActive('table') && (
+        <>
+          <button className="tbl-row-add" title="Add row below" onClick={() => chain().addRowAfter().run()}>
+            row+
+          </button>
+          <button className="tbl-col-add" title="Add column right" onClick={() => chain().addColumnAfter().run()}>
+            col+
+          </button>
+          <button className="tbl-row-del" title="Delete row" onClick={() => chain().deleteRow().run()}>
+            row−
+          </button>
+          <button className="tbl-col-del" title="Delete column" onClick={() => chain().deleteColumn().run()}>
+            col−
+          </button>
+          <button title="Delete table" onClick={() => chain().deleteTable().run()}>
+            ⌫⊞
+          </button>
+        </>
+      )}
+      <button className="footnote-insert" title="Insert footnote" onClick={insertFootnote}>
+        [ⁿ]
+      </button>
       <span className="toolbar-sep" />
       {linkMode ? (
         <span className="toolbar-link-form">
@@ -99,7 +161,19 @@ export default function Toolbar({ editor }: { editor: Editor }) {
           <button onClick={applyLink}>Set</button>
         </span>
       ) : (
-        <button title="Link" className={active('link')} onClick={() => setLinkMode(true)}>
+        <button
+          title={editor.isActive('link') ? 'Edit link' : 'Link'}
+          className={active('link')}
+          onClick={() => {
+            // editing after creation: prefill with the existing href (EU6)
+            setLinkUrl(
+              editor.isActive('link')
+                ? String(editor.getAttributes('link').href ?? '')
+                : '',
+            );
+            setLinkMode(true);
+          }}
+        >
           🔗
         </button>
       )}

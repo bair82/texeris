@@ -13,6 +13,7 @@ import {
 import { DocChannels, type DocEvent } from '../shared/doc-types';
 import { PatchChannels, type PatchProposedEvent } from '../shared/patch-types';
 import { SettingsChannels } from '../shared/settings-types';
+import type { AppearanceConfig } from '../shared/settings-types';
 import { UiChannels } from '../shared/ui-types';
 import { ProjectChannels, type ProjectInfo } from '../shared/project-types';
 import { HistoryChannels } from '../shared/doc-types';
@@ -106,6 +107,17 @@ const api: TexerisApi = {
       ipcRenderer.invoke(SettingsChannels.clearApiKey, { provider }),
     setSpellcheck: (input) =>
       ipcRenderer.invoke(SettingsChannels.setSpellcheck, input),
+    setAppearance: (input) =>
+      ipcRenderer.invoke(SettingsChannels.setAppearance, input),
+    onAppearanceChanged: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
+        callback(payload as AppearanceConfig);
+      };
+      ipcRenderer.on(SettingsChannels.appearanceChanged, listener);
+      return () => {
+        ipcRenderer.removeListener(SettingsChannels.appearanceChanged, listener);
+      };
+    },
   },
   ui: {
     get: () => ipcRenderer.invoke(UiChannels.get),

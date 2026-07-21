@@ -29,7 +29,13 @@ const CONFIG = {
     fast: { provider: 'faux', model: 'faux-model' },
     deep: { provider: 'faux', model: 'faux-model' },
   },
-  spellcheck: { enabled: true, language: 'en-US' },
+  spellcheck: { enabled: false, language: 'en-US' },
+  appearance: {
+    theme: 'dark' as const,
+    fontFamily: 'serif' as const,
+    fontSize: 16.5,
+    editorWidth: 'comfortable' as const,
+  },
 };
 
 function makeRuntime(): PiAgentRuntime {

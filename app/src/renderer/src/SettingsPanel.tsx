@@ -94,6 +94,82 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
           </select>
         </div>
 
+        <h3>Appearance</h3>
+        <div className="settings-appearance">
+          <label>
+            Theme
+            <select
+              className="scope-select"
+              value={settings.appearance.theme}
+              onChange={(e) => {
+                void window.texeris.settings
+                  .setAppearance({
+                    theme: e.target.value as typeof settings.appearance.theme,
+                  })
+                  .then(refresh);
+              }}
+            >
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+              <option value="system">System</option>
+            </select>
+          </label>
+          <label>
+            Editor font
+            <select
+              className="scope-select"
+              value={settings.appearance.fontFamily}
+              onChange={(e) => {
+                void window.texeris.settings
+                  .setAppearance({
+                    fontFamily: e.target.value as typeof settings.appearance.fontFamily,
+                  })
+                  .then(refresh);
+              }}
+            >
+              <option value="serif">Serif</option>
+              <option value="sans">Sans</option>
+              <option value="mono">Monospace</option>
+            </select>
+          </label>
+          <label>
+            Font size
+            <select
+              className="scope-select"
+              value={String(settings.appearance.fontSize)}
+              onChange={(e) => {
+                void window.texeris.settings
+                  .setAppearance({ fontSize: Number(e.target.value) })
+                  .then(refresh);
+              }}
+            >
+              {[14, 15, 16, 16.5, 17, 18, 20].map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Editor width
+            <select
+              className="scope-select"
+              value={settings.appearance.editorWidth}
+              onChange={(e) => {
+                void window.texeris.settings
+                  .setAppearance({
+                    editorWidth: e.target.value as typeof settings.appearance.editorWidth,
+                  })
+                  .then(refresh);
+              }}
+            >
+              <option value="comfortable">Comfortable</option>
+              <option value="wide">Wide</option>
+              <option value="full">Full</option>
+            </select>
+          </label>
+        </div>
+
         <h3>API keys</h3>
         {!settings.encryptionAvailable && (
           <p className="chat-error">

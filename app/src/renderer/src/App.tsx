@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { AppInfo } from '../../shared/ipc-contract';
 import type { ProjectInfo } from '../../shared/project-types';
+import { initAppearance } from './appearance';
 import AppShell from './layout/AppShell';
 import ProjectPicker from './ProjectPicker';
 import SettingsPanel from './SettingsPanel';
@@ -11,6 +12,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
+    void initAppearance().catch(console.error);
     window.texeris.getAppInfo().then(setInfo).catch(console.error);
     window.texeris.project.current().then(setProject).catch(console.error);
     // Full reload on project switch — every pane re-reads its data.

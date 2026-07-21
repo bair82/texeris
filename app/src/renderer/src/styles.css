@@ -20,6 +20,46 @@
   --amber: #e5c76b;
   --red: #f0a3a3;
   --radius: 8px;
+  /* appearance prefs (EU6) — defaults, overwritten by appearance.ts */
+  --editor-font-family: 'Iowan Old Style', 'Palatino Linotype', 'Noto Serif',
+    'Liberation Serif', Georgia, serif;
+  --editor-font-size: 16.5px;
+  --editor-measure: 720px;
+  --cite-fg: #7db8f8;
+  --cite-bg: rgba(96, 165, 250, 0.16);
+  --active-file-fg: #d5e3ff;
+  --on-accent: #0b1524;
+  --notice-bg: #3a2f14;
+  --notice-fg: #e5c76b;
+  --scrollbar: rgba(255, 255, 255, 0.09);
+  --scrollbar-hover: rgba(255, 255, 255, 0.18);
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f6f7f9;
+  --bg-panel: #eceff3;
+  --bg-rail: #e2e7ed;
+  --bg-elevated: #ffffff;
+  --bg-input: #ffffff;
+  --border: rgba(15, 23, 42, 0.1);
+  --border-strong: rgba(15, 23, 42, 0.18);
+  --text: #1d2733;
+  --text-muted: #55657a;
+  --text-faint: #8794a5;
+  --accent: #2f6fde;
+  --accent-dim: rgba(47, 111, 222, 0.12);
+  --green: #17855a;
+  --amber: #8a6a14;
+  --red: #c04444;
+  --cite-fg: #1d5fc4;
+  --cite-bg: rgba(47, 111, 222, 0.14);
+  --active-file-fg: #1d4fb8;
+  --on-accent: #ffffff;
+  --notice-bg: #f7ecc8;
+  --notice-fg: #7a5c10;
+  --scrollbar: rgba(15, 23, 42, 0.16);
+  --scrollbar-hover: rgba(15, 23, 42, 0.3);
 }
 
 body {
@@ -44,14 +84,14 @@ button {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.09);
+  background: var(--scrollbar);
   border: 3px solid transparent;
   border-radius: 6px;
   background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--scrollbar-hover);
   border: 3px solid transparent;
   background-clip: content-box;
 }
@@ -408,7 +448,7 @@ body.col-resizing {
 }
 
 .nav-file.active {
-  color: #d5e3ff;
+  color: var(--active-file-fg);
   background: var(--accent-dim);
 }
 
@@ -444,15 +484,15 @@ body.col-resizing {
   min-height: 100%;
 }
 
-/* Rendered mode: a calm serif page, centered at a readable measure. */
+/* Rendered mode: a calm page, centered at a readable measure — the surface
+   prefs (font, size, width) drive these variables. */
 .editor-host .tiptap-rendered {
-  max-width: 720px;
+  max-width: var(--editor-measure);
   margin: 0 auto;
-  font-family: 'Iowan Old Style', 'Palatino Linotype', 'Noto Serif',
-    'Liberation Serif', Georgia, serif;
-  font-size: 16.5px;
+  font-family: var(--editor-font-family);
+  font-size: var(--editor-font-size);
   line-height: 1.75;
-  color: #dbe2ea;
+  color: var(--text);
 }
 
 .editor-host .tiptap-rendered h1,
@@ -476,8 +516,8 @@ body.col-resizing {
 
 /* citations: text-like, tinted (D0 feedback) — not pills */
 .editor-host .cite {
-  background: rgba(96, 165, 250, 0.16);
-  color: #7db8f8;
+  background: var(--cite-bg);
+  color: var(--cite-fg);
   border-radius: 3px;
   padding: 0 1px;
 }
@@ -536,8 +576,8 @@ body.col-resizing {
 .editor-notice {
   margin: 0;
   padding: 6px 16px;
-  background: #3a2f14;
-  color: var(--amber);
+  background: var(--notice-bg);
+  color: var(--notice-fg);
   font-size: 13px;
   cursor: pointer;
 }
@@ -1280,7 +1320,7 @@ body.col-resizing {
 
 .chat-input button {
   background: var(--accent);
-  color: #0b1524;
+  color: var(--on-accent);
   font-weight: 600;
   border: none;
   border-radius: 8px;
@@ -1716,6 +1756,21 @@ body.col-resizing {
   margin: 6px 0;
 }
 
+.settings-appearance {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+  margin: 6px 0;
+}
+
+.settings-appearance label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .settings-check {
   display: flex;
   align-items: center;
@@ -1771,7 +1826,7 @@ body.col-resizing {
 .picker-primary {
   background: var(--accent) !important;
   border-color: var(--accent) !important;
-  color: #0b1524 !important;
+  color: var(--on-accent) !important;
   font-weight: 600;
 }
 

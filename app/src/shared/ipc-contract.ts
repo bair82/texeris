@@ -17,7 +17,7 @@ import type {
   PatchProposedEvent,
   PatchRecord,
 } from './patch-types';
-import type { SettingsView } from './settings-types';
+import type { AppearanceConfig, SettingsView } from './settings-types';
 import type { UiState } from './ui-types';
 import type { CheckpointInfo, DocumentInfo, RevisionInfo } from './domain-types';
 import type { ProjectInfo } from './project-types';
@@ -95,6 +95,9 @@ export interface TexerisApi {
       enabled: boolean;
       language: string;
     }): Promise<{ enabled: boolean; language: string }>;
+    setAppearance(input: Partial<AppearanceConfig>): Promise<AppearanceConfig>;
+    /** Appearance changed anywhere (settings UI or another window); repaint. */
+    onAppearanceChanged(callback: (appearance: AppearanceConfig) => void): () => void;
   };
   ui: {
     get(): Promise<UiState>;

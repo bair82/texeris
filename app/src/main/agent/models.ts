@@ -62,6 +62,12 @@ export function createFauxModels(scripted: string): { models: Models; config: Wo
         deep: { provider: 'faux', model: 'faux-model' },
       },
       spellcheck: { enabled: false, language: 'en-US' },
+      appearance: {
+        theme: 'dark' as const,
+        fontFamily: 'serif' as const,
+        fontSize: 16.5,
+        editorWidth: 'comfortable' as const,
+      },
     },
   };
 }
