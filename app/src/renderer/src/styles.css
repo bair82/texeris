@@ -549,7 +549,10 @@ body.col-resizing {
   padding: 4px 10px;
 }
 
-/* Raw mode: full-width monospace with line numbers. */
+/* Raw mode: full-width monospace with line numbers. Themed colors (text,
+   caret, gutters, selection) live in the CM theme extension in session.ts —
+   CM rewrites the class attribute on updates, so only CM-managed styling is
+   stable. The cm-raw class itself is registered via editorAttributes. */
 .cm-raw {
   font-size: 13.5px;
 }
@@ -557,22 +560,6 @@ body.col-resizing {
 .cm-raw .cm-editor {
   height: 100%;
   background: transparent;
-}
-
-/* drawSelection owns the caret; don't override its transparent native caret. */
-.cm-raw.cm-editor .cm-content {
-  color: var(--text);
-}
-
-.cm-raw .cm-selectionBackground,
-.cm-raw .cm-focused .cm-selectionBackground {
-  background: var(--selection-bg) !important;
-}
-
-.cm-raw .cm-gutters {
-  background: transparent;
-  color: var(--text-faint);
-  border: none;
 }
 
 .editor-notice {

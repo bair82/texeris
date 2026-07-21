@@ -43,6 +43,11 @@ when product or architecture decisions change, update them.
   editable copies. Both commit grouped text splices over IPC; main validates
   and applies them. The Markdown⇄PM round trip (`editor/lib/markdown-in/out`)
   is CI-guarded and must stay byte-exact on the golden samples.
+- CM styling belongs in CM theme extensions, never stylesheet rules keyed on
+  editor classes: CM rewrites the editor's `class` attribute on updates
+  (`updateAttrs`), so imperatively-added classes get wiped. `cm-raw` itself
+  is registered via `EditorView.editorAttributes` to keep it stable; theme
+  values are CSS variables so dark/light repaint needs no session rebuild.
 
 ## Commands
 

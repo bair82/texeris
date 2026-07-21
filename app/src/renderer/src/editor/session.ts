@@ -451,6 +451,16 @@ const cmSearchField = StateField.define<CMDecorationSet>({
   },
   provide: (field) => EditorView.decorations.from(field),
 });
+
+/**
+ * Raw-mode theme. All CM styling must live in a CM theme extension: CM
+ * owns the class attribute (updateAttrs rewrites it), so stylesheet rules
+ * keyed on an imperatively-added class die on the first view update. The
+ * cm-raw class itself is therefore registered via editorAttributes (kept).
+ * Themed values are CSS variables, so dark/light repaints without a
+ * session rebuild; the &dark/&light base-matching selectors tie with CM's
+ * base theme and win by theme order.
+ */
 const rawTheme = EditorView.theme(
   {
     '&': {
@@ -458,6 +468,16 @@ const rawTheme = EditorView.theme(
     },
     '.cm-cursor': {
       borderLeftColor: 'var(--text)',
+    },
+    // base-matching without &dark/&light shorthands (unsupported outside
+    // CM's base scopes): !important outranks the base variants regardless
+    '.cm-gutters': {
+      backgroundColor: 'transparent !important',
+      color: 'var(--text-faint)',
+      border: 'none',
+    },
+    '.cm-selectionBackground': {
+      backgroundColor: 'var(--selection-bg) !important',
     },
   },
   { dark: true },
@@ -502,6 +522,10 @@ export class RawSession implements EditorSession {
           cmHighlightField,
           cmSearchField,
           rawTheme,
+          // cm-raw via editorAttributes: CM rewrites the class attribute on
+          // updates (updateAttrs), so an imperatively-added class would be
+          // wiped — this keeps it stable for our CSS and smoke selectors.
+          EditorView.editorAttributes.of({ class: 'cm-raw' }),
           // CM defaults spellcheck="false" on its contentDOM — allow the
           // Chromium spellchecker (EU4) in raw mode too.
           EditorView.contentAttributes.of({ spellcheck: 'true' }),
@@ -527,7 +551,6 @@ export class RawSession implements EditorSession {
     this.view.dom.addEventListener('paste', () => {
       this.pastePending = true;
     });
-    this.view.dom.classList.add('cm-raw');
   }
 
   mount(el: HTMLElement): void {
