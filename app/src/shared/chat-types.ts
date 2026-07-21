@@ -11,17 +11,18 @@ export type ModelMode = 'fast' | 'deep';
 
 /** What the agent sees. `selection` is a seam wired in WP2 (editor). */
 export type ContextScope =
-  | { kind: 'document' }
-  | { kind: 'section'; heading: string }
-  | { kind: 'selection'; from: number; to: number };
+  | { kind: 'document'; documentId?: string }
+  | { kind: 'section'; heading: string; documentId?: string }
+  | { kind: 'selection'; from: number; to: number; documentId?: string };
 
 export const ContextScopeSchema = Type.Union([
-  Type.Object({ kind: Type.Literal('document') }),
-  Type.Object({ kind: Type.Literal('section'), heading: Type.String() }),
+  Type.Object({ kind: Type.Literal('document'), documentId: Type.Optional(Type.String()) }),
+  Type.Object({ kind: Type.Literal('section'), heading: Type.String(), documentId: Type.Optional(Type.String()) }),
   Type.Object({
     kind: Type.Literal('selection'),
     from: Type.Integer({ minimum: 0 }),
     to: Type.Integer({ minimum: 0 }),
+    documentId: Type.Optional(Type.String()),
   }),
 ]);
 

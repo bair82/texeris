@@ -5,7 +5,6 @@ import type {
   ContextScope,
 } from '../../shared/chat-types';
 import type { ProjectContext } from '../services/project';
-import { ensureDocument } from '../services/project';
 import type { ChangeSummary } from './changes';
 import { extractHeadings, sliceSection } from './markdown';
 
@@ -29,7 +28,8 @@ export function assembleContext(
   scope: ContextScope,
   budgetChars: number = DOC_BUDGET_CHARS,
 ): AssembledContext {
-  const documentId = ensureDocument(project, project.project.mainDocument);
+  const documentId = scope.documentId ?? documentIdForPath(project, project.project.mainDocument);
+  const documentPath = pathForDocument(project, documentId);
   const text = project.revisions.getCurrentText(documentId);
   const baseRevision = project.revisions.getCurrentRevision(documentId);
   // Change-row count of the base revision: revision coalescing appends user
@@ -63,7 +63,7 @@ export function assembleContext(
       );
       body = renderOutline(outline);
     }
-    items.push({ label: `${project.project.mainDocument} (document)`, chars: body.length });
+    items.push({ label: `${documentPath} (document)`, chars: body.length });
   } else if (scope.kind === 'section') {
     const section = sliceSection(text, scope.heading);
     if (section === null) {
@@ -82,7 +82,7 @@ export function assembleContext(
       }
     }
     items.push({
-      label: `${project.project.mainDocument} § ${scope.heading}`,
+      label: `${documentPath} § ${scope.heading}`,
       chars: body.length,
     });
   } else {
@@ -90,7 +90,7 @@ export function assembleContext(
     const to = Math.min(Math.max(scope.to, from), text.length);
     body = text.slice(from, to);
     items.push({
-      label: `${project.project.mainDocument} selection [${from}, ${to})`,
+      label: `${documentPath} selection [${from}, ${to})`,
       chars: body.length,
     });
   }
@@ -103,7 +103,7 @@ export function assembleContext(
   }
 
   const contextText =
-    `<document source="${project.project.mainDocument}" revision="${baseRevision}">\n` +
+    `<document source="${documentPath}" revision="${baseRevision}">\n` +
     body +
     '\n</document>' +
     (instructions ? `\n\n<project-instructions>\n${instructions}\n</project-instructions>` : '') +
@@ -121,6 +121,22 @@ export function assembleContext(
       notices,
     },
   };
+}
+
+function documentIdForPath(project: ProjectContext, documentPath: string): string {
+  const row = project.db
+    .prepare('SELECT id FROM documents WHERE path = ? AND trashed_at IS NULL')
+    .get(documentPath) as { id: string } | undefined;
+  if (!row) throw new Error(`main document ${documentPath} is not available`);
+  return row.id;
+}
+
+function pathForDocument(project: ProjectContext, documentId: string): string {
+  const row = project.db
+    .prepare('SELECT path FROM documents WHERE id = ? AND trashed_at IS NULL')
+    .get(documentId) as { path: string } | undefined;
+  if (!row) throw new Error(`document ${documentId} is not available`);
+  return row.path;
 }
 
 function renderOutline(outline: ReturnType<typeof extractHeadings>): string {

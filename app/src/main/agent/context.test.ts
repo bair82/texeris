@@ -74,6 +74,22 @@ describe('assembleContext', () => {
     expect(manifest.items[0].chars).toBe(7);
   });
 
+  it('uses the explicitly active document rather than the project main document', () => {
+    const welcomeId = ensureDocument(ctx, 'welcome.md');
+    ctx.revisions.commit(welcomeId, [{ from: 0, to: 0, deletedText: '', insertedText: '# Welcome\n' }], {
+      actor: 'user',
+      source: { kind: 'typing' },
+    });
+    const { contextText, manifest } = assembleContext(ctx, {
+      kind: 'document',
+      documentId: welcomeId,
+    });
+    expect(contextText).toContain('<document source="welcome.md"');
+    expect(contextText).toContain('# Welcome');
+    expect(contextText).not.toContain('Some text here.');
+    expect(manifest.documentId).toBe(welcomeId);
+  });
+
   it('includes project instructions when present', () => {
     fs.writeFileSync(path.join(root, 'project-instructions.md'), 'Write plainly.');
     const { contextText, manifest } = assembleContext(ctx, { kind: 'document' });

@@ -88,7 +88,7 @@ const api: TexerisApi = {
     },
   },
   patch: {
-    list: () => ipcRenderer.invoke(PatchChannels.list),
+    list: (documentId) => ipcRenderer.invoke(PatchChannels.list, { documentId }),
     get: (patchId) => ipcRenderer.invoke(PatchChannels.get, { patchId }),
     accept: (patchId, groupIds) =>
       ipcRenderer.invoke(PatchChannels.accept, { patchId, groupIds }),

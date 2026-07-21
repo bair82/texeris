@@ -92,6 +92,8 @@ interface DocRow {
 export interface RunContext {
   conversationId: string;
   runId: string;
+  /** Current editor document for this run; absent in older unit-test callers. */
+  documentId?: string;
 }
 
 export function createAgentTools(
@@ -109,7 +111,8 @@ export function createAgentTools(
     return row.id;
   };
 
-  const resolveDocId = (documentId?: string): string => documentId ?? mainDocId();
+  const resolveDocId = (documentId?: string): string =>
+    documentId ?? getRunContext()?.documentId ?? mainDocId();
 
   const listDocuments: AgentTool<typeof EmptyParams> = {
     name: 'list_project_documents',
@@ -213,6 +216,9 @@ export function createAgentTools(
     parameters: ProposePatchParams,
     async execute(_id, params) {
       const runContext = getRunContext();
+      const origin = runContext
+        ? { conversationId: runContext.conversationId, runId: runContext.runId }
+        : {};
       const result = patches.propose(
         {
           documentId: resolveDocId(params.documentId),
@@ -221,7 +227,7 @@ export function createAgentTools(
           summary: params.summary,
           groups: params.groups,
         },
-        runContext ?? {},
+        origin,
       );
       if ('conflict' in result) {
         // Expected outcome, not an error: the agent re-reads and adjusts.

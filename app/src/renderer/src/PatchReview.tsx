@@ -9,14 +9,14 @@ import { highlightInEditor, reloadEditor } from './editor/editorBridge';
  * accept-all, in-editor highlight of affected ranges, and one-click undo of
  * an accepted patch (restore-as-new-revision).
  */
-export default function PatchReview() {
+export default function PatchReview({ documentId }: { documentId: string | null }) {
   const [patches, setPatches] = useState<PatchRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [undoable, setUndoable] = useState<{ label: string; previousSeq: number } | null>(null);
 
   const refresh = useCallback(async () => {
-    setPatches(await window.texeris.patch.list());
-  }, []);
+    setPatches(await window.texeris.patch.list(documentId ?? undefined));
+  }, [documentId]);
 
   useEffect(() => {
     void refresh();
@@ -76,7 +76,7 @@ export default function PatchReview() {
             onClick={() =>
               act(
                 async () => {
-                  await window.texeris.doc.restore(undoable.previousSeq);
+                  await window.texeris.doc.restore(undoable.previousSeq, documentId ?? undefined);
                 },
                 () => {
                   setUndoable(null);

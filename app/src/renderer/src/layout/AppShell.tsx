@@ -423,8 +423,9 @@ export default function AppShell({
             onMouseDown={startDrag('side')}
           />
           <div className="side-column" style={{ width: sideWidth }}>
-            <PatchReview />
+            <PatchReview documentId={openDocId} />
             <ChatPanel
+              documentId={openDocId}
               initialConversationId={ui.openConversationId ?? null}
               onConversationChange={(id) => patchUi({ openConversationId: id })}
             />

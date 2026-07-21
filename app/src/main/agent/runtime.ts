@@ -87,7 +87,7 @@ export class PiAgentRuntime implements AgentRuntime {
   private readonly agents = new Map<string, Agent>();
   private readonly runs = new Map<string, ActiveRun>();
   /** Run context handed to tools (patch origin) while a run is active. */
-  private activeRunContext: { conversationId: string; runId: string } | null = null;
+  private activeRunContext: { conversationId: string; runId: string; documentId: string } | null = null;
 
   constructor(
     private readonly options: {
@@ -151,7 +151,11 @@ export class PiAgentRuntime implements AgentRuntime {
       model: modeConfig.model,
       manifest: assembled.manifest,
     });
-    this.activeRunContext = { conversationId: input.conversationId, runId };
+    this.activeRunContext = {
+      conversationId: input.conversationId,
+      runId,
+      documentId: assembled.manifest.documentId,
+    };
 
     const queue = new EventQueue<NormalizedAgentEvent>();
     const run: ActiveRun = {

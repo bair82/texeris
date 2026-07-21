@@ -117,11 +117,19 @@ export function trashDocument(ctx: ProjectContext, documentId: string): void {
     throw new Error('the main document cannot be trashed');
   }
   const trashDir = path.join(ctx.root, TRASH_DIR);
+  const from = path.join(ctx.root, row.path);
+  const to = path.join(trashDir, `${row.id}.md`);
   fs.mkdirSync(trashDir, { recursive: true });
-  fs.renameSync(path.join(ctx.root, row.path), path.join(trashDir, `${row.id}.md`));
-  ctx.db
-    .prepare('UPDATE documents SET trashed_at = ? WHERE id = ?')
-    .run(new Date().toISOString(), row.id);
+  fs.renameSync(from, to);
+  try {
+    ctx.db
+      .prepare('UPDATE documents SET trashed_at = ? WHERE id = ?')
+      .run(new Date().toISOString(), row.id);
+  } catch (err) {
+    // Keep the file and row together when SQLite rejects the state change.
+    fs.renameSync(to, from);
+    throw err;
+  }
 }
 
 /** Duplicate under "<name> copy.md" (numbered when taken), new id + history. */
@@ -256,9 +264,14 @@ export function restoreDocument(ctx: ProjectContext, documentId: string): Docume
   const to = path.join(ctx.root, target);
   fs.mkdirSync(path.dirname(to), { recursive: true });
   fs.renameSync(trashFile, to);
-  ctx.db
-    .prepare('UPDATE documents SET path = ?, title = ?, trashed_at = NULL WHERE id = ?')
-    .run(target, titleFor(target), row.id);
+  try {
+    ctx.db
+      .prepare('UPDATE documents SET path = ?, title = ?, trashed_at = NULL WHERE id = ?')
+      .run(target, titleFor(target), row.id);
+  } catch (err) {
+    fs.renameSync(to, trashFile);
+    throw err;
+  }
   return { id: row.id, path: target, title: titleFor(target) };
 }
 
@@ -272,6 +285,11 @@ export function deleteTrashedDocument(ctx: ProjectContext, documentId: string): 
   if (row.trashed_at === null) {
     throw new Error(`document is not in the trash: ${row.path}`);
   }
+  const trashFile = path.join(ctx.root, TRASH_DIR, `${row.id}.md`);
+  // Remove the user-visible file first, but retain enough data to restore it
+  // if SQLite rejects the matching history deletion.
+  const contents = fs.existsSync(trashFile) ? fs.readFileSync(trashFile) : null;
+  fs.rmSync(trashFile, { force: true });
   ctx.db.exec('BEGIN');
   try {
     ctx.db
@@ -295,7 +313,10 @@ export function deleteTrashedDocument(ctx: ProjectContext, documentId: string): 
     ctx.db.exec('COMMIT');
   } catch (err) {
     ctx.db.exec('ROLLBACK');
+    if (contents !== null) {
+      fs.mkdirSync(path.dirname(trashFile), { recursive: true });
+      fs.writeFileSync(trashFile, contents);
+    }
     throw err;
   }
-  fs.rmSync(path.join(ctx.root, TRASH_DIR, `${row.id}.md`), { force: true });
 }

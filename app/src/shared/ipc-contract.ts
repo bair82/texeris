@@ -82,7 +82,7 @@ export interface TexerisApi {
     onEvent(callback: (event: DocEvent) => void): () => void;
   };
   patch: {
-    list(): Promise<PatchRecord[]>;
+    list(documentId?: string): Promise<PatchRecord[]>;
     get(patchId: string): Promise<PatchRecord>;
     accept(
       patchId: string,

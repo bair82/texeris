@@ -386,9 +386,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
   // ------------------------------------------------------------------ patch
 
-  ipcMain.handle(PatchChannels.list, () => {
+  ipcMain.handle(PatchChannels.list, (_event, raw: unknown) => {
+    const req = Value.Decode(DocGetTextRequestSchema, raw ?? {});
     const project = deps.requireProject();
-    const docId = ensureDocument(project, project.project.mainDocument);
+    const docId = req.documentId ?? ensureDocument(project, project.project.mainDocument);
     return deps.requirePatches().list(docId);
   });
 
@@ -438,7 +439,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const req = Value.Decode(SetAppearanceRequestSchema, raw);
     const appearance: AppearanceConfig = { ...deps.config.appearance, ...req };
     deps.config.appearance = appearance;
-    saveWorkspaceConfig(deps.config);
+    if (!process.env.TEXERIS_FAUX_PROVIDER) saveWorkspaceConfig(deps.config);
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send(SettingsChannels.appearanceChanged, appearance);
     }
@@ -458,7 +459,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       session.defaultSession.setSpellCheckerLanguages([language]);
     }
     deps.config.spellcheck = { enabled: req.enabled, language };
-    saveWorkspaceConfig(deps.config);
+    if (!process.env.TEXERIS_FAUX_PROVIDER) saveWorkspaceConfig(deps.config);
     return { enabled: req.enabled, language };
   });
 

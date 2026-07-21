@@ -30,11 +30,14 @@ interface ChatPanelProps {
   initialConversationId?: string | null;
   /** Report the active conversation so the shell can persist it. */
   onConversationChange?(conversationId: string): void;
+  /** The document currently shown in the editor is the default chat target. */
+  documentId: string | null;
 }
 
 export default function ChatPanel({
   initialConversationId = null,
   onConversationChange,
+  documentId,
 }: ChatPanelProps) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationListItem[]>([]);
@@ -79,10 +82,17 @@ export default function ChatPanel({
       setConversationId(id);
       setMessages(await window.texeris.chat.listMessages(id));
       setRuns(await window.texeris.chat.listRuns(id));
-      setHeadings(await window.texeris.doc.outline());
+      setHeadings(await window.texeris.doc.outline(documentId ?? undefined));
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Keep the scope menu aligned with the document beside the chat panel.
+  useEffect(() => {
+    if (documentId) {
+      void window.texeris.doc.outline(documentId).then(setHeadings);
+    }
+  }, [documentId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -214,7 +224,7 @@ export default function ChatPanel({
         setError(err instanceof Error ? err.message : String(err));
       }
     },
-    [conversationId, streaming],
+    [conversationId, documentId, streaming],
   );
 
   const send = useCallback(async () => {
@@ -228,12 +238,16 @@ export default function ChatPanel({
         setError('no active editor selection — select some text first');
         return;
       }
-      effectiveScope = { kind: 'selection', ...selection };
+      effectiveScope = { kind: 'selection', documentId: documentId ?? undefined, ...selection };
     }
     const text = input.trim();
     setInput('');
-    await startTurn({ text, mode, scope: effectiveScope });
-  }, [input, mode, scope, startTurn]);
+    await startTurn({
+      text,
+      mode,
+      scope: { ...effectiveScope, documentId: documentId ?? undefined },
+    });
+  }, [documentId, input, mode, scope, startTurn]);
 
   const cancel = useCallback(() => {
     if (streaming) {

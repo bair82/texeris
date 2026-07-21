@@ -1,4 +1,6 @@
 import { app, BrowserWindow, Menu, safeStorage, session } from 'electron';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import path from 'node:path';
 import { registerIpcHandlers, projectInfo } from './ipc';
 import { COMMANDS, MenuCommandChannel } from '../shared/commands';
@@ -126,6 +128,13 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   assertNodeVersion();
+
+  // Faux runs are deliberately disposable.  They must never inherit a
+  // person's workspace config or recents merely because a smoke command
+  // omitted XDG_CONFIG_HOME.
+  if (process.env.TEXERIS_FAUX_PROVIDER && !process.env.XDG_CONFIG_HOME) {
+    process.env.XDG_CONFIG_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'texeris-faux-config-'));
+  }
 
   // TEXERIS_FAUX_PROVIDER=1 swaps real providers for a scripted one (offline).
   let models: Models;
