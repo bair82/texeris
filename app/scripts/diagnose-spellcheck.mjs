@@ -6,7 +6,7 @@
  *
  * Usage: pnpm build, then node scripts/diagnose-spellcheck.mjs
  */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -23,7 +23,11 @@ const WORD = 'mispellled';
 let proc;
 
 try {
-  proc = spawn(ELECTRON, ['.', '--no-sandbox', '--remote-debugging-port=0'], {
+  const electronArgs = ['.', '--remote-debugging-port=0'];
+  if (process.env.TEXERIS_SPELLCHECK_OZONE_PLATFORM) {
+    electronArgs.push(`--ozone-platform=${process.env.TEXERIS_SPELLCHECK_OZONE_PLATFORM}`);
+  }
+  proc = spawn(ELECTRON, electronArgs, {
     cwd: APP_DIR,
     env: {
       ...process.env,
@@ -107,9 +111,49 @@ try {
     await sleep(500);
   };
   const diagnosticCount = () => (stderr.match(/\[spellcheck-diagnostic\]/g) ?? []).length;
+  const insertText = async (text) => {
+    if (!process.env.TEXERIS_SPELLCHECK_REAL_KEYS) {
+      await send('Input.insertText', { text });
+      return;
+    }
+    for (const character of text) {
+      const key = character === ' ' ? 'space' : character.toUpperCase();
+      const sent = spawnSync('hyprctl', [
+        'dispatch',
+        'sendshortcut',
+        `, ${key}, activewindow`,
+      ], { encoding: 'utf8' });
+      if (sent.status !== 0) {
+        throw new Error(`hyprctl could not type ${JSON.stringify(character)}: ${sent.stderr}`);
+      }
+      await sleep(40);
+    }
+  };
   const probe = async (name, selector, offset, setup) => {
     await setup();
-    await sleep(7000);
+    if (process.env.TEXERIS_SPELLCHECK_TOGGLE_AFTER_INPUT) {
+      await evaluate(`window.texeris.settings.setSpellcheck({ enabled: false, language: 'en-US' })`);
+      await evaluate(`window.texeris.settings.setSpellcheck({ enabled: true, language: 'en-US' })`);
+      await evaluate(`document.querySelector(${JSON.stringify(selector)}).focus()`);
+    }
+    if (process.env.TEXERIS_SPELLCHECK_TIMELINE_PREFIX) {
+      let elapsed = 0;
+      for (const checkpoint of [100, 400, 1000, 3000, 7000]) {
+        await sleep(checkpoint - elapsed);
+        elapsed = checkpoint;
+        const shot = await send('Page.captureScreenshot', { format: 'png', fromSurface: true });
+        fs.writeFileSync(
+          `${process.env.TEXERIS_SPELLCHECK_TIMELINE_PREFIX}-${checkpoint}ms.png`,
+          Buffer.from(shot.data, 'base64'),
+        );
+      }
+    } else {
+      await sleep(7000);
+    }
+    if (process.env.TEXERIS_SPELLCHECK_SCREENSHOT) {
+      const shot = await send('Page.captureScreenshot', { format: 'png', fromSurface: true });
+      fs.writeFileSync(process.env.TEXERIS_SPELLCHECK_SCREENSHOT, Buffer.from(shot.data, 'base64'));
+    }
     const before = diagnosticCount();
     await rightClick(selector, offset);
     const line = stderr.split('\n').filter((entry) => entry.includes('[spellcheck-diagnostic]')).at(-1);
@@ -127,7 +171,7 @@ try {
   if (requestedProbe === 'all' || requestedProbe === 'textarea') {
     results.push(await probe('textarea', '.chat-input textarea', { x: 25, y: 20 }, async () => {
       await evaluate(`document.querySelector('.chat-input textarea').focus()`);
-      await send('Input.insertText', { text: `${WORD} ` });
+      await insertText(`${WORD} `);
     }));
   }
   if (requestedProbe === 'all' || requestedProbe === 'tiptap') {
@@ -135,7 +179,7 @@ try {
     await evaluate(`document.querySelector('.tiptap-rendered').focus()`);
     await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', modifiers: 2 });
     await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', modifiers: 2 });
-    await send('Input.insertText', { text: ` ${WORD} ` });
+    await insertText(` ${WORD} `);
   }));
   }
   if (requestedProbe === 'all' || requestedProbe === 'codemirror') {
@@ -143,7 +187,7 @@ try {
     await evaluate(`Array.from(document.querySelectorAll('.toggle-group button')).find((b) => b.textContent === 'Raw').click()`);
     await waitFor(`!!document.querySelector('.cm-content')`);
     await evaluate(`document.querySelector('.cm-content').focus()`);
-    await send('Input.insertText', { text: ` ${WORD} ` });
+    await insertText(` ${WORD} `);
   }));
   }
 

@@ -520,18 +520,22 @@ messages + runs.
 `smoke-eu3.mjs`: rename doc through the menu, set-main, duplicate,
 trash, rename a conversation and reopen it after starting a new one.
 
-**EU4 — Proofreading & statistics.** ✅ done 2026-07-20 (kimi). Electron
+**EU4 — Proofreading & statistics.** ⚠️ statistics done; spellcheck incomplete.
+Electron
 spellcheck (`session.defaultSession`) with an enable toggle + language
 picker in Settings; the preference lives in the workspace `config.json`
 (`spellcheck: {enabled, language}`) and applies at boot and on change.
-Chromium underlines misspellings natively in both editors (both are
-contenteditable); right-click suggestion menus are a later follow-up.
+Native Chromium underlines are unreliable in rendered mode and cannot remain
+stable in raw CodeMirror mode: CM redraws text nodes and destroys the native
+marker (confirmed by a brief underline flash during a real-key test).
+Raw mode therefore needs an application-level checker with CM decorations.
+Right-click suggestion menus are a later follow-up.
 Word count + selection count (words/chars) in the editor status bar,
 polled at 500 ms; Markdown syntax tokens don't count as words.
 *DoD:* `smoke-eu4.mjs`: live count while typing, select-all selection
 count, spellcheck setting round-trips over IPC and persists. (The wavy
-underline itself is Chromium-rendered, not DOM-assertable — verified by
-the setting round-trip + manual check.)
+underline itself is not covered by this smoke; the original underline DoD is
+not met. See `spellcheck-notes.md`.)
 
 **EU5 — Keyboard UX.** App menu (File/Edit/View/Help) over a shared
 renderer command registry; Ctrl+K command palette; shortcuts overlay.

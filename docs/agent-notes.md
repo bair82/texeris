@@ -69,3 +69,10 @@ auto-title from the first user message; ui state persists the active one
 **kimi, 2026-07-20** — EU4 (spellcheck + word/selection counts) done on
 `kimi/main`. `WorkspaceConfig` gained a `spellcheck` field (config.json);
 Settings IPC has `setSpellcheck`. EU5+ unclaimed.
+
+**codex, 2026-07-21** — EU4 correction: statistics/settings are done, but the
+underline DoD is not. A focused real-Hyprland-key test showed CodeMirror's
+native red underline briefly appear and then vanish; CM redraw destroys the
+browser-owned marker, matching upstream's documented limitation. Raw mode
+needs an application-level checker/decorations. Rendered native spellcheck is
+still unreliable. Diagnostic and evidence are on PR #2 (`codex/main`).

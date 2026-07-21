@@ -1,7 +1,8 @@
 # Spellcheck: investigation notes (2026-07-20/21)
 
-Status: **unresolved**, two open mysteries. Everything below is verified
-evidence; the fix shipped so far is a hypothesis, not a proven cure.
+Status: **partially diagnosed, unresolved in rendered mode**. Raw mode's
+failure mechanism is now understood; the fix shipped so far does not satisfy
+the EU4 underline requirement.
 
 ## Symptoms (owner reports)
 
@@ -10,7 +11,8 @@ evidence; the fix shipped so far is a hypothesis, not a proven cure.
    settings window.
 2. After switching rendered → raw → rendered, underline is gone again and
    takes another ~5–7 s to reappear.
-3. Raw mode (CodeMirror): no underline under any circumstances.
+3. Raw mode (CodeMirror): an underline may flash briefly after real keyboard
+   input, then disappears (and sometimes is never visibly painted).
 
 ## Verified facts
 
@@ -46,6 +48,16 @@ evidence; the fix shipped so far is a hypothesis, not a proven cure.
 - The BrowserWindow now explicitly sets `webPreferences.spellcheck: true`,
   matching Electron's documented setup instead of relying on its default.
   This did not change the focused textarea probe result.
+- A focused Hyprland test delivered real compositor keyboard events rather
+  than CDP text insertion. `mispellled` was visibly entered in Tiptap and
+  CodeMirror. Tiptap had no stable underline. In CodeMirror the owner observed
+  the red underline appear briefly and then disappear; a repeat did not paint
+  it visibly at all.
+- **Raw-mode cause confirmed:** Chromium can initially mark the spelling
+  range, but CodeMirror redraws the affected text nodes and the browser-owned
+  marker is lost. This matches CodeMirror's documented native-spellcheck
+  limitation. Setting `spellcheck="true"` is necessary to permit checking but
+  cannot make the marker durable.
 - The `did-finish-load` + 3 s re-apply existed only in local debugging until
   2026-07-21; the owner never tested a build containing it before this note.
 
@@ -59,24 +71,22 @@ evidence; the fix shipped so far is a hypothesis, not a proven cure.
 - **H2 (per-field scan delay):** each freshly created editable is queued
   for a full scan on a slow timer — the observed ~5–7 s after every
   toggle/mode switch. Not a bug per se, but makes H1's arming look flaky.
-- **H3 (CM-specific blocker, unknown):** CM is dead under all conditions,
-  so something beyond the attribute blocks Chromium checking there.
-  Candidates: another CM default attribute (`translate="no"`,
-  `writingsuggestions="false"`, `autocorrect="off"`), or an Electron
-  regression. Unknown.
 
 ## Next diagnostics (when resumed)
 
-1. **Isolation test:** after the toggle ritual, type a misspelling in the
-   *chat textarea* (plain HTML textarea, no editor framework). Underline
-   there → the issue is editor-specific; no underline → window/session-level.
-2. Try overriding all of CM's "off" attributes:
-   `EditorView.contentAttributes.of({ spellcheck: 'true', translate: 'yes',
-   autocorrect: 'on', autocapitalize: 'on', writingsuggestions: 'true' })`.
-3. Search electron issues: "spellcheck linux not working",
+1. **Rendered-mode isolation:** manually type and right-click the same typo in
+   the plain chat textarea and Tiptap after the toggle ritual. The automated
+   real-key test gets no stable marker in either, but a synthetic CDP
+   right-click may not reproduce Chromium's spelling hit-test.
+2. Search electron issues: "spellcheck linux not working",
    "setSpellCheckerLanguages no effect" — check for 43.x regressions.
-4. Fallback if Chromium keeps refusing: app-level checker (dictionary-based
-   decoration extension for PM/CM) — environment-proof but a real project.
+3. **Raw-mode fix:** use an app-level checker with CodeMirror decorations.
+   More session toggles or DOM attributes cannot survive CodeMirror redraws.
+   `codemirror-v6-spell-checker@1.0.1` was examined but is not a good default:
+   it is new, has no tests, and unpacks to about 66 MB. A smaller explicit
+   implementation around `nspell` plus `dictionary-en` is roughly 0.6 MB of
+   package data, but supporting the current multi-language picker requires a
+   deliberate dictionary/distribution design.
 
 ## Reproduction recipe (visual, on Omarchy)
 
@@ -94,3 +104,7 @@ TEXERIS_SPELLCHECK_CONFIG_DIR="$HOME/.config" \
 
 The config override deliberately reuses the downloaded dictionary. Omitting it
 creates an isolated config and exercises the slow first-download path instead.
+Set `TEXERIS_SPELLCHECK_PROBE=textarea|tiptap|codemirror` to isolate a field,
+and `TEXERIS_SPELLCHECK_REAL_KEYS=1` under Hyprland to send compositor keyboard
+events. `TEXERIS_SPELLCHECK_TIMELINE_PREFIX=/tmp/name` captures screenshots at
+100, 400, 1000, 3000, and 7000 ms after input.
