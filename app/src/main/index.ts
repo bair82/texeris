@@ -64,7 +64,13 @@ function createWindow(): void {
     },
   });
 
-  if (!smoke) {
+  // Diagnostic mode: render visibly (so Chromium spellchecks + screenshots
+  // work) without stealing focus.
+  if (process.env.TEXERIS_SHOW_INACTIVE) {
+    win.on('ready-to-show', () => {
+      win.showInactive();
+    });
+  } else if (!smoke) {
     win.on('ready-to-show', () => {
       win.show();
     });
@@ -98,6 +104,9 @@ app.whenReady().then(() => {
   // Spellcheck preference (M1.5 EU4). Applied at boot AND for every new
   // webContents — on Linux the session's spellchecker can ignore too-early
   // configuration (owner report: needed an off/on toggle to kick in).
+  // NOTE: Chromium downloads the language dictionary lazily on first enable
+  // (into <userData>/Dictionaries); until the download finishes, no
+  // underline appears — that was the real cause of the "toggle ritual".
   const applySpellcheck = () => {
     session.defaultSession.setSpellCheckerEnabled(config.spellcheck.enabled);
     if (config.spellcheck.enabled) {

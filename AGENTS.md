@@ -80,6 +80,16 @@ when product or architecture decisions change, update them.
   runs fine via Wayland/Xwayland.
 - `--ozone-platform=headless` segfaults on this box — don't use it; smoke
   launches go to the real display (short `timeout` is fine).
+- Hidden smoke windows can't be screenshotted (capture hangs) and never
+  satisfy Chromium's document-focus requirement (spellcheck stays off).
+  For visual/spellcheck diagnostics, `TEXERIS_SHOW_INACTIVE=1` shows the
+  window without stealing focus; move it to a free workspace with
+  `hyprctl dispatch movetoworkspacesilent N,address:0x…` so it doesn't
+  tile next to the terminal.
+- Spellcheck dictionaries are downloaded lazily by Chromium on first
+  enable into `<userData>/Dictionaries` (shared:
+  `~/.config/@texeris/app/Dictionaries`) — until the download finishes,
+  no underline appears even when everything is configured.
 - gnome-keyring runs and owns `org.freedesktop.secrets`, so Electron
   `safeStorage` is viable for credential storage — but only with
   `--password-store=gnome-libsecret` (set in `app/src/main/index.ts`);
