@@ -11,6 +11,7 @@ import type {
   DocEvent,
   DocText,
   HeadingInfo,
+  TrashedDocumentInfo,
 } from './doc-types';
 import type {
   PatchConflictItem,
@@ -75,6 +76,9 @@ export interface TexerisApi {
     importDialog(): Promise<{ id: string; path: string; title: string } | null>;
     setMain(documentId: string): Promise<ProjectInfo>;
     reveal(documentId: string): Promise<{ revealed: boolean }>;
+    trashList(): Promise<TrashedDocumentInfo[]>;
+    restoreTrash(documentId: string): Promise<{ id: string; path: string; title: string }>;
+    deleteTrash(documentId: string): Promise<{ deleted: boolean }>;
     onEvent(callback: (event: DocEvent) => void): () => void;
   };
   patch: {

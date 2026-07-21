@@ -152,7 +152,7 @@ export function importDocumentFile(ctx: ProjectContext, sourcePath: string): Doc
 }
 
 /** Register a file-backed document and record its content as rev 1. */
-function registerImported(
+export function registerImported(
   ctx: ProjectContext,
   relativePath: string,
   content: string,
@@ -187,4 +187,115 @@ export function setMainDocument(ctx: ProjectContext, documentId: string): Docume
     );
   }
   return { id: row.id, path: row.path, title: row.title };
+}
+
+// ---------------------------------------------------------------- EU7: trash
+
+export interface TrashedDocumentInfo {
+  id: string;
+  path: string;
+  title: string;
+  trashedAt: string;
+}
+
+/** Trashed documents, most recently trashed first (the trash view). */
+export function listTrashedDocuments(ctx: ProjectContext): TrashedDocumentInfo[] {
+  const rows = ctx.db
+    .prepare(
+      `SELECT id, path, title, trashed_at FROM documents
+       WHERE trashed_at IS NOT NULL ORDER BY trashed_at DESC`,
+    )
+    .all() as Array<{ id: string; path: string; title: string; trashed_at: string }>;
+  return rows.map((row) => ({
+    id: row.id,
+    path: row.path,
+    title: row.title,
+    trashedAt: row.trashed_at,
+  }));
+}
+
+function pathTakenByOther(
+  ctx: ProjectContext,
+  relativePath: string,
+  excludeId: string,
+): boolean {
+  if (fs.existsSync(path.join(ctx.root, relativePath))) {
+    return true;
+  }
+  return (
+    ctx.db
+      .prepare('SELECT 1 AS x FROM documents WHERE path = ? AND id != ?')
+      .get(relativePath, excludeId) !== undefined
+  );
+}
+
+/**
+ * Restore: the file moves back from `.texeris/trash/` and the row goes live
+ * again — id and revision history never changed, so the document resumes
+ * exactly where it left off. When the original path was taken in the
+ * meantime, restores as "<name> (restored).md" (numbered) rather than
+ * overwriting anything.
+ */
+export function restoreDocument(ctx: ProjectContext, documentId: string): DocumentHandle {
+  const row = docRow(ctx, documentId);
+  if (row.trashed_at === null) {
+    throw new Error(`document is not in the trash: ${row.path}`);
+  }
+  const trashFile = path.join(ctx.root, TRASH_DIR, `${row.id}.md`);
+  if (!fs.existsSync(trashFile)) {
+    throw new Error(`the trashed file is missing from ${TRASH_DIR}`);
+  }
+  let target = row.path;
+  if (pathTakenByOther(ctx, target, row.id)) {
+    const base = row.path.replace(/\.md$/i, '');
+    target = `${base} (restored).md`;
+    for (let n = 2; pathTakenByOther(ctx, target, row.id); n++) {
+      target = `${base} (restored ${n}).md`;
+    }
+  }
+  const to = path.join(ctx.root, target);
+  fs.mkdirSync(path.dirname(to), { recursive: true });
+  fs.renameSync(trashFile, to);
+  ctx.db
+    .prepare('UPDATE documents SET path = ?, title = ?, trashed_at = NULL WHERE id = ?')
+    .run(target, titleFor(target), row.id);
+  return { id: row.id, path: target, title: titleFor(target) };
+}
+
+/**
+ * Permanent delete: the row, all revision history, checkpoints, and patches
+ * go with it (foreign keys demand children first), then the trashed file.
+ * There is no way back from this one.
+ */
+export function deleteTrashedDocument(ctx: ProjectContext, documentId: string): void {
+  const row = docRow(ctx, documentId);
+  if (row.trashed_at === null) {
+    throw new Error(`document is not in the trash: ${row.path}`);
+  }
+  ctx.db.exec('BEGIN');
+  try {
+    ctx.db
+      .prepare(
+        `DELETE FROM patch_changes WHERE group_id IN (
+           SELECT id FROM patch_groups WHERE patch_id IN (
+             SELECT id FROM patches WHERE document_id = ?))`,
+      )
+      .run(documentId);
+    ctx.db
+      .prepare(
+        `DELETE FROM patch_groups WHERE patch_id IN (
+           SELECT id FROM patches WHERE document_id = ?)`,
+      )
+      .run(documentId);
+    ctx.db.prepare('DELETE FROM patches WHERE document_id = ?').run(documentId);
+    ctx.db.prepare('DELETE FROM checkpoints WHERE document_id = ?').run(documentId);
+    ctx.db.prepare('DELETE FROM revision_changes WHERE document_id = ?').run(documentId);
+    ctx.db.prepare('DELETE FROM revisions WHERE document_id = ?').run(documentId);
+    ctx.db.prepare('DELETE FROM documents WHERE id = ?').run(documentId);
+    ctx.db.exec('COMMIT');
+  } catch (err) {
+    ctx.db.exec('ROLLBACK');
+    throw err;
+  }
+  fs.rmSync(path.join(ctx.root, TRASH_DIR, `${row.id}.md`), { force: true });
 }

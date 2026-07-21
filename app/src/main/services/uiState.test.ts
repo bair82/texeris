@@ -12,6 +12,9 @@ let ui: UiStateService;
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'texeris-ui-'));
   ctx = createProject(root);
+  // createProject seeds ui.state (the welcome document, EU7) — the service
+  // tests below start from a clean slate instead.
+  ctx.db.prepare("DELETE FROM settings WHERE key = 'ui.state'").run();
   ui = new UiStateService(ctx.db);
 });
 

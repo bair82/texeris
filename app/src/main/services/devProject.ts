@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createProject, openProject, type ProjectContext } from './project';
 import { workspaceDir } from './settings';
+import { UiStateService } from './uiState';
 
 /**
  * WP3 dev harness: the app works against one development project until the
@@ -35,12 +36,16 @@ export function openDevProject(): ProjectContext {
     'geodesic distances between layers.',
     '',
   ].join('\n');
+  const manuscriptId = ctx.db
+    .prepare('SELECT id FROM documents WHERE path = ?')
+    .get(ctx.project.mainDocument)!.id as string;
   ctx.revisions.commit(
-    ctx.db
-      .prepare('SELECT id FROM documents WHERE path = ?')
-      .get(ctx.project.mainDocument)!.id as string,
+    manuscriptId,
     [{ from: 0, to: 0, deletedText: '', insertedText: manuscript }],
     { actor: 'user', source: { kind: 'import' } },
   );
+  // The harness keeps opening on the manuscript, not the seeded welcome.md —
+  // smoke tests and dev runs expect the agent's material front and center.
+  new UiStateService(ctx.db).set({ openDocumentId: manuscriptId });
   return ctx;
 }

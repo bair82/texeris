@@ -21,6 +21,8 @@ interface ProjectNavProps {
   onImportDoc(): Promise<void>;
   onSetMainDoc(documentId: string): Promise<void>;
   onRevealDoc(documentId: string): Promise<void>;
+  /** Open the trash dialog (EU7). */
+  onOpenTrash(): void;
   /** Jump to a heading in the editor (EU2). */
   onNavigate(headingText: string): void;
 }
@@ -45,6 +47,26 @@ function FileGlyph() {
   );
 }
 
+function TrashGlyph() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 6h18" />
+      <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+    </svg>
+  );
+}
+
 /**
  * Left navigation region (M1.5): the project's Markdown files with
  * management actions (EU3: rename/duplicate/trash/import/set-main/reveal)
@@ -65,6 +87,7 @@ export default function ProjectNav({
   onImportDoc,
   onSetMainDoc,
   onRevealDoc,
+  onOpenTrash,
   onNavigate,
 }: ProjectNavProps) {
   const [creating, setCreating] = useState<string | null>(null);
@@ -166,6 +189,9 @@ export default function ProjectNav({
             onClick={() => setCreating('')}
           >
             +
+          </button>
+          <button className="nav-action trash-action" title="Trash" onClick={onOpenTrash}>
+            <TrashGlyph />
           </button>
         </span>
       </header>

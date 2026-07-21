@@ -19,6 +19,7 @@ const SMOKE = [
   'scripts/smoke-eu4.mjs',
   'scripts/smoke-eu5.mjs',
   'scripts/smoke-eu6.mjs',
+  'scripts/smoke-eu7.mjs',
 ];
 
 let failed = 0;

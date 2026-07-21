@@ -94,6 +94,14 @@ export interface HeadingInfo {
   line: number;
 }
 
+/** A trashed document as shown in the trash view (M1.5 EU7). */
+export interface TrashedDocumentInfo {
+  id: string;
+  path: string;
+  title: string;
+  trashedAt: string;
+}
+
 export const DocChannels = {
   list: 'texeris:doc-list',
   outline: 'texeris:doc-outline',
@@ -107,5 +115,8 @@ export const DocChannels = {
   importDialog: 'texeris:doc-import-dialog',
   setMain: 'texeris:doc-set-main',
   reveal: 'texeris:doc-reveal',
+  trashList: 'texeris:doc-trash-list',
+  restoreTrash: 'texeris:doc-restore-trash',
+  deleteTrash: 'texeris:doc-delete-trash',
   event: 'texeris:doc-event',
 } as const;

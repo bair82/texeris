@@ -10,6 +10,9 @@ import {
   PROJECT_FORMAT_VERSION,
   type ProjectContext,
 } from './project';
+import { restoreDocument, trashDocument } from './documents';
+import { UiStateService } from './uiState';
+import { WELCOME_DOCUMENT } from './welcome';
 
 let root: string;
 const created: ProjectContext[] = [];
@@ -45,6 +48,28 @@ describe('createProject', () => {
   it('refuses to create over an existing project', () => {
     create();
     expect(() => createProject(root)).toThrow(/already exists/);
+  });
+
+  it('seeds welcome.md as rev 1 and opens new projects on it', () => {
+    const ctx = create();
+    const row = ctx.db
+      .prepare('SELECT id FROM documents WHERE path = ?')
+      .get(WELCOME_DOCUMENT) as { id: string } | undefined;
+    expect(row?.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(ctx.revisions.getCurrentText(row!.id)).toContain('# Welcome to Texeris');
+    expect(new UiStateService(ctx.db).get().openDocumentId).toBe(row!.id);
+  });
+
+  it('registers an existing welcome.md without overwriting it', () => {
+    fs.writeFileSync(path.join(root, WELCOME_DOCUMENT), 'my own welcome\n');
+    const ctx = create();
+    const row = ctx.db
+      .prepare('SELECT id FROM documents WHERE path = ?')
+      .get(WELCOME_DOCUMENT) as { id: string };
+    expect(fs.readFileSync(path.join(root, WELCOME_DOCUMENT), 'utf8')).toBe(
+      'my own welcome\n',
+    );
+    expect(ctx.revisions.getCurrentText(row.id)).toBe('my own welcome\n');
   });
 });
 
@@ -110,5 +135,14 @@ describe('openProject', () => {
 
     expect(() => createDocument(ctx, '../escape.md')).toThrow(/invalid document name/);
     expect(() => createDocument(ctx, 'no-extension.txt')).toThrow(/invalid document name/);
+  });
+
+  it('createDocument refuses a path owned by a trashed document', () => {
+    const ctx = create();
+    const doc = createDocument(ctx, 'notes.md');
+    trashDocument(ctx, doc.id);
+    expect(() => createDocument(ctx, 'notes.md')).toThrow(/trash/);
+    restoreDocument(ctx, doc.id);
+    expect(createDocument(ctx, 'notes.md').id).toBe(doc.id);
   });
 });

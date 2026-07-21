@@ -3,12 +3,17 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  deleteTrashedDocument,
   duplicateDocument,
   importDocumentFile,
+  listTrashedDocuments,
   renameDocument,
+  restoreDocument,
   setMainDocument,
   trashDocument,
 } from './documents';
+import { CheckpointService } from './checkpoint';
+import { PatchService } from './patch';
 import { createProject, ensureDocument, openProject, type ProjectContext } from './project';
 
 let root: string;
@@ -164,5 +169,114 @@ describe('setMainDocument', () => {
     const id = makeDoc('paper.md');
     trashDocument(ctx, id);
     expect(() => setMainDocument(ctx, id)).toThrow(/trash/);
+  });
+});
+
+// ------------------------------------------------------------- EU7: trash
+
+function rowCount(table: string, documentId: string): number {
+  const row = ctx.db
+    .prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE document_id = ?`)
+    .get(documentId) as { n: number };
+  return row.n;
+}
+
+describe('listTrashedDocuments', () => {
+  it('lists trashed docs with their trash date, skipping live ones', () => {
+    makeDoc('keep.md');
+    trashDocument(ctx, makeDoc('a.md'));
+    trashDocument(ctx, makeDoc('b.md'));
+    const list = listTrashedDocuments(ctx);
+    expect(new Set(list.map((d) => d.path))).toEqual(new Set(['a.md', 'b.md']));
+    expect(list.every((d) => d.trashedAt.length > 0)).toBe(true);
+  });
+});
+
+describe('restoreDocument', () => {
+  it('moves the file back, clears trashed_at, keeps id and history', () => {
+    const id = makeDoc('draft.md', 'hello\n');
+    trashDocument(ctx, id);
+    const restored = restoreDocument(ctx, id);
+    expect(restored).toMatchObject({ id, path: 'draft.md', title: 'draft' });
+    expect(fs.readFileSync(path.join(root, 'draft.md'), 'utf8')).toBe('hello\n');
+    expect(
+      ctx.db.prepare('SELECT trashed_at FROM documents WHERE id = ?').get(id),
+    ).toMatchObject({ trashed_at: null });
+    expect(ctx.revisions.getTextAt(id, 1)).toBe('hello\n');
+    expect(listTrashedDocuments(ctx)).toHaveLength(0);
+  });
+
+  it('restores under a new name when the original path was taken', () => {
+    const id = makeDoc('draft.md', 'old\n');
+    trashDocument(ctx, id);
+    fs.writeFileSync(path.join(root, 'draft.md'), 'new\n'); // external newcomer
+    const restored = restoreDocument(ctx, id);
+    expect(restored.path).toBe('draft (restored).md');
+    expect(fs.readFileSync(path.join(root, 'draft.md'), 'utf8')).toBe('new\n');
+    expect(fs.readFileSync(path.join(root, 'draft (restored).md'), 'utf8')).toBe('old\n');
+  });
+
+  it('refuses a live document and reports a missing trash file', () => {
+    const id = makeDoc('draft.md');
+    expect(() => restoreDocument(ctx, id)).toThrow(/not in the trash/);
+    trashDocument(ctx, id);
+    fs.rmSync(path.join(root, '.texeris', 'trash', `${id}.md`));
+    expect(() => restoreDocument(ctx, id)).toThrow(/missing/);
+  });
+});
+
+describe('deleteTrashedDocument', () => {
+  it('removes the row, history, checkpoints, patches, and the trash file', () => {
+    const id = makeDoc('draft.md', 'text\n');
+    new CheckpointService(ctx.db, ctx.revisions).create(id, 'before the end');
+    const proposed = new PatchService(ctx.db, ctx.revisions).propose(
+      {
+        baseRevision: 1,
+        title: 't',
+        summary: 's',
+        groups: [
+          {
+            explanation: 'e',
+            changes: [{ from: 0, to: 4, expectedText: 'text', insert: 'word' }],
+          },
+        ],
+        documentId: id,
+      },
+      { conversationId: 'c1', agentRunId: 'r1' },
+    );
+    expect(proposed).toHaveProperty('patchId');
+    trashDocument(ctx, id);
+
+    deleteTrashedDocument(ctx, id);
+
+    for (const table of ['revisions', 'revision_changes', 'checkpoints', 'patches']) {
+      expect(rowCount(table, id), table).toBe(0);
+    }
+    expect(
+      (ctx.db.prepare('SELECT COUNT(*) AS n FROM documents WHERE id = ?').get(id) as { n: number }).n,
+    ).toBe(0);
+    // no orphaned patch rows pointing at deleted patches/groups
+    for (const orphanQuery of [
+      'SELECT COUNT(*) AS n FROM patch_groups WHERE patch_id NOT IN (SELECT id FROM patches)',
+      'SELECT COUNT(*) AS n FROM patch_changes WHERE group_id NOT IN (SELECT id FROM patch_groups)',
+    ]) {
+      expect((ctx.db.prepare(orphanQuery).get() as { n: number }).n).toBe(0);
+    }
+    expect(fs.existsSync(path.join(root, '.texeris', 'trash', `${id}.md`))).toBe(false);
+  });
+
+  it('refuses to delete a live document', () => {
+    const id = makeDoc('draft.md');
+    expect(() => deleteTrashedDocument(ctx, id)).toThrow(/not in the trash/);
+  });
+
+  it('project open still works afterwards', () => {
+    const id = makeDoc('draft.md');
+    trashDocument(ctx, id);
+    deleteTrashedDocument(ctx, id);
+    ctx.db.close();
+    const reopened = openProject(root);
+    ctx = reopened; // afterEach closes it
+    expect(reopened.project.mainDocument).toBe('manuscript.md');
   });
 });

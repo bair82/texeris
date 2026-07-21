@@ -15,6 +15,7 @@ import ActivityBar from './ActivityBar';
 import CommandPalette from './CommandPalette';
 import ProjectNav from './ProjectNav';
 import ShortcutsOverlay from './ShortcutsOverlay';
+import TrashDialog from './TrashDialog';
 
 const DEFAULT_NAV_WIDTH = 232;
 const DEFAULT_SIDE_WIDTH = 400;
@@ -25,6 +26,13 @@ const SIDE_MAX = 660;
 const SAVE_DEBOUNCE_MS = 400;
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+
+/**
+ * Set before a project-switch reload (App.tsx): the beforeunload flush must
+ * NOT fire for that reload, or the outgoing project's ui state would be
+ * written into the incoming project's database.
+ */
+export const PROJECT_SWITCH_FLAG = 'texeris:project-switch';
 
 /**
  * The workspace shell (M1.5 EU1, plan §12): activity rail plus three
@@ -47,6 +55,7 @@ export default function AppShell({
   const [mainPath, setMainPath] = useState(mainDocument);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [trashOpen, setTrashOpen] = useState(false);
   const [newDocRequested, setNewDocRequested] = useState(0);
   const uiRef = useRef<UiState>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -54,6 +63,9 @@ export default function AppShell({
   // Boot: load layout state + document list, then pick the document to open
   // (the one from last session when it still exists, else the first).
   useEffect(() => {
+    // The switch flag did its job (the stale blob was not flushed) — clear it
+    // so ordinary unloads persist again.
+    sessionStorage.removeItem(PROJECT_SWITCH_FLAG);
     void (async () => {
       const [state, list] = await Promise.all([
         window.texeris.ui.get(),
@@ -101,10 +113,16 @@ export default function AppShell({
     [persist],
   );
 
-  // Flush a pending debounced save before the window reloads (project
-  // switch does a full location.reload()).
+  // Flush a pending debounced save before the window reloads — but not when
+  // the reload is a project switch: uiRef still holds the OUTGOING project's
+  // state, and persisting it would clobber the incoming project's database.
   useEffect(() => {
-    const flush = () => persist(true);
+    const flush = () => {
+      if (sessionStorage.getItem(PROJECT_SWITCH_FLAG)) {
+        return;
+      }
+      persist(true);
+    };
     window.addEventListener('beforeunload', flush);
     return () => window.removeEventListener('beforeunload', flush);
   }, [persist]);
@@ -206,6 +224,15 @@ export default function AppShell({
   const onRevealDoc = useCallback(async (documentId: string) => {
     await window.texeris.doc.reveal(documentId);
   }, []);
+
+  // A restored document rejoins the nav and opens right away (EU7).
+  const onRestoredDoc = useCallback(
+    async (doc: { id: string }) => {
+      setDocs(await window.texeris.doc.list());
+      openDoc(doc.id);
+    },
+    [openDoc],
+  );
 
   // ------------------------------------------------------- command registry
 
@@ -362,6 +389,7 @@ export default function AppShell({
             onImportDoc={onImportDoc}
             onSetMainDoc={onSetMainDoc}
             onRevealDoc={onRevealDoc}
+            onOpenTrash={() => setTrashOpen(true)}
             onNavigate={navigateToHeading}
           />
           <div
@@ -401,6 +429,9 @@ export default function AppShell({
         <CommandPalette onRun={runCommand} onClose={() => setPaletteOpen(false)} />
       )}
       {shortcutsOpen && <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />}
+      {trashOpen && (
+        <TrashDialog onClose={() => setTrashOpen(false)} onRestored={onRestoredDoc} />
+      )}
     </div>
   );
 }

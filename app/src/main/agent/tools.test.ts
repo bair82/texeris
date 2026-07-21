@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createAgentTools } from './tools';
 import { PatchService } from '../services/patch';
+import { trashDocument } from '../services/documents';
 import { createProject, ensureDocument, type ProjectContext } from '../services/project';
 
 let root: string;
@@ -44,6 +45,14 @@ describe('read-only agent tools (§10.2)', () => {
   it('list_project_documents returns paths, titles, revisions', async () => {
     const out = JSON.parse(await callTool('list_project_documents'));
     expect(out[0]).toMatchObject({ path: 'manuscript.md', currentRevision: 1 });
+  });
+
+  it('list_project_documents hides trashed documents', async () => {
+    fs.writeFileSync(path.join(root, 'notes.md'), '');
+    const id = ensureDocument(ctx, 'notes.md');
+    trashDocument(ctx, id);
+    const out = JSON.parse(await callTool('list_project_documents'));
+    expect(out.map((d: { path: string }) => d.path)).not.toContain('notes.md');
   });
 
   it('read_document returns JSON with text, revision and outline', async () => {

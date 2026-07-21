@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { AppInfo } from '../../shared/ipc-contract';
 import type { ProjectInfo } from '../../shared/project-types';
 import { initAppearance } from './appearance';
-import AppShell from './layout/AppShell';
+import AppShell, { PROJECT_SWITCH_FLAG } from './layout/AppShell';
 import ProjectPicker from './ProjectPicker';
 import SettingsPanel from './SettingsPanel';
 
@@ -15,8 +15,11 @@ export default function App() {
     void initAppearance().catch(console.error);
     window.texeris.getAppInfo().then(setInfo).catch(console.error);
     window.texeris.project.current().then(setProject).catch(console.error);
-    // Full reload on project switch — every pane re-reads its data.
+    // Full reload on project switch — every pane re-reads its data. Flag it
+    // so AppShell's beforeunload flush does not write this project's ui
+    // state into the incoming project's database.
     return window.texeris.project.onChanged(() => {
+      sessionStorage.setItem(PROJECT_SWITCH_FLAG, '1');
       window.location.reload();
     });
   }, []);

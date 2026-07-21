@@ -9,6 +9,8 @@ import {
   hashText,
 } from './document';
 import { RevisionService } from './revision';
+import { UiStateService } from './uiState';
+import { seedWelcomeDocument } from './welcome';
 
 /**
  * Project service (plan §4.8, §7.1): a project is a user folder with a
@@ -102,7 +104,11 @@ export function createProject(root: string, mainDocument = 'manuscript.md'): Pro
   }
   const db = openDatabase(path.join(texerisDir(root), DB_FILE));
   registerDocument(db, mainDocument);
-  return { root, project, db, revisions: new RevisionService(db, root) };
+  const ctx: ProjectContext = { root, project, db, revisions: new RevisionService(db, root) };
+  // EU7: seed welcome.md and make it the first thing a new project opens on.
+  const welcomeId = seedWelcomeDocument(ctx);
+  new UiStateService(db).set({ openDocumentId: welcomeId });
+  return ctx;
 }
 
 /**
@@ -154,6 +160,16 @@ export function createDocument(
     );
   }
   const filePath = path.join(ctx.root, trimmed);
+  const trashedRow = ctx.db
+    .prepare('SELECT 1 AS x FROM documents WHERE path = ? AND trashed_at IS NOT NULL')
+    .get(trimmed);
+  if (trashedRow) {
+    // The row (and its UNIQUE path) is still owned by the trash — reusing the
+    // name would entangle the new file with the trashed document's history.
+    throw new Error(
+      `${trimmed} is in the trash — restore it or delete it permanently first`,
+    );
+  }
   if (!fs.existsSync(filePath)) {
     atomicWriteText(filePath, '');
   }

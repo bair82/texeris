@@ -119,7 +119,10 @@ export function createAgentTools(
     parameters: EmptyParams,
     async execute() {
       const rows = project.db
-        .prepare('SELECT id, path, title, current_revision FROM documents ORDER BY path')
+        .prepare(
+          `SELECT id, path, title, current_revision FROM documents
+           WHERE trashed_at IS NULL ORDER BY path`,
+        )
         .all() as unknown as DocRow[];
       const payload = rows.map((row) => ({
         documentId: row.id,

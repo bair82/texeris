@@ -62,9 +62,12 @@ import type { WorkspaceConfig } from './services/settings';
 import { saveWorkspaceConfig } from './services/settings';
 import { extractHeadings } from './agent/markdown';
 import {
+  deleteTrashedDocument,
   duplicateDocument,
   importDocumentFile,
+  listTrashedDocuments,
   renameDocument,
+  restoreDocument,
   setMainDocument,
   trashDocument,
 } from './services/documents';
@@ -332,6 +335,23 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const project = deps.requireProject();
     shell.showItemInFolder(path.join(project.root, docPath(project, req.documentId)));
     return { revealed: true };
+  });
+
+  // ---------------------------------------------------------- trash (EU7)
+
+  ipcMain.handle(DocChannels.trashList, () =>
+    listTrashedDocuments(deps.requireProject()),
+  );
+
+  ipcMain.handle(DocChannels.restoreTrash, (_event, raw: unknown) => {
+    const req = Value.Decode(DocIdRequestSchema, raw);
+    return restoreDocument(deps.requireProject(), req.documentId);
+  });
+
+  ipcMain.handle(DocChannels.deleteTrash, (_event, raw: unknown) => {
+    const req = Value.Decode(DocIdRequestSchema, raw);
+    deleteTrashedDocument(deps.requireProject(), req.documentId);
+    return { deleted: true };
   });
 
   // ---------------------------------------------------------------- history

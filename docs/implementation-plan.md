@@ -461,6 +461,8 @@ packaging needs a Mac.
 
 ## M1.5 — Daily-use ergonomics
 
+**Complete 2026-07-21** — all seven packages (EU1–EU7) landed on `main`.
+
 Approved 2026-07-20 (plan file `plans/…/psylocke-batgirl-groot.md`; codex's
 12-item review + kimi's list reconciled). Fills the product-spec §11.1 gaps
 ("Search and replace", "Navigate by headings") before M2. Out of scope:
@@ -520,8 +522,9 @@ messages + runs.
 `smoke-eu3.mjs`: rename doc through the menu, set-main, duplicate,
 trash, rename a conversation and reopen it after starting a new one.
 
-**EU4 — Proofreading & statistics.** ⚠️ statistics done; spellcheck incomplete.
-Electron
+**EU4 — Proofreading & statistics.** ✅ done 2026-07-21 (kimi), with the
+spellcheck underline descoped to the post-M1.5 backlog (item 2, app-level
+checker). Electron
 spellcheck (`session.defaultSession`) with an enable toggle + language
 picker in Settings; the preference lives in the workspace `config.json`
 (`spellcheck: {enabled, language}`) and applies at boot and on change.
@@ -534,8 +537,9 @@ Word count + selection count (words/chars) in the editor status bar,
 polled at 500 ms; Markdown syntax tokens don't count as words.
 *DoD:* `smoke-eu4.mjs`: live count while typing, select-all selection
 count, spellcheck setting round-trips over IPC and persists. (The wavy
-underline itself is not covered by this smoke; the original underline DoD is
-not met. See `spellcheck-notes.md`.)
+underline itself is descoped — native Chromium spellcheck is unreliable
+here, so it defaults OFF; the app-level checker is backlog item 2.
+See `spellcheck-notes.md`.)
 
 **EU5 — Keyboard UX.** ✅ done 2026-07-21 (kimi). Shared command
 definitions in `shared/commands.ts` feed three surfaces that cannot
@@ -578,10 +582,25 @@ run after both exist, or the def attaches to a stale label — caught by
 data loss; deleting the last ref leaves all defs untouched so cut →
 paste restores cleanly). Unit tests in `footnote-renumber.test.ts`.
 
-**EU7 — Recovery & onboarding.** Trash view with restore; `welcome.md`
-seeded into new projects explaining autosave/modes/scopes/patches/
-checkpoints.
-*DoD:* delete → trash → restore works; new project opens on welcome.md.
+**EU7 — Recovery & onboarding.** ✅ done 2026-07-21 (kimi). Trash dialog
+(nav header icon, overlay pattern like settings/shortcuts, Esc closes)
+lists trashed documents from `documents WHERE trashed_at IS NOT NULL` with
+restore and permanent delete. Restore moves the file back from
+`.texeris/trash/<id>.md` under the same id with history intact (falls back
+to "<name> (restored).md" when the path was taken) and opens it; permanent
+delete removes row + revisions + checkpoints + patches (FK children first,
+one transaction) and the trash file. `welcome.md` is seeded as rev 1 in
+`createProject` (`services/welcome.ts`; an existing file is registered,
+never overwritten) and `ui.state.openDocumentId` points new projects at
+it; the dev harness re-points at the manuscript so smokes are unaffected.
+Three latent issues fixed along the way: `createDocument` now refuses a
+path owned by a trashed row (UNIQUE path would entangle the new file with
+the trashed history), the agent's `list_project_documents` filters
+trashed docs, and AppShell's beforeunload ui-state flush no longer fires
+on project-switch reloads (`PROJECT_SWITCH_FLAG` in sessionStorage) — it
+used to write the outgoing project's blob into the incoming project's db.
+*DoD:* `smoke-eu7.mjs`: trash → restore (reopens, trash empty) → trash →
+permanent delete; a freshly created project opens on welcome.md.
 
 ### Post-M1.5 backlog (owner review 2026-07-21, ranked)
 

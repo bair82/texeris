@@ -1847,3 +1847,92 @@ body.col-resizing {
   text-align: left;
   font-size: 13px;
 }
+
+/* ------------------------------------------------------------- trash (EU7) */
+
+.trash-panel {
+  width: 480px;
+}
+
+.trash-list {
+  list-style: none;
+  margin: 10px 0 4px;
+  padding: 0;
+}
+
+.trash-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.trash-row:last-child {
+  border-bottom: none;
+}
+
+.trash-doc {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.trash-doc-path {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trash-doc-date {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.trash-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.trash-confirm-text {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.trash-quiet,
+.trash-danger {
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  background: none;
+}
+
+.trash-quiet {
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.trash-quiet:hover {
+  border-color: var(--border-strong);
+}
+
+.trash-delete {
+  color: var(--red);
+}
+
+.trash-danger {
+  color: var(--red);
+  border: 1px solid var(--red);
+}
+
+.trash-error {
+  font-size: 12px;
+  color: var(--red);
+  margin: 8px 0 0;
+  cursor: pointer;
+}

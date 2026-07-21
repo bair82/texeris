@@ -72,6 +72,11 @@ const api: TexerisApi = {
     importDialog: () => ipcRenderer.invoke(DocChannels.importDialog),
     setMain: (documentId) => ipcRenderer.invoke(DocChannels.setMain, { documentId }),
     reveal: (documentId) => ipcRenderer.invoke(DocChannels.reveal, { documentId }),
+    trashList: () => ipcRenderer.invoke(DocChannels.trashList),
+    restoreTrash: (documentId) =>
+      ipcRenderer.invoke(DocChannels.restoreTrash, { documentId }),
+    deleteTrash: (documentId) =>
+      ipcRenderer.invoke(DocChannels.deleteTrash, { documentId }),
     onEvent: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
         callback(payload as DocEvent);
