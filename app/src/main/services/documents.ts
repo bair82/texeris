@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { minimalSplice } from '../../shared/text-splice';
 import { atomicWriteText, hashText } from './document';
 import type { ProjectContext } from './project';
+import { convertToMarkdown, formatForPath, writePandocExport, type InterchangeFormat } from './pandoc';
 
 /**
  * Document management (M1.5 EU3): rename (ids never change), trash (file
@@ -20,6 +21,16 @@ export interface DocumentHandle {
   id: string;
   path: string;
   title: string;
+}
+
+export interface DocumentImportResult extends DocumentHandle {
+  warnings: string[];
+}
+
+export interface DocumentExportResult {
+  path: string;
+  format: InterchangeFormat;
+  warnings: string[];
 }
 
 interface DocumentRow {
@@ -147,16 +158,53 @@ export function duplicateDocument(ctx: ProjectContext, documentId: string): Docu
 }
 
 /** Copy a Markdown file from anywhere into the project root. */
-export function importDocumentFile(ctx: ProjectContext, sourcePath: string): DocumentHandle {
+export function importDocumentFile(ctx: ProjectContext, sourcePath: string): DocumentImportResult {
   const original = path.basename(sourcePath);
-  const base = original.replace(/\.md$/i, '');
+  const base = original.replace(/\.(?:md|markdown|mdown|txt|docx|odt|rtf)$/i, '');
   let target = `${base}.md`;
   for (let n = 2; pathTaken(ctx, target); n++) {
     target = `${base}-${n}.md`;
   }
-  const content = fs.readFileSync(sourcePath, 'utf8');
+  const bytes = fs.readFileSync(sourcePath);
+  const converted = convertToMarkdown(sourcePath, bytes);
+  const content = converted.markdown;
   const id = registerImported(ctx, target, content, `imported from ${original}`);
-  return { id, path: target, title: titleFor(target) };
+  return { id, path: target, title: titleFor(target), warnings: converted.warnings };
+}
+
+/** Export a snapshot of a live document without changing its canonical Markdown or history. */
+export function exportDocumentFile(
+  ctx: ProjectContext,
+  documentId: string,
+  outputPath: string,
+): DocumentExportResult {
+  const row = docRow(ctx, documentId);
+  assertLive(row);
+  const format = formatForPath(outputPath);
+  if (!format) throw new Error('choose a Markdown, DOCX, ODT, or RTF filename');
+  const sourcePath = path.resolve(ctx.root, row.path);
+  if (path.resolve(outputPath) === sourcePath) throw new Error('choose a different path from the canonical project document');
+  const text = fs.readFileSync(sourcePath, 'utf8');
+  const tempPath = path.join(
+    path.dirname(outputPath),
+    `.${path.basename(outputPath)}.${randomUUID()}.tmp${path.extname(outputPath)}`,
+  );
+  try {
+    let warnings: string[] = [];
+    if (format === 'markdown') {
+      atomicWriteText(tempPath, text);
+    } else {
+      warnings = writePandocExport(text, tempPath, format);
+    }
+    fs.renameSync(tempPath, outputPath);
+    if (/\[@[-\w]+/.test(text)) {
+      warnings.push('Citation markers were preserved where possible, but no bibliography was rendered because this project has no reference library yet.');
+    }
+    return { path: outputPath, format, warnings };
+  } catch (error) {
+    fs.rmSync(tempPath, { force: true });
+    throw error;
+  }
 }
 
 /** Register a file-backed document and record its content as rev 1. */

@@ -88,6 +88,7 @@ export interface EditorCommands {
   openSearch(): void;
   toggleHistory(): void;
   toggleMode(): void;
+  flush(): void;
 }
 
 let editorCommands: EditorCommands | null = null;

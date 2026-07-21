@@ -65,6 +65,7 @@ import { extractHeadings } from './agent/markdown';
 import {
   deleteTrashedDocument,
   duplicateDocument,
+  exportDocumentFile,
   importDocumentFile,
   listTrashedDocuments,
   renameDocument,
@@ -355,14 +356,42 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   ipcMain.handle(DocChannels.importDialog, async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     const result = await dialog.showOpenDialog(win!, {
-      title: 'Import a Markdown file',
-      filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'txt'] }],
+      title: 'Import a document',
+      filters: [
+        { name: 'Supported documents', extensions: ['md', 'markdown', 'mdown', 'txt', 'docx', 'odt', 'rtf'] },
+        { name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'txt'] },
+        { name: 'Word document', extensions: ['docx'] },
+        { name: 'OpenDocument text', extensions: ['odt'] },
+        { name: 'Rich Text Format', extensions: ['rtf'] },
+      ],
       properties: ['openFile'],
     });
     if (result.canceled || result.filePaths.length === 0) {
       return null;
     }
     return importDocumentFile(deps.requireProject(), result.filePaths[0]);
+  });
+
+  ipcMain.handle(DocChannels.exportDialog, async (event, raw: unknown) => {
+    const req = Value.Decode(DocIdRequestSchema, raw);
+    const project = deps.requireProject();
+    const row = project.db.prepare('SELECT path, title FROM documents WHERE id = ?').get(req.documentId) as
+      | { path: string; title: string }
+      | undefined;
+    if (!row) throw new Error('unknown document');
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showSaveDialog(win!, {
+      title: 'Export document',
+      defaultPath: path.join(project.root, `${row.title}.docx`),
+      filters: [
+        { name: 'Word document', extensions: ['docx'] },
+        { name: 'OpenDocument text', extensions: ['odt'] },
+        { name: 'Rich Text Format', extensions: ['rtf'] },
+        { name: 'Markdown', extensions: ['md'] },
+      ],
+    });
+    if (result.canceled || !result.filePath) return null;
+    return exportDocumentFile(project, req.documentId, result.filePath);
   });
 
   ipcMain.handle(DocChannels.setMain, (_event, raw: unknown) => {

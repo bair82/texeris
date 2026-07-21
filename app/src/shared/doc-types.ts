@@ -35,6 +35,19 @@ export const DocCreateRequestSchema = Type.Object({
 });
 export type DocCreateRequest = Static<typeof DocCreateRequestSchema>;
 
+export interface DocumentImportResult {
+  id: string;
+  path: string;
+  title: string;
+  warnings: string[];
+}
+
+export interface DocumentExportResult {
+  path: string;
+  format: 'markdown' | 'docx' | 'odt' | 'rtf';
+  warnings: string[];
+}
+
 /** Document-management requests (M1.5 EU3) — all id-addressed, never path. */
 export const DocRenameRequestSchema = Type.Object({
   documentId: Type.String(),
@@ -113,6 +126,7 @@ export const DocChannels = {
   trash: 'texeris:doc-trash',
   duplicate: 'texeris:doc-duplicate',
   importDialog: 'texeris:doc-import-dialog',
+  exportDialog: 'texeris:doc-export-dialog',
   setMain: 'texeris:doc-set-main',
   reveal: 'texeris:doc-reveal',
   trashList: 'texeris:doc-trash-list',

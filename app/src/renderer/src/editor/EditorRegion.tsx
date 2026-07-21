@@ -274,6 +274,7 @@ export default function EditorRegion({
       toggleHistory: () => setShowHistory((v) => !v),
       toggleMode: () =>
         switchModeRef.current(modeRef.current === 'rendered' ? 'raw' : 'rendered'),
+      flush: () => sessionRef.current?.flush(),
     });
   }, []);
 

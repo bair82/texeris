@@ -11,6 +11,8 @@ import type {
   DocCommitRequest,
   DocEvent,
   DocText,
+  DocumentExportResult,
+  DocumentImportResult,
   HeadingInfo,
   TrashedDocumentInfo,
 } from './doc-types';
@@ -80,7 +82,8 @@ export interface TexerisApi {
     rename(documentId: string, name: string): Promise<{ id: string; path: string; title: string }>;
     trash(documentId: string): Promise<{ trashed: boolean }>;
     duplicate(documentId: string): Promise<{ id: string; path: string; title: string }>;
-    importDialog(): Promise<{ id: string; path: string; title: string } | null>;
+    importDialog(): Promise<DocumentImportResult | null>;
+    exportDialog(documentId: string): Promise<DocumentExportResult | null>;
     setMain(documentId: string): Promise<ProjectInfo>;
     reveal(documentId: string): Promise<{ revealed: boolean }>;
     trashList(): Promise<TrashedDocumentInfo[]>;

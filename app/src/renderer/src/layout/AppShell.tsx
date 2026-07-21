@@ -61,6 +61,7 @@ export default function AppShell({
   const [trashOpen, setTrashOpen] = useState(false);
   const [newDocRequested, setNewDocRequested] = useState(0);
   const [profileSourceOpen, setProfileSourceOpen] = useState(false);
+  const [operationNotice, setOperationNotice] = useState<string | null>(null);
   const uiRef = useRef<UiState>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -217,8 +218,24 @@ export default function AppShell({
     if (imported) {
       setDocs(await window.texeris.doc.list());
       openDoc(imported.id);
+      if (imported.warnings.length) {
+        setOperationNotice(`Imported ${imported.path}. ${imported.warnings.join(' ')}`);
+      }
     }
   }, [openDoc]);
+
+  const onExportDoc = useCallback(async () => {
+    if (!openDocId) return;
+    getEditorCommands()?.flush();
+    const exported = await window.texeris.doc.exportDialog(openDocId);
+    if (exported) {
+      setOperationNotice(
+        exported.warnings.length
+          ? `Exported to ${exported.path}. ${exported.warnings.join(' ')}`
+          : `Exported to ${exported.path}.`,
+      );
+    }
+  }, [openDocId]);
 
   const onSetMainDoc = useCallback(async (documentId: string) => {
     const info = await window.texeris.doc.setMain(documentId);
@@ -260,6 +277,9 @@ export default function AppShell({
           break;
         case 'file:import-document':
           void onImportDoc();
+          break;
+        case 'file:export-document':
+          void onExportDoc();
           break;
         case 'file:switch-project':
           void window.texeris.project.openDialog().catch(() => {
@@ -304,7 +324,7 @@ export default function AppShell({
           break;
       }
     },
-    [onImportDoc, onOpenProjectPicker, patchUi, toggleNav, toggleSide, toggleFocus],
+    [onExportDoc, onImportDoc, onOpenProjectPicker, patchUi, toggleNav, toggleSide, toggleFocus],
   );
 
   // App-menu commands from main.
@@ -441,6 +461,12 @@ export default function AppShell({
       )}
       {paletteOpen && (
         <CommandPalette onRun={runCommand} onClose={() => setPaletteOpen(false)} />
+      )}
+      {operationNotice && (
+        <div className="operation-notice" role="status">
+          <span>{operationNotice}</span>
+          <button type="button" aria-label="Dismiss notification" onClick={() => setOperationNotice(null)}>×</button>
+        </div>
       )}
       {shortcutsOpen && <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />}
       {trashOpen && (

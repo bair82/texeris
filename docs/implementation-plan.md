@@ -604,14 +604,10 @@ permanent delete; a freshly created project opens on welcome.md.
 
 ### Post-M1.5 backlog (owner review 2026-07-21, ranked)
 
-1. **docx import/export** (owner ask, top priority): Pandoc both ways —
-   import .docx into a project document, export manuscript to .docx for
-   collaborators/supervisors. Use the already-decided bundled Pandoc 3.10
-   component; add golden import/export samples before exposing the workflow.
-2. **App-level spellchecker**: native is unreliable (PR #2); codex's
+1. **App-level spellchecker**: native is unreliable (PR #2); codex's
    nspell + dictionary-en design (~0.6 MB) is the seed; needs a
    dictionary-distribution decision for the language picker.
-3. **Citations UI** (M2 core): CSL JSON library per project, insert-
+2. **Citations UI** (M2 core): CSL JSON library per project, insert-
    citation picker with search, bibliography rendering.
 4. **Images/figures**: paste/drag image → copy to project assets + link;
    render in rendered mode.

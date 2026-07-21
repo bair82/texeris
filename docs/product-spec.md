@@ -337,7 +337,7 @@ The user can:
 - Create an empty project.
 - Open an existing project.
 - Import a Markdown document.
-- Potentially import DOCX or another format through conversion.
+- Import Markdown, DOCX, ODT, or RTF as a new revisioned Markdown document.
 - Add previous documents to the writing archive.
 
 A new project may begin with:
@@ -772,6 +772,11 @@ The application should not require the user to choose among many provider-specif
 - Use templates or reference documents.
 - Store export presets per project.
 - Produce an export report containing warnings.
+
+The first deterministic interchange workflow exports Markdown, DOCX, ODT, and
+RTF through a native save dialog. Exports are derived artifacts and never
+replace the canonical project Markdown; citation markers may be preserved, but
+a formatted bibliography awaits the reference-library workflow.
 
 ### Exploratory
 

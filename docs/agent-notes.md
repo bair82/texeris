@@ -115,3 +115,9 @@ research delegation, editable profile/report artifacts, slash command, and
 patch-style critic. Linux releases now checksum-verify and bundle Pandoc 3.10
 for DOCX/ODT/RTF/HTML corpus conversion; PDF remains explicitly text extraction.
 Typecheck + 158 unit tests + AppImage resource inspection passed.
+
+**codex, 2026-07-22** — document interchange added on `codex/main`:
+native import/export supports Markdown, DOCX, ODT, and RTF. Imports become
+revision-1 canonical Markdown documents; exports use the shared bundled Pandoc
+adapter and atomic output, with explicit warnings for unrendered citations.
+161 unit tests, typecheck, production build, and AppImage resource check pass.

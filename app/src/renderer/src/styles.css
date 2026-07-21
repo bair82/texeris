@@ -115,6 +115,34 @@ button {
   min-height: 0;
 }
 
+.operation-notice {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 30;
+  display: flex;
+  max-width: min(560px, calc(100vw - 40px));
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  color: var(--text);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 25%);
+  font-size: 13px;
+}
+
+.operation-notice button {
+  border: 0;
+  padding: 0 2px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 16px;
+}
+
 .app-footer {
   display: flex;
   align-items: center;

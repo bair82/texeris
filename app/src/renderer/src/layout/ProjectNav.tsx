@@ -178,7 +178,7 @@ export default function ProjectNav({
         <span className="nav-header-actions">
           <button
             className="nav-action import-action"
-            title="Import a Markdown file…"
+            title="Import a document…"
             onClick={() => void onImportDoc().catch(reportError)}
           >
             ⇩

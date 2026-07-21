@@ -76,6 +76,7 @@ const api: TexerisApi = {
     trash: (documentId) => ipcRenderer.invoke(DocChannels.trash, { documentId }),
     duplicate: (documentId) => ipcRenderer.invoke(DocChannels.duplicate, { documentId }),
     importDialog: () => ipcRenderer.invoke(DocChannels.importDialog),
+    exportDialog: (documentId) => ipcRenderer.invoke(DocChannels.exportDialog, { documentId }),
     setMain: (documentId) => ipcRenderer.invoke(DocChannels.setMain, { documentId }),
     reveal: (documentId) => ipcRenderer.invoke(DocChannels.reveal, { documentId }),
     trashList: () => ipcRenderer.invoke(DocChannels.trashList),

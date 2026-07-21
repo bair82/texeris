@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   deleteTrashedDocument,
   duplicateDocument,
+  exportDocumentFile,
   importDocumentFile,
   listTrashedDocuments,
   renameDocument,
@@ -19,6 +20,7 @@ import { createProject, ensureDocument, openProject, type ProjectContext } from 
 let root: string;
 let ctx: ProjectContext;
 let mainId: string;
+let fakePandoc: string;
 
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'texeris-docs-'));
@@ -28,9 +30,19 @@ beforeEach(() => {
     actor: 'user',
     source: { kind: 'typing' },
   });
+  fakePandoc = path.join(root, 'fake-pandoc.sh');
+  fs.writeFileSync(fakePandoc, `#!/bin/sh
+for arg in "$@"; do
+  case "$arg" in --output) next=1;; *) if [ "$next" = 1 ]; then output="$arg"; next=; fi;; esac
+done
+if [ -n "$output" ]; then cat > "$output"; else printf '# Converted\\n'; fi
+`);
+  fs.chmodSync(fakePandoc, 0o755);
+  process.env.TEXERIS_PANDOC_PATH = fakePandoc;
 });
 
 afterEach(() => {
+  delete process.env.TEXERIS_PANDOC_PATH;
   ctx.db.close();
   fs.rmSync(root, { recursive: true, force: true });
 });
@@ -150,6 +162,45 @@ describe('importDocumentFile', () => {
       expect(fs.readFileSync(path.join(root, 'notes.md'), 'utf8')).toBe('mine\n');
     } finally {
       fs.rmSync(source, { force: true });
+    }
+  });
+
+  it('converts DOCX-like sources into a revisioned Markdown document', () => {
+    const source = path.join(root, '..', 'paper.docx');
+    fs.writeFileSync(source, 'binary placeholder');
+    try {
+      const imported = importDocumentFile(ctx, source);
+      expect(imported.path).toBe('paper.md');
+      expect(ctx.revisions.getTextAt(imported.id, 1)).toBe('# Converted\n');
+      expect(imported.warnings).toHaveLength(1);
+    } finally {
+      fs.rmSync(source, { force: true });
+    }
+  });
+});
+
+describe('exportDocumentFile', () => {
+  it('writes a DOCX derivative without changing the source document or revision', () => {
+    const output = path.join(root, '..', `export-${path.basename(root)}.docx`);
+    try {
+      const result = exportDocumentFile(ctx, mainId, output);
+      expect(result.format).toBe('docx');
+      expect(fs.readFileSync(output, 'utf8')).toBe('# Main\n');
+      expect(ctx.revisions.getTextAt(mainId, 1)).toBe('# Main\n');
+      expect(result.warnings).toHaveLength(1);
+    } finally {
+      fs.rmSync(output, { force: true });
+    }
+  });
+
+  it('warns about unrendered citations and refuses to overwrite the canonical file', () => {
+    const id = makeDoc('cited.md', 'A claim [@source].\n');
+    const output = path.join(root, '..', `export-${path.basename(root)}.rtf`);
+    try {
+      expect(exportDocumentFile(ctx, id, output).warnings.join(' ')).toMatch(/bibliography/);
+      expect(() => exportDocumentFile(ctx, id, path.join(root, 'cited.md'))).toThrow(/different path/);
+    } finally {
+      fs.rmSync(output, { force: true });
     }
   });
 });

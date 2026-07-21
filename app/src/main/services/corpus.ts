@@ -6,11 +6,9 @@ import type { CorpusSourceView } from '../../shared/profile-types';
 import type { ProjectContext } from './project';
 import { atomicWriteText, hashText } from './document';
 import { workspaceDir } from './settings';
+import { convertToMarkdown, PANDOC_VERSION } from './pandoc';
 
 const SUPPORTED = new Set(['.md', '.markdown', '.mdown', '.txt', '.html', '.htm', '.docx', '.odt', '.rtf', '.pdf']);
-
-/** Kept in lockstep with scripts/prepare-pandoc.mjs and the packaged resource. */
-export const PANDOC_VERSION = '3.10';
 
 interface Converted {
   markdown: string;
@@ -171,63 +169,15 @@ function convert(file: string, bytes: Buffer): Converted {
       return { markdown: '', converter: 'pdftotext-unavailable', warnings: [`PDF conversion failed: ${String(error)}`] };
     }
   }
-  const pandoc = resolvePandoc();
-  if (!pandoc) {
-    return {
-      markdown: '',
-      converter: `pandoc-${PANDOC_VERSION}-missing`,
-      warnings: ['The packaged Pandoc converter is unavailable. Reinstall Texeris or ask the administrator to repair the installation.'],
-    };
-  }
   try {
-    const markdown = execFileSync(
-      pandoc.path,
-      [file, '--to=markdown', '--wrap=none', '--standalone=false', '--sandbox', '--track-changes=accept'],
-      { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
-    );
-    return {
-      markdown,
-      converter: `pandoc-${PANDOC_VERSION}-${pandoc.kind}`,
-      warnings: pandoc.kind === 'development-path'
-        ? ['Using a development Pandoc installation; packaged builds use the pinned Texeris converter.']
-        : [],
-    };
+    return convertToMarkdown(file, bytes);
   } catch (error) {
     return {
       markdown: '',
       converter: `pandoc-${PANDOC_VERSION}-failed`,
-      warnings: [`Pandoc conversion failed: ${errorMessage(error)}`],
+      warnings: [`Pandoc conversion failed: ${error instanceof Error ? error.message : String(error)}`],
     };
   }
-}
-
-function resolvePandoc(): { path: string; kind: 'bundled' | 'development-path' } | null {
-  const override = process.env.TEXERIS_PANDOC_PATH;
-  if (override) return { path: override, kind: 'development-path' };
-
-  const resourceRoot = process.resourcesPath;
-  const bundled = resourceRoot
-    ? path.join(resourceRoot, 'pandoc', pandocPlatformDirectory(), process.platform === 'win32' ? 'pandoc.exe' : 'pandoc')
-    : null;
-  if (bundled && fs.existsSync(bundled)) return { path: bundled, kind: 'bundled' };
-
-  // electron-vite development runs have no app.asar. A PATH fallback keeps
-  // contributor workflows convenient without making release builds depend on it.
-  if (!isPackagedRuntime()) return { path: 'pandoc', kind: 'development-path' };
-  return null;
-}
-
-function pandocPlatformDirectory(): string {
-  const arch = process.arch === 'x64' ? 'amd64' : process.arch;
-  return `${process.platform}-${arch}`;
-}
-
-function isPackagedRuntime(): boolean {
-  return Boolean(process.resourcesPath && fs.existsSync(path.join(process.resourcesPath, 'app.asar')));
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function detectDate(text: string, filename: string): { date: string; confidence: string } | null {
