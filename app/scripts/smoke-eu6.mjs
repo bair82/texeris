@@ -83,6 +83,13 @@ try {
     if (res.exceptionDetails) throw new Error(JSON.stringify(res.exceptionDetails));
     return res.result.value;
   };
+  const send = (method, params = {}) => {
+    const id = ++msgId;
+    return new Promise((resolve, reject) => {
+      pending.set(id, (msg) => (msg.error ? reject(new Error(`${method}: ${msg.error.message}`)) : resolve(msg.result)));
+      ws.send(JSON.stringify({ id, method, params }));
+    });
+  };
   const waitFor = async (expression, label, tries = 60) => {
     for (let i = 0; i < tries; i++) {
       if (await evaluate(expression)) return true;
@@ -95,6 +102,51 @@ try {
     `[...document.querySelectorAll('.toolbar button')].find(b => b.title === ${JSON.stringify(title)})?.click(); true`;
 
   await waitFor(`!!window.texeris && !!document.querySelector('.tiptap-rendered')`, 'editor never mounted');
+
+  // ---- structural editing: footnote insert + management
+  await evaluate(`document.querySelector('.footnote-insert').click(); true`);
+  await waitFor(
+    `window.texeris.doc.getText().then(d => d.text.includes('[^1]') && d.text.includes('[^1]:'))`,
+    'footnote ref/definition never committed',
+    40,
+  );
+  check('footnote insert lands ref + definition', true);
+
+  // insert another footnote BEFORE the existing one → document-order renumber
+  const caretToStart = `(() => {
+    const el = document.querySelector('.tiptap-rendered');
+    el.focus();
+    window.getSelection().collapse(el, 0);
+    return true;
+  })()`;
+  await evaluate(caretToStart);
+  await sleep(300);
+  await evaluate(`document.querySelector('.footnote-insert').click(); true`);
+  const renumbered = await waitFor(
+    `window.texeris.doc.getText().then(d => {
+      const t = d.text;
+      return t.includes('[^1]:') && t.includes('[^2]:') && t.indexOf('[^1]') < t.indexOf('[^2]');
+    })`,
+    'footnotes never renumbered after inserting before an existing one',
+    40,
+  );
+  check('inserting before an existing footnote renumbers in document order', renumbered);
+
+  // delete the first ref → numbering heals, orphaned definition kept
+  await evaluate(caretToStart);
+  await sleep(300);
+  // a trusted CDP key event — synthetic keydowns can't edit content
+  await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Delete', code: 'Delete', windowsVirtualKeyCode: 46 });
+  await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Delete', code: 'Delete', windowsVirtualKeyCode: 46 });
+  const healed = await waitFor(
+    `window.texeris.doc.getText().then(d => {
+      const t = d.text;
+      return t.includes('[^1]:') && t.includes('[^2]:') && !/\\[\\^2\\](?!:)/.test(t);
+    })`,
+    'footnote numbering never healed after delete',
+    40,
+  );
+  check('deleting a footnote heals numbering and keeps the orphaned definition', healed);
 
   // ---- structural editing: table ops
   await evaluate(clickTitle('Insert table'));
@@ -120,15 +172,6 @@ try {
   check('delete row → 3', (await dims()).rows === 3);
   await evaluate(`document.querySelector('.tbl-col-del').click(); true`);
   check('delete column → 3', (await dims()).cols === 3);
-
-  // ---- structural editing: footnote insert
-  await evaluate(`document.querySelector('.footnote-insert').click(); true`);
-  await waitFor(
-    `window.texeris.doc.getText().then(d => d.text.includes('[^1]') && d.text.includes('[^1]:'))`,
-    'footnote ref/definition never committed',
-    40,
-  );
-  check('footnote insert lands ref + definition', true);
 
   // ---- surface preferences repaint without reload
   check(

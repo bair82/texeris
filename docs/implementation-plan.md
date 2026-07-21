@@ -566,6 +566,17 @@ second palette; straggler hard-coded colors are var-parametrized.
 definition commit, theme/font/width repaint live and persist across
 reload.
 
+Follow-up (2026-07-21, owner feedback): footnotes are MANAGED, not just
+inserted — a renumber plugin (`editor/tiptap/footnote-renumber.ts`)
+keeps labels in document order after every footnote-affecting
+transaction: inserting before an existing footnote renumbers everything,
+deleting a ref heals the numbering. Insert uses transient unique labels
+(max+1) and puts ref + def out in ONE PM transaction (the plugin must
+run after both exist, or the def attaches to a stale label — caught by
+`smoke-eu6`). Orphaned definitions keep their content (never silent
+data loss; deleting the last ref leaves all defs untouched so cut →
+paste restores cleanly). Unit tests in `footnote-renumber.test.ts`.
+
 **EU7 — Recovery & onboarding.** Trash view with restore; `welcome.md`
 seeded into new projects explaining autosave/modes/scopes/patches/
 checkpoints.

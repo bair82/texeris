@@ -24,8 +24,10 @@ export default function Toolbar({ editor }: { editor: Editor }) {
   const active = (name: string, attrs?: Record<string, unknown>) =>
     editor.isActive(name, attrs) ? 'active' : '';
 
-  /** Insert a footnote ref at the cursor + a definition block at the doc
-   * end, and land the cursor inside the definition (M1.5 EU6). */
+  /** Insert a footnote ref at the cursor + a definition block after the
+   * last existing definition, and land the cursor inside it. Ref and def
+   * go out in ONE transaction: the renumber plugin runs after both exist,
+   * so the transient unique label maps the pair unambiguously (M1.5 EU6). */
   const insertFootnote = () => {
     let max = 0;
     editor.state.doc.descendants((node) => {
@@ -38,22 +40,29 @@ export default function Toolbar({ editor }: { editor: Editor }) {
       return true;
     });
     const label = String(max + 1);
-    chain().insertContent({ type: 'footnoteRef', attrs: { label } }).run();
-    editor
-      .chain()
-      .insertContentAt(editor.state.doc.content.size, {
-        type: 'footnoteDef',
-        attrs: { label },
-        content: [{ type: 'paragraph' }],
-      })
-      .run();
-    // cursor into the fresh definition's paragraph
+    const { schema } = editor.state;
+    const refNode = schema.nodes.footnoteRef.create({ label });
+    const defNode = schema.nodes.footnoteDef.create(
+      { label },
+      schema.nodes.paragraph.create(),
+    );
+    let tr = editor.state.tr.replaceSelectionWith(refNode);
+    // defs stay contiguous: after the last definition, else at the doc end
+    let insertAt = tr.doc.content.size;
+    tr.doc.descendants((node, pos) => {
+      if (node.type.name === 'footnoteDef') {
+        insertAt = pos + node.nodeSize;
+      }
+      return true;
+    });
+    tr = tr.insert(insertAt, defNode);
+    editor.view.dispatch(tr);
+    // cursor into the fresh definition (the last one) after renumbering
     const target = ((): number | null => {
       let found: number | null = null;
       editor.state.doc.descendants((node, pos) => {
-        if (node.type.name === 'footnoteDef' && String(node.attrs.label) === label) {
+        if (node.type.name === 'footnoteDef') {
           found = pos + 2;
-          return false;
         }
         return true;
       });

@@ -29,6 +29,7 @@ import type { TextSplice } from '../../../shared/domain-types';
 import { ChangeAccumulator } from './accumulator';
 import type { HighlightRange } from './editorBridge';
 import { buildExtensions } from './tiptap/nodes';
+import { footnoteRenumberExtension } from './tiptap/footnote-renumber';
 import { markdownIn, type PMNodeJSON } from './lib/markdown-in';
 import { markdownOut } from './lib/markdown-out';
 
@@ -207,7 +208,12 @@ export class RenderedSession implements EditorSession {
     this.accumulator = new ChangeAccumulator(options.onFlush, options.onDirty);
     this.snapshot = options.text;
     this.editor = new Editor({
-      extensions: [...buildExtensions(), highlightExtension, searchHighlightExtension],
+      extensions: [
+        ...buildExtensions(),
+        highlightExtension,
+        searchHighlightExtension,
+        footnoteRenumberExtension,
+      ],
       content: markdownIn(options.text),
       onUpdate: ({ editor }) => {
         const text = markdownOut(editor.getJSON() as PMNodeJSON);
