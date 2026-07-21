@@ -454,10 +454,10 @@ const cmSearchField = StateField.define<CMDecorationSet>({
 const rawTheme = EditorView.theme(
   {
     '&': {
-      color: '#f5f5f5',
+      color: 'var(--text)',
     },
     '.cm-cursor': {
-      borderLeftColor: '#f5f5f5',
+      borderLeftColor: 'var(--text)',
     },
   },
   { dark: true },

@@ -559,7 +559,7 @@ body.col-resizing {
 
 /* drawSelection owns the caret; don't override its transparent native caret. */
 .cm-raw.cm-editor .cm-content {
-  color: #f5f5f5;
+  color: var(--text);
 }
 
 .cm-raw .cm-selectionBackground,
@@ -569,7 +569,7 @@ body.col-resizing {
 
 .cm-raw .cm-gutters {
   background: transparent;
-  color: #44566a;
+  color: var(--text-faint);
   border: none;
 }
 

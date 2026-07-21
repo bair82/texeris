@@ -189,6 +189,15 @@ try {
   );
   const lightBg = await evaluate(`getComputedStyle(document.body).backgroundColor`);
   check('theme repaints without reload', lightBg !== 'rgb(13, 17, 23)', lightBg);
+
+  // raw mode follows the theme (was hard-coded near-white — invisible on light)
+  await evaluate(`[...document.querySelectorAll('.editor-status button')].find(b => b.textContent === 'Raw').click(); true`);
+  await waitFor(`!!document.querySelector('.cm-raw')`, 'raw mode never mounted');
+  const cmColor = await evaluate(`getComputedStyle(document.querySelector('.cm-raw .cm-content')).color`);
+  check('raw mode text is readable on light', cmColor === 'rgb(29, 39, 51)', cmColor);
+  await evaluate(`[...document.querySelectorAll('.editor-status button')].find(b => b.textContent === 'Rendered').click(); true`);
+  await waitFor(`!!document.querySelector('.tiptap-rendered')`, 'rendered mode never remounted');
+
   await evaluate(`window.texeris.settings.setAppearance({ fontSize: 20 })`);
   await sleep(400);
   check(
