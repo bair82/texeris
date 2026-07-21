@@ -17,7 +17,8 @@
     "smoke": "node scripts/smoke-all.mjs"
   },
   "dependencies": {
-    "@sinclair/typebox": "^0.34.52"
+    "@sinclair/typebox": "^0.34.52",
+    "parse5": "8.0.0"
   },
   "devDependencies": {
     "@codemirror/commands": "6.10.4",

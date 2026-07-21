@@ -6,6 +6,7 @@
 
 import { serializeCitation, type CitationItem } from './citations';
 import type { PMMarkJSON, PMNodeJSON } from './markdown-in';
+import { isComplexTable, serializeHtmlTable } from './html-table';
 
 function inlineMarks(text: string, marks: PMMarkJSON[] | undefined): string {
   if (!marks || marks.length === 0) return text;
@@ -15,10 +16,12 @@ function inlineMarks(text: string, marks: PMMarkJSON[] | undefined): string {
   const italic = has('italic');
   const bold = has('bold');
   const strike = has('strike');
+  const underline = has('underline');
   if (italic && bold) out = `***${out}***`;
   else if (bold) out = `**${out}**`;
   else if (italic) out = `*${out}*`;
   if (strike) out = `~~${out}~~`;
+  if (underline) out = `<u>${out}</u>`;
   const link = marks.find((m) => m.type === 'link');
   if (link) {
     const href = String(link.attrs?.href ?? '');
@@ -101,8 +104,14 @@ function serializeFootnoteDef(node: PMNodeJSON): string[] {
 
 function serializeBlock(node: PMNodeJSON): string[] {
   switch (node.type) {
-    case 'paragraph':
-      return [serializeInlines(node.content)];
+    case 'paragraph': {
+      const inline = serializeInlines(node.content);
+      // A literal paragraph beginning with a Markdown list marker must remain
+      // a paragraph when this canonical text is parsed again.
+      return [inline
+        .replace(/^(\s*)([-+*])\s/, '$1\\$2 ')
+        .replace(/^(\s*)(\d+)([.)])\s/, '$1$2\\$3 ')];
+    }
     case 'heading': {
       const level = typeof node.attrs?.level === 'number' ? (node.attrs.level as number) : 1;
       return [`${'#'.repeat(level)} ${serializeInlines(node.content)}`];
@@ -114,7 +123,7 @@ function serializeBlock(node: PMNodeJSON): string[] {
     case 'orderedList':
       return serializeList(node);
     case 'table':
-      return serializeTable(node);
+      return isComplexTable(node) ? serializeHtmlTable(node) : serializeTable(node);
     case 'footnoteDef':
       return serializeFootnoteDef(node);
     case 'codeBlock': {
@@ -136,6 +145,11 @@ function serializeBlocks(nodes: PMNodeJSON[]): string[] {
     const prev = i > 0 ? nodes[i - 1] : null;
     const tight = prev?.type === 'footnoteDef' && node.type === 'footnoteDef';
     if (i > 0 && !tight) lines.push('');
+    if (prev && /List$/.test(prev.type) && /List$/.test(node.type)) {
+      // CommonMark otherwise merges adjacent lists. The comment is invisible
+      // in rendered mode and parsed away by markdownIn.
+      lines.push('<!-- texeris-list-break -->', '');
+    }
     lines.push(...serializeBlock(node));
   });
   return lines;

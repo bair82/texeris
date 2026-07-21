@@ -1066,9 +1066,12 @@ Do not claim support for every Pandoc extension immediately. Define and test a s
 - Block quotations.
 - Links and images.
 - Pipe tables or another chosen table syntax.
+- Controlled raw-HTML tables for imported structures that pipe tables cannot
+  represent (merged cells, alignment, and multi-paragraph cells).
 - Footnotes.
 - Citation syntax.
 - Inline and display math, possibly later.
+- Inline underline as controlled `<u>` markup for word-processor interchange.
 - YAML metadata, possibly later.
 
 The parser, editor decorations, preview, and export tests should agree on this profile.

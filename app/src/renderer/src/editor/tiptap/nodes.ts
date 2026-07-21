@@ -12,6 +12,28 @@ import StarterKit from '@tiptap/starter-kit';
 import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
 import { serializeCitation, type CitationItem } from '../lib/citations';
 
+const alignmentAttribute = {
+  textAlign: {
+    default: null,
+    parseHTML: (element: { style: { textAlign: string } }) => element.style.textAlign || null,
+    renderHTML: (attributes: Record<string, unknown>) => attributes.textAlign
+      ? { style: `text-align: ${String(attributes.textAlign)}` }
+      : {},
+  },
+};
+
+const AlignedTableCell = TableCell.extend({
+  addAttributes() {
+    return { ...this.parent?.(), ...alignmentAttribute };
+  },
+});
+
+const AlignedTableHeader = TableHeader.extend({
+  addAttributes() {
+    return { ...this.parent?.(), ...alignmentAttribute };
+  },
+});
+
 /** Pandoc citation marker as an inline atom. `items` drives serialization. */
 export const Citation = Node.create({
   name: 'citation',
@@ -74,8 +96,8 @@ export function buildExtensions() {
     }),
     Table.configure({ resizable: false }),
     TableRow,
-    TableHeader,
-    TableCell,
+    AlignedTableHeader,
+    AlignedTableCell,
     Citation,
     FootnoteRef,
     FootnoteDef,

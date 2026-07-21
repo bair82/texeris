@@ -101,6 +101,9 @@ export default function Toolbar({ editor }: { editor: Editor }) {
       <button title="Italic" className={active('italic')} onClick={() => chain().toggleItalic().run()}>
         <em>I</em>
       </button>
+      <button title="Underline" className={active('underline')} onClick={() => chain().toggleMark('underline').run()}>
+        <u>U</u>
+      </button>
       <button title="Strikethrough" className={active('strike')} onClick={() => chain().toggleStrike().run()}>
         <s>S</s>
       </button>

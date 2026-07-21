@@ -121,3 +121,10 @@ native import/export supports Markdown, DOCX, ODT, and RTF. Imports become
 revision-1 canonical Markdown documents; exports use the shared bundled Pandoc
 adapter and atomic output, with explicit warnings for unrendered citations.
 161 unit tests, typecheck, production build, and AppImage resource check pass.
+
+**codex, 2026-07-22** — Pandoc/editor dialect bridge completed after testing a
+real 657-line Russian legal contract: imports now target GFM; controlled HTML
+tables preserve colspan/rowspan, alignment, and multi-paragraph cells; underline
+round-trips; Pandoc list separators and literal list-like paragraphs normalize
+without renumbering. Pandoc-specific `.md` is detected on import. The private
+fixture passes a manual schema/stability harness; 164 regular tests pass.

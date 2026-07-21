@@ -177,6 +177,24 @@ describe('importDocumentFile', () => {
       fs.rmSync(source, { force: true });
     }
   });
+
+  it('normalizes Pandoc-specific Markdown while leaving ordinary Markdown byte-exact', () => {
+    const pandocSource = path.join(root, '..', `pandoc-${path.basename(root)}.md`);
+    const ordinarySource = path.join(root, '..', `ordinary-${path.basename(root)}.md`);
+    fs.writeFileSync(pandocSource, '[Underlined]{.underline}\n\n+:---:+\n| A |\n+---+\n');
+    fs.writeFileSync(ordinarySource, '# Ordinary\n');
+    try {
+      const normalized = importDocumentFile(ctx, pandocSource);
+      const ordinary = importDocumentFile(ctx, ordinarySource);
+      expect(ctx.revisions.getTextAt(normalized.id, 1)).toBe('# Converted\n');
+      expect(normalized.warnings.join(' ')).toMatch(/normalized/);
+      expect(ctx.revisions.getTextAt(ordinary.id, 1)).toBe('# Ordinary\n');
+      expect(ordinary.warnings).toHaveLength(0);
+    } finally {
+      fs.rmSync(pandocSource, { force: true });
+      fs.rmSync(ordinarySource, { force: true });
+    }
+  });
 });
 
 describe('exportDocumentFile', () => {

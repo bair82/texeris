@@ -36,22 +36,39 @@ export function convertToMarkdown(file: string, bytes: Buffer): MarkdownConversi
   const format = formatForPath(file);
   if (!format) throw new Error(`unsupported import format: ${path.extname(file) || 'no extension'}`);
   if (format === 'markdown') {
-    return { markdown: bytes.toString('utf8'), converter: 'direct-utf8-v1', warnings: [] };
+    const markdown = bytes.toString('utf8');
+    if (!looksLikePandocMarkdown(markdown)) {
+      return { markdown, converter: 'direct-utf8-v1', warnings: [] };
+    }
+    return convertWithPandoc(file, [
+      'Pandoc-specific Markdown was normalized for the rendered editor; inspect complex formatting after import.',
+    ]);
   }
+  return convertWithPandoc(file);
+}
+
+function looksLikePandocMarkdown(markdown: string): boolean {
+  return /^\+[:=+\-]{3,}\+|\[[^\]\n]+\]\{\.(?:underline|smallcaps)\}/m.test(markdown);
+}
+
+function convertWithPandoc(file: string, initialWarnings: string[] = []): MarkdownConversion {
   const pandoc = resolvePandoc();
   if (!pandoc) throw new Error('The packaged Pandoc converter is unavailable. Reinstall Texeris or repair the installation.');
   try {
     const markdown = execFileSync(
       pandoc.path,
-      [file, '--to=markdown', '--wrap=none', '--standalone=false', '--sandbox', '--track-changes=accept'],
+      [file, '--to=gfm', '--wrap=none', '--standalone=false', '--sandbox', '--track-changes=accept'],
       { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
     );
     return {
       markdown,
       converter: `pandoc-${PANDOC_VERSION}-${pandoc.kind}`,
-      warnings: pandoc.kind === 'development-path'
-        ? ['Using a development Pandoc installation; packaged builds use the pinned Texeris converter.']
-        : [],
+      warnings: [
+        ...initialWarnings,
+        ...(pandoc.kind === 'development-path'
+          ? ['Using a development Pandoc installation; packaged builds use the pinned Texeris converter.']
+          : []),
+      ],
     };
   } catch (error) {
     throw new Error(`Pandoc import failed: ${errorMessage(error)}`);
