@@ -61,8 +61,21 @@ function createWindow(): void {
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
+      spellcheck: true,
     },
   });
+
+  if (process.env.TEXERIS_SPELLCHECK_DIAGNOSTIC) {
+    win.webContents.on('context-menu', (_event, params) => {
+      console.error(
+        `[spellcheck-diagnostic] ${JSON.stringify({
+          isEditable: params.isEditable,
+          misspelledWord: params.misspelledWord,
+          dictionarySuggestions: params.dictionarySuggestions,
+        })}`,
+      );
+    });
+  }
 
   // Diagnostic mode: render visibly (so Chromium spellchecks + screenshots
   // work) without stealing focus.
