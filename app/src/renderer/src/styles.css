@@ -33,6 +33,7 @@
   --notice-fg: #e5c76b;
   --scrollbar: rgba(255, 255, 255, 0.09);
   --scrollbar-hover: rgba(255, 255, 255, 0.18);
+  --selection-bg: rgba(125, 184, 248, 0.25);
 }
 
 [data-theme='light'] {
@@ -60,6 +61,7 @@
   --notice-fg: #7a5c10;
   --scrollbar: rgba(15, 23, 42, 0.16);
   --scrollbar-hover: rgba(15, 23, 42, 0.3);
+  --selection-bg: rgba(47, 111, 222, 0.16);
 }
 
 body {
@@ -564,7 +566,7 @@ body.col-resizing {
 
 .cm-raw .cm-selectionBackground,
 .cm-raw .cm-focused .cm-selectionBackground {
-  background: rgba(125, 184, 248, 0.25) !important;
+  background: var(--selection-bg) !important;
 }
 
 .cm-raw .cm-gutters {

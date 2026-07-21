@@ -195,6 +195,16 @@ try {
   await waitFor(`!!document.querySelector('.cm-raw')`, 'raw mode never mounted');
   const cmColor = await evaluate(`getComputedStyle(document.querySelector('.cm-raw .cm-content')).color`);
   check('raw mode text is readable on light', cmColor === 'rgb(29, 39, 51)', cmColor);
+  const selColor = await evaluate(`(() => {
+    const host = document.querySelector('.cm-raw');
+    const probe = document.createElement('div');
+    probe.className = 'cm-selectionBackground';
+    host.appendChild(probe);
+    const color = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return color;
+  })()`);
+  check('raw mode selection follows the theme', selColor === 'rgba(47, 111, 222, 0.16)', String(selColor));
   await evaluate(`[...document.querySelectorAll('.editor-status button')].find(b => b.textContent === 'Rendered').click(); true`);
   await waitFor(`!!document.querySelector('.tiptap-rendered')`, 'rendered mode never remounted');
 
