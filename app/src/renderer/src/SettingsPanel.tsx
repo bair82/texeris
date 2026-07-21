@@ -170,6 +170,34 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
           </label>
         </div>
 
+        <h3>Writing voice</h3>
+        <div className="settings-writing-voice">
+          <p className="settings-hint">
+            {settings.writingProfile.enabled
+              ? `Active profile ${settings.writingProfile.activeProfileId}`
+              : 'No active writing profile. Build one from the command palette.'}
+          </p>
+          {settings.writingProfile.enabled && (
+            <button onClick={() => void window.texeris.settings.disableWritingProfile().then(refresh)}>
+              Disable profile
+            </button>
+          )}
+          <label>
+            Patch style review
+            <select
+              className="scope-select"
+              value={settings.patchStyleMode}
+              onChange={(event) => void window.texeris.settings
+                .setPatchStyleMode(event.target.value as typeof settings.patchStyleMode)
+                .then(refresh)}
+            >
+              <option value="off">Off</option>
+              <option value="audit">Audit only</option>
+              <option value="revise-once">Ask agent to revise once</option>
+            </select>
+          </label>
+        </div>
+
         <h3>API keys</h3>
         {!settings.encryptionAvailable && (
           <p className="chat-error">

@@ -108,6 +108,7 @@ export function getEditorCommands(): EditorCommands | null {
 /** Chat command surface (EU5). */
 export interface ChatCommands {
   newConversation(): void;
+  openConversation(conversationId: string): void;
 }
 
 let chatCommands: ChatCommands | null = null;

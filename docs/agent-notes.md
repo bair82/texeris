@@ -108,3 +108,10 @@ clobbering e.g. the seeded openDocumentId; createDocument refuses paths
 owned by trashed rows (UNIQUE path entanglement); agent
 list_project_documents filters trashed. 150 unit + 13 smokes green.
 Next up per the ranked backlog: docx import/export (owner's top ask).
+
+**codex, 2026-07-21** — writing-profile workflow implemented on `codex/main`:
+profile corpus grants and cached Markdown derivatives, date weighting and
+research delegation, editable profile/report artifacts, slash command, and
+patch-style critic. Linux releases now checksum-verify and bundle Pandoc 3.10
+for DOCX/ODT/RTF/HTML corpus conversion; PDF remains explicitly text extraction.
+Typecheck + 158 unit tests + AppImage resource inspection passed.

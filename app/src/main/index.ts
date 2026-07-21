@@ -18,6 +18,8 @@ import { ProjectManager } from './services/projectManager';
 import { loadWorkspaceConfig, type WorkspaceConfig } from './services/settings';
 import { watchProjectFiles } from './services/watcher';
 import type { Models } from '@earendil-works/pi-ai';
+import { CorpusService } from './services/corpus';
+import { WritingProfileService } from './services/profile';
 
 /** Pi requires Node >= 22.19; assert the Electron-bundled Node at startup. */
 const MIN_NODE_VERSION = [22, 19, 0] as const;
@@ -149,6 +151,8 @@ app.whenReady().then(() => {
   }
   const credentials = new CredentialsService(safeStorage);
   const manager = new ProjectManager();
+  const corpus = new CorpusService();
+  const profiles = new WritingProfileService(config);
 
   // Spellcheck preference (M1.5 EU4). Chromium downloads the language
   // dictionary lazily on first enable (into <userData>/Dictionaries).
@@ -200,6 +204,8 @@ app.whenReady().then(() => {
         conversations,
         project: ctx,
         patches,
+        corpus,
+        profiles,
         credentials,
       });
     }
@@ -243,6 +249,8 @@ app.whenReady().then(() => {
     credentials,
     config,
     manager,
+    corpus,
+    profiles,
     adoptProject,
   });
 

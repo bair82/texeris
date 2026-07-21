@@ -1099,7 +1099,9 @@ A typical export job:
 - Version and availability vary.
 - GUI applications on macOS and Linux may not inherit the user's shell PATH as expected.
 
-A personal prototype can use a configured system Pandoc. A distributable application will probably benefit from bundling or explicit version detection.
+A personal prototype can use a configured system Pandoc. Texeris now uses that
+only as a development convenience; Linux distributions bundle the pinned
+converter so release behaviour is independent of the user's PATH.
 
 ## 17.4 Golden export tests
 
@@ -1245,6 +1247,21 @@ src/infrastructure/
 ```
 
 This is an organisational suggestion, not a demand for strict domain-driven design.
+
+### Conversion components
+
+Texeris ships a pinned Pandoc executable with every Linux release and invokes
+it only from the main process for user-selected corpus files. Pandoc is the
+primary semantic converter for DOCX, ODT, RTF, and HTML: its Markdown output
+is the corpus derivative, never a replacement for the original file. The
+release build verifies the upstream asset checksum before placing the
+executable outside `app.asar`; conversion uses `--sandbox` and does not enable
+filters or custom writers.
+
+PDF is a distinct, lower-fidelity case. It is ingested as extracted text via a
+dedicated PDF extractor and is labelled accordingly; Texeris does not present
+layout reconstruction as faithful Markdown conversion. Image-only PDFs need
+OCR and are outside the first implementation.
 
 ## 20.1 Document service
 

@@ -30,6 +30,15 @@ export interface AppearanceConfig {
   editorWidth: AppearanceWidth;
 }
 
+export type PatchStyleMode = 'off' | 'audit' | 'revise-once';
+
+export interface WritingProfileView {
+  enabled: boolean;
+  activeProfileId: string | null;
+  activatedAt: string | null;
+  sourceProject: string | null;
+}
+
 export const AppearanceConfigSchema = Type.Object({
   theme: Type.Union([
     Type.Literal('dark'),
@@ -57,6 +66,8 @@ export interface SettingsView {
   encryptionAvailable: boolean;
   spellcheck: SpellcheckView;
   appearance: AppearanceConfig;
+  patchStyleMode: PatchStyleMode;
+  writingProfile: WritingProfileView;
 }
 
 export const SetApiKeyRequestSchema = Type.Object({
@@ -76,12 +87,23 @@ export const SetSpellcheckRequestSchema = Type.Object({
 });
 export type SetSpellcheckRequest = Static<typeof SetSpellcheckRequestSchema>;
 
+export const SetPatchStyleModeRequestSchema = Type.Object({
+  mode: Type.Union([
+    Type.Literal('off'),
+    Type.Literal('audit'),
+    Type.Literal('revise-once'),
+  ]),
+});
+export type SetPatchStyleModeRequest = Static<typeof SetPatchStyleModeRequestSchema>;
+
 export const SettingsChannels = {
   get: 'texeris:settings-get',
   setApiKey: 'texeris:settings-set-api-key',
   clearApiKey: 'texeris:settings-clear-api-key',
   setSpellcheck: 'texeris:settings-set-spellcheck',
   setAppearance: 'texeris:settings-set-appearance',
+  setPatchStyleMode: 'texeris:settings-set-patch-style-mode',
+  disableWritingProfile: 'texeris:settings-disable-writing-profile',
   /** main → renderer push: appearance changed, repaint now (EU6). */
   appearanceChanged: 'texeris:settings-appearance-changed',
 } as const;

@@ -45,6 +45,7 @@ import {
   SetApiKeyRequestSchema,
   SetAppearanceRequestSchema,
   SetSpellcheckRequestSchema,
+  SetPatchStyleModeRequestSchema,
   SettingsChannels,
   type AppearanceConfig,
   type SettingsView,
@@ -72,6 +73,9 @@ import {
   trashDocument,
 } from './services/documents';
 import { createDocument, ensureDocument } from './services/project';
+import { ProfileBeginRequestSchema, ProfileChannels } from '../shared/profile-types';
+import type { CorpusService } from './services/corpus';
+import type { WritingProfileService } from './services/profile';
 
 export interface IpcDeps {
   requireProject(): ProjectContext;
@@ -81,6 +85,8 @@ export interface IpcDeps {
   credentials: CredentialsService;
   config: WorkspaceConfig;
   manager: ProjectManager;
+  corpus: CorpusService;
+  profiles: WritingProfileService;
   adoptProject(ctx: ProjectContext): void;
 }
 
@@ -198,6 +204,11 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return deps.requireConversations().listRuns(req.conversationId);
   });
 
+  ipcMain.handle(ChatChannels.listDelegations, (_event, raw: unknown) => {
+    const req = Value.Decode(ConversationRequestSchema, raw);
+    return deps.requireConversations().listDelegations(req.conversationId);
+  });
+
   ipcMain.handle(ChatChannels.startTurn, async (event, raw: unknown) => {
     const req = Value.Decode(StartTurnRequestSchema, raw);
     const { runId } = await deps.requireRuntime().startTurn(req);
@@ -217,6 +228,36 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const req = Value.Decode(CancelRequestSchema, raw);
     await deps.requireRuntime().cancel(req.runId);
     return { cancelled: true };
+  });
+
+  // --------------------------------------------------------- writing profile
+
+  ipcMain.handle(ProfileChannels.begin, async (event, raw: unknown) => {
+    const req = Value.Decode(ProfileBeginRequestSchema, raw);
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showOpenDialog(win!, {
+      title: req.source === 'folder' ? 'Choose writing corpus folder' : 'Choose writing files',
+      properties: req.source === 'folder' ? ['openDirectory'] : ['openFile', 'multiSelections'],
+      filters: req.source === 'files'
+        ? [{ name: 'Writing documents', extensions: ['md', 'markdown', 'mdown', 'txt', 'html', 'htm', 'docx', 'odt', 'rtf', 'pdf'] }]
+        : undefined,
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const conversations = deps.requireConversations();
+    const conversationId = conversations.startNewConversation({ id: 'writing-profile', version: 1 });
+    const grant = deps.corpus.createGrant(deps.requireProject(), conversationId, result.filePaths, req.source);
+    const { runId } = await deps.requireRuntime().startTurn({
+      conversationId,
+      text: 'Analyze the selected corpus and build my writing profile. Begin by reviewing the corpus inventory and conversion warnings. Delegate bounded corpus-analysis and metadata tasks where useful. Ask me before any lookup involving an ambiguous or apparently private work.',
+      mode: 'deep',
+      scope: { kind: 'document', documentId: mainDocId(deps.requireProject()) },
+    });
+    void (async () => {
+      for await (const agentEvent of deps.requireRuntime().events(runId)) {
+        if (!event.sender.isDestroyed()) event.sender.send(ChatChannels.event, agentEvent);
+      }
+    })();
+    return { conversationId, runId, sourceCount: grant.sources.length };
   });
 
   // -------------------------------------------------------------------- doc
@@ -430,6 +471,8 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         availableLanguages: session.defaultSession.availableSpellCheckerLanguages,
       },
       appearance: deps.config.appearance,
+      patchStyleMode: deps.config.patchStyleMode,
+      writingProfile: deps.profiles.view(),
     };
   });
 
@@ -461,6 +504,18 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     deps.config.spellcheck = { enabled: req.enabled, language };
     if (!process.env.TEXERIS_FAUX_PROVIDER) saveWorkspaceConfig(deps.config);
     return { enabled: req.enabled, language };
+  });
+
+  ipcMain.handle(SettingsChannels.setPatchStyleMode, (_event, raw: unknown) => {
+    const req = Value.Decode(SetPatchStyleModeRequestSchema, raw);
+    deps.config.patchStyleMode = req.mode;
+    if (!process.env.TEXERIS_FAUX_PROVIDER) saveWorkspaceConfig(deps.config);
+    return { mode: req.mode };
+  });
+
+  ipcMain.handle(SettingsChannels.disableWritingProfile, () => {
+    deps.profiles.disable();
+    return { disabled: true };
   });
 
   ipcMain.handle(SettingsChannels.setApiKey, (_event, raw: unknown) => {

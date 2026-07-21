@@ -7,6 +7,7 @@ import type {
   ModelMode,
   NormalizedAgentEvent,
   UiMessage,
+  DelegationRecord,
 } from '../../shared/chat-types';
 import type { HeadingInfo } from '../../shared/doc-types';
 import { getEditorSelection, registerChatCommands } from './editor/editorBridge';
@@ -17,6 +18,7 @@ interface StreamingState {
   text: string;
   thinking: string;
   tools: Array<{ toolCallId: string; toolName: string; isError?: boolean }>;
+  delegations: Array<{ id: string; role: string; status: string; summary: string }>;
 }
 
 interface LastTurn {
@@ -32,12 +34,14 @@ interface ChatPanelProps {
   onConversationChange?(conversationId: string): void;
   /** The document currently shown in the editor is the default chat target. */
   documentId: string | null;
+  onOpenDocument?(documentId: string): void;
 }
 
 export default function ChatPanel({
   initialConversationId = null,
   onConversationChange,
   documentId,
+  onOpenDocument,
 }: ChatPanelProps) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationListItem[]>([]);
@@ -47,6 +51,7 @@ export default function ChatPanel({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [runs, setRuns] = useState<AgentRunRecord[]>([]);
+  const [delegations, setDelegations] = useState<DelegationRecord[]>([]);
   const [showUsage, setShowUsage] = useState(false);
   const [headings, setHeadings] = useState<HeadingInfo[]>([]);
   const [mode, setMode] = useState<ModelMode>('fast');
@@ -82,6 +87,7 @@ export default function ChatPanel({
       setConversationId(id);
       setMessages(await window.texeris.chat.listMessages(id));
       setRuns(await window.texeris.chat.listRuns(id));
+      setDelegations(await window.texeris.chat.listDelegations(id));
       setHeadings(await window.texeris.doc.outline(documentId ?? undefined));
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -122,6 +128,7 @@ export default function ChatPanel({
       setConversationId(id);
       setMessages(await window.texeris.chat.listMessages(id));
       setRuns(await window.texeris.chat.listRuns(id));
+      setDelegations(await window.texeris.chat.listDelegations(id));
       setManifest(null);
       setError(null);
       setStreaming(null);
@@ -135,6 +142,7 @@ export default function ChatPanel({
     setConversationId(id);
     setMessages([]);
     setRuns([]);
+    setDelegations([]);
     setManifest(null);
     setError(null);
     await refreshConversations();
@@ -147,8 +155,11 @@ export default function ChatPanel({
       newConversation: () => {
         void newConversation();
       },
+      openConversation: (id) => {
+        void switchConversation(id);
+      },
     });
-  }, [newConversation]);
+  }, [newConversation, switchConversation]);
 
   const submitRename = async () => {
     if (!renamingId) {
@@ -174,7 +185,7 @@ export default function ChatPanel({
   useEffect(() => {
     return window.texeris.chat.onEvent((event: NormalizedAgentEvent) => {
       if (event.type === 'run_start') {
-        setStreaming({ runId: event.runId, text: '', thinking: '', tools: [] });
+        setStreaming({ runId: event.runId, text: '', thinking: '', tools: [], delegations: [] });
         setError(null);
       } else if (event.type === 'text_delta') {
         setStreaming((s) => (s ? { ...s, text: s.text + event.delta } : s));
@@ -204,10 +215,20 @@ export default function ChatPanel({
         if (conversationId) {
           void window.texeris.chat.listMessages(conversationId).then(setMessages);
           void window.texeris.chat.listRuns(conversationId).then(setRuns);
+          void window.texeris.chat.listDelegations(conversationId).then(setDelegations);
         }
+      } else if (event.type === 'delegation_start' || event.type === 'delegation_end') {
+        setStreaming((s) => {
+          if (!s || s.runId !== event.runId) return s;
+          const next = { id: event.delegationId, role: event.role, status: event.status, summary: event.summary };
+          const found = s.delegations.some((d) => d.id === event.delegationId);
+          return { ...s, delegations: found ? s.delegations.map((d) => d.id === next.id ? next : d) : [...s.delegations, next] };
+        });
+      } else if (event.type === 'profile_artifacts_created') {
+        onOpenDocument?.(event.writingProfileDocumentId);
       }
     });
-  }, [conversationId]);
+  }, [conversationId, onOpenDocument]);
 
   const startTurn = useCallback(
     async (turn: LastTurn) => {
@@ -421,6 +442,20 @@ export default function ChatPanel({
       )}
 
       <div className="chat-messages">
+        {delegations.length > 0 && (
+          <details className="delegation-card delegation-history">
+            <summary>Delegated work ({delegations.length})</summary>
+            {delegations.map((delegation) => (
+              <details key={delegation.id}>
+                <summary>
+                  {delegation.status === 'completed' ? '✓' : delegation.status === 'running' ? '◌' : '⚠'}{' '}
+                  {delegation.role} · {delegation.model}
+                </summary>
+                <p>{delegation.summary ?? delegation.task}</p>
+              </details>
+            ))}
+          </details>
+        )}
         {messages.map((m) => (
           <div key={m.seq} className={`msg msg-${m.role}`}>
             {m.role === 'tool' ? (
@@ -450,6 +485,12 @@ export default function ChatPanel({
         ))}
         {streaming && (
           <div className="msg msg-assistant streaming">
+            {streaming.delegations.map((delegation) => (
+              <details className="delegation-card" key={delegation.id}>
+                <summary>{delegation.status === 'running' ? '◌' : delegation.status === 'completed' ? '✓' : '⚠'} {delegation.role}</summary>
+                <p>{delegation.summary}</p>
+              </details>
+            ))}
             {streaming.thinking && (
               <details className="thinking">
                 <summary>Reasoning</summary>

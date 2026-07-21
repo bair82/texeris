@@ -17,6 +17,7 @@ import type { AppearanceConfig } from '../shared/settings-types';
 import { UiChannels } from '../shared/ui-types';
 import { ProjectChannels, type ProjectInfo } from '../shared/project-types';
 import { HistoryChannels } from '../shared/doc-types';
+import { ProfileChannels } from '../shared/profile-types';
 
 const api: TexerisApi = {
   async getAppInfo() {
@@ -46,6 +47,8 @@ const api: TexerisApi = {
       ipcRenderer.invoke(ChatChannels.listMessages, { conversationId }),
     listRuns: (conversationId) =>
       ipcRenderer.invoke(ChatChannels.listRuns, { conversationId }),
+    listDelegations: (conversationId) =>
+      ipcRenderer.invoke(ChatChannels.listDelegations, { conversationId }),
     startTurn: (request) => ipcRenderer.invoke(ChatChannels.startTurn, request),
     cancel: (runId) => ipcRenderer.invoke(ChatChannels.cancel, { runId }),
     onEvent: (callback) => {
@@ -57,6 +60,9 @@ const api: TexerisApi = {
         ipcRenderer.removeListener(ChatChannels.event, listener);
       };
     },
+  },
+  profile: {
+    begin: (request) => ipcRenderer.invoke(ProfileChannels.begin, request),
   },
   doc: {
     list: () => ipcRenderer.invoke(DocChannels.list),
@@ -114,6 +120,10 @@ const api: TexerisApi = {
       ipcRenderer.invoke(SettingsChannels.setSpellcheck, input),
     setAppearance: (input) =>
       ipcRenderer.invoke(SettingsChannels.setAppearance, input),
+    setPatchStyleMode: (mode) =>
+      ipcRenderer.invoke(SettingsChannels.setPatchStyleMode, { mode }),
+    disableWritingProfile: () =>
+      ipcRenderer.invoke(SettingsChannels.disableWritingProfile),
     onAppearanceChanged: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
         callback(payload as AppearanceConfig);

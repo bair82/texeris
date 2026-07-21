@@ -183,6 +183,39 @@ export function registerImported(
   return id;
 }
 
+/** Create a uniquely named, revisioned Markdown report produced by a skill. */
+export function createGeneratedDocument(
+  ctx: ProjectContext,
+  preferredName: string,
+  content: string,
+  origin: { conversationId: string; agentRunId: string },
+): DocumentHandle {
+  const safe = assertValidName(preferredName);
+  const base = safe.replace(/\.md$/i, '');
+  let target = safe;
+  for (let n = 2; pathTaken(ctx, target); n++) {
+    target = `${base} ${n}.md`;
+  }
+  atomicWriteText(path.join(ctx.root, target), '');
+  const id = randomUUID();
+  ctx.db
+    .prepare(
+      `INSERT INTO documents (id, path, title, created_at, current_revision, content_hash)
+       VALUES (?, ?, ?, ?, 0, ?)`,
+    )
+    .run(id, target, titleFor(target), new Date().toISOString(), hashText(''));
+  ctx.revisions.commit(id, [minimalSplice('', content)], {
+    actor: 'agent',
+    source: {
+      kind: 'report',
+      conversationId: origin.conversationId,
+      agentRunId: origin.agentRunId,
+    },
+    summary: 'generated writing-profile artifact',
+  });
+  return { id, path: target, title: titleFor(target) };
+}
+
 /** Designate an existing live document as the project's main document. */
 export function setMainDocument(ctx: ProjectContext, documentId: string): DocumentHandle {
   const row = docRow(ctx, documentId);

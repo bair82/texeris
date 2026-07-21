@@ -76,6 +76,21 @@ export type NormalizedAgentEvent =
       errorMessage?: string;
       usage?: UsageSummary;
       manifest: ContextManifest;
+    }
+  | {
+      type: 'delegation_start' | 'delegation_end';
+      runId: string;
+      delegationId: string;
+      role: string;
+      status: 'running' | 'completed' | 'error' | 'aborted';
+      summary: string;
+    }
+  | {
+      type: 'profile_artifacts_created';
+      runId: string;
+      reportDocumentId: string;
+      writingProfileDocumentId: string;
+      intellectualProfileDocumentId: string;
     };
 
 export type RunStatus = 'running' | 'completed' | 'aborted' | 'error';
@@ -92,6 +107,10 @@ export interface AgentRunRecord {
   usage: UsageSummary | null;
   manifest: ContextManifest | null;
   error: string | null;
+  parentRunId?: string | null;
+  roleId?: string | null;
+  skillId?: string | null;
+  skillVersion?: number | null;
 }
 
 /** Renderer-facing conversation message (derived from stored AgentMessages). */
@@ -127,6 +146,7 @@ export const ChatChannels = {
   deleteConversation: 'texeris:chat-delete-conversation',
   listMessages: 'texeris:chat-list-messages',
   listRuns: 'texeris:chat-list-runs',
+  listDelegations: 'texeris:chat-list-delegations',
   startTurn: 'texeris:chat-start-turn',
   cancel: 'texeris:chat-cancel',
   /** main → renderer push channel for NormalizedAgentEvent */
@@ -139,6 +159,19 @@ export interface ConversationListItem {
   title: string;
   createdAt: string;
   messageCount: number;
+}
+
+export interface DelegationRecord {
+  id: string;
+  parentRunId: string;
+  role: string;
+  status: 'running' | 'completed' | 'error' | 'aborted';
+  task: string;
+  summary: string | null;
+  provider: string;
+  model: string;
+  createdAt: string;
+  endedAt: string | null;
 }
 
 export const RenameConversationRequestSchema = Type.Object({

@@ -34,6 +34,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   { id: 'view:toggle-history', section: 'View', title: 'Revision History' },
 
   { id: 'chat:new', section: 'Chat', title: 'New Conversation' },
+  { id: 'chat:build-writing-profile', section: 'Chat', title: 'Build or Update Writing Profile…' },
 
   { id: 'help:shortcuts', section: 'Help', title: 'Keyboard Shortcuts', accelerator: 'CmdOrCtrl+/' },
 ] as const;

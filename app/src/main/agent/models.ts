@@ -68,6 +68,8 @@ export function createFauxModels(scripted: string): { models: Models; config: Wo
         fontSize: 16.5,
         editorWidth: 'comfortable' as const,
       },
+      patchStyleMode: 'off' as const,
+      activeProfileId: null,
     },
   };
 }

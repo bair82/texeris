@@ -26,6 +26,8 @@ export interface WorkspaceConfig {
   };
   spellcheck: SpellcheckConfig;
   appearance: import('../../shared/settings-types').AppearanceConfig;
+  patchStyleMode: import('../../shared/settings-types').PatchStyleMode;
+  activeProfileId: string | null;
 }
 
 export const DEFAULT_CONFIG: WorkspaceConfig = {
@@ -40,6 +42,8 @@ export const DEFAULT_CONFIG: WorkspaceConfig = {
     fontSize: 16.5,
     editorWidth: 'comfortable',
   },
+  patchStyleMode: 'off',
+  activeProfileId: null,
 };
 
 export function workspaceDir(): string {
@@ -109,6 +113,12 @@ export function loadWorkspaceConfig(dir = workspaceDir()): WorkspaceConfig {
           ? parsed.appearance.editorWidth
           : DEFAULT_CONFIG.appearance.editorWidth,
     },
+    patchStyleMode:
+      parsed.patchStyleMode === 'audit' || parsed.patchStyleMode === 'revise-once'
+        ? parsed.patchStyleMode
+        : 'off',
+    activeProfileId:
+      typeof parsed.activeProfileId === 'string' ? parsed.activeProfileId : null,
   };
   // Persist a repaired faux/invalid config so the next normal launch is safe too.
   if (JSON.stringify(parsed) !== JSON.stringify(config)) saveWorkspaceConfig(config, dir);

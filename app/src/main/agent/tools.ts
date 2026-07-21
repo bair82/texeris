@@ -4,6 +4,10 @@ import { Type } from '@earendil-works/pi-ai';
 import type { AgentTool } from '@earendil-works/pi-agent-core';
 import type { PatchService } from '../services/patch';
 import type { ProjectContext } from '../services/project';
+import type { CorpusService } from '../services/corpus';
+import type { WritingProfileService } from '../services/profile';
+import type { AgentCoordinator, SubagentRole } from './coordinator';
+import { createGeneratedDocument } from '../services/documents';
 import { summarizeChangesSince } from './changes';
 import { extractHeadings, sliceSection } from './markdown';
 
@@ -94,12 +98,35 @@ export interface RunContext {
   runId: string;
   /** Current editor document for this run; absent in older unit-test callers. */
   documentId?: string;
+  task?: string;
+  skillId?: string;
+}
+
+export interface AgentToolExtensions {
+  conversationId?: string;
+  skillId?: string;
+  corpus?: CorpusService;
+  profiles?: WritingProfileService;
+  coordinator?: AgentCoordinator;
+  propose?: (
+    runId: string,
+    task: string,
+    input: Parameters<PatchService['propose']>[0],
+    origin: { conversationId: string; agentRunId: string },
+  ) => Promise<
+    | { kind: 'stored'; patchId: string; review: unknown }
+    | { kind: 'conflict'; conflict: unknown[] }
+    | { kind: 'revise'; review: unknown }
+  >;
+  verifyApproval?: (conversationId: string, quote: string) => boolean;
+  onProfileArtifacts?: (artifacts: { reportDocumentId: string; writingProfileDocumentId: string; intellectualProfileDocumentId: string }) => void;
 }
 
 export function createAgentTools(
   project: ProjectContext,
   patches: PatchService,
   getRunContext: () => RunContext | null,
+  extensions: AgentToolExtensions = {},
 ): AgentTool<any>[] {
   const mainDocId = (): string => {
     const row = project.db
@@ -217,16 +244,28 @@ export function createAgentTools(
     async execute(_id, params) {
       const runContext = getRunContext();
       const origin = runContext
-        ? { conversationId: runContext.conversationId, runId: runContext.runId }
+        ? { conversationId: runContext.conversationId, agentRunId: runContext.runId }
         : {};
+      const patchInput = {
+        documentId: resolveDocId(params.documentId),
+        baseRevision: params.baseRevision,
+        title: params.title,
+        summary: params.summary,
+        groups: params.groups,
+      };
+      if (runContext && extensions.propose) {
+        const gated = await extensions.propose(
+          runContext.runId,
+          runContext.task ?? '',
+          patchInput,
+          origin as { conversationId: string; agentRunId: string },
+        );
+        if (gated.kind === 'conflict') return jsonResult({ conflict: gated.conflict, hint: 're-read the document and regenerate with exact anchors' });
+        if (gated.kind === 'revise') return jsonResult({ status: 'revision-required', styleReview: gated.review, hint: 'Revise the patch in the original context and call propose_patch once more. Do not repeat the flagged construction.' });
+        return jsonResult({ patchId: gated.patchId, status: 'proposed', styleReview: gated.review });
+      }
       const result = patches.propose(
-        {
-          documentId: resolveDocId(params.documentId),
-          baseRevision: params.baseRevision,
-          title: params.title,
-          summary: params.summary,
-          groups: params.groups,
-        },
+        patchInput,
         origin,
       );
       if ('conflict' in result) {
@@ -240,5 +279,117 @@ export function createAgentTools(
     },
   };
 
-  return [listDocuments, readDocument, readRange, readChanges, readInstructions, proposePatch];
+  const tools: AgentTool<any>[] = [listDocuments, readDocument, readRange, readChanges, readInstructions, proposePatch];
+  if (extensions.profiles) {
+    const profiles = extensions.profiles;
+    tools.push({
+      name: 'read_writing_profile', label: 'Read writing profile',
+      description: 'Read the active compact writing profile.', parameters: EmptyParams,
+      async execute() { return textResult(profiles.read('writing-profile') ?? '(no active writing profile)'); },
+    }, {
+      name: 'read_writing_style_report', label: 'Read writing style report',
+      description: 'Read the extensive evidence-backed report behind the active writing profile.', parameters: EmptyParams,
+      async execute() { return textResult(profiles.read('writing-style-report') ?? '(no active writing profile)'); },
+    }, {
+      name: 'read_intellectual_profile', label: 'Read intellectual profile',
+      description: 'Read the active intellectual profile only when the task materially concerns the user’s expressed philosophical or political commitments.', parameters: EmptyParams,
+      async execute() { return textResult(profiles.read('intellectual-profile') ?? '(no active writing profile)'); },
+    });
+  }
+  const grantId = extensions.conversationId && extensions.corpus
+    ? extensions.corpus.grantForConversation(project, extensions.conversationId)
+    : null;
+  if (grantId && extensions.corpus) {
+    const corpus = extensions.corpus;
+    const ListCorpusParams = Type.Object({});
+    const ReadCorpusParams = Type.Object({ sourceId: Type.String(), offset: Type.Optional(Type.Integer({ minimum: 0 })), limit: Type.Optional(Type.Integer({ minimum: 1000, maximum: 40000 })) });
+    const listCorpus: AgentTool<typeof ListCorpusParams> = {
+      name: 'list_corpus_sources', label: 'List profile corpus',
+      description: 'List the immutable source snapshot selected for this profile conversation.', parameters: ListCorpusParams,
+      async execute() { return jsonResult(corpus.list(project, grantId)); },
+    };
+    const readCorpus: AgentTool<typeof ReadCorpusParams> = {
+      name: 'read_corpus_source', label: 'Read corpus source',
+      description: 'Read a bounded range from one converted Markdown corpus source.', parameters: ReadCorpusParams,
+      async execute(_id, params) { return jsonResult(corpus.read(project, grantId, params.sourceId, params.offset ?? 0, params.limit ?? 20000)); },
+    };
+    const MetadataParams = Type.Object({ title: Type.String(), author: Type.Optional(Type.String()), publicEvidence: Type.String() });
+    const metadata: AgentTool<typeof MetadataParams> = {
+      name: 'lookup_publication_metadata', label: 'Look up publication metadata',
+      description: 'Query public scholarly catalogues for a public-looking work. publicEvidence must explain why sending the title is authorized.', parameters: MetadataParams,
+      async execute(_id, params) {
+        if (!params.publicEvidence.trim()) throw new Error('public-looking evidence is required');
+        const query = encodeURIComponent([params.title, params.author].filter(Boolean).join(' '));
+        const [crossref, openalex] = await Promise.all([
+          fetch(`https://api.crossref.org/works?query.bibliographic=${query}&rows=3`).then((r) => r.ok ? r.json() : { error: r.status }),
+          fetch(`https://api.openalex.org/works?search=${query}&per-page=3`).then((r) => r.ok ? r.json() : { error: r.status }),
+        ]);
+        return jsonResult({ crossref, openalex });
+      },
+    };
+    tools.push(listCorpus, readCorpus, metadata);
+    if (extensions.coordinator) {
+      const DelegateParams = Type.Object({
+        role: Type.Union([Type.Literal('conversion-reviewer'), Type.Literal('metadata-researcher'), Type.Literal('corpus-analyst')]),
+        task: Type.String(),
+      });
+      tools.push({
+        name: 'delegate_task', label: 'Delegate bounded task',
+        description: 'Delegate a bounded conversion, metadata, or corpus-analysis task to an isolated child agent. Its structured result returns here; children cannot delegate.',
+        parameters: DelegateParams,
+        async execute(_id, params: any) {
+          const run = getRunContext();
+          if (!run) throw new Error('delegation is only available during an agent run');
+          const result = await extensions.coordinator!.delegate({
+            parentRunId: run.runId,
+            conversationId: run.conversationId,
+            role: params.role as SubagentRole,
+            task: params.task,
+            tools: [listCorpus, readCorpus, metadata],
+          });
+          return jsonResult(result, result);
+        },
+      });
+    }
+    if (extensions.profiles && extensions.skillId === 'writing-profile') {
+      const CreateArtifactsParams = Type.Object({
+        writingStyleReport: Type.String(), writingProfile: Type.String(), intellectualProfile: Type.String(),
+      });
+      tools.push({
+        name: 'create_profile_artifacts', label: 'Create profile artifacts',
+        description: 'Create the three initial reviewable Markdown profile documents. Use once after analysis and any necessary user questions.',
+        parameters: CreateArtifactsParams,
+        async execute(_id, params: any) {
+          const run = getRunContext();
+          if (!run) throw new Error('profile artifact creation requires an active run');
+          const origin = { conversationId: run.conversationId, agentRunId: run.runId };
+          const report = createGeneratedDocument(project, 'writing-style-report.md', params.writingStyleReport, origin);
+          const writing = createGeneratedDocument(project, 'writing-profile.md', params.writingProfile, origin);
+          const intellectual = createGeneratedDocument(project, 'intellectual-profile.md', params.intellectualProfile, origin);
+          extensions.onProfileArtifacts?.({
+            reportDocumentId: report.id,
+            writingProfileDocumentId: writing.id,
+            intellectualProfileDocumentId: intellectual.id,
+          });
+          return jsonResult({ report, writingProfile: writing, intellectualProfile: intellectual });
+        },
+      });
+      const ActivateParams = Type.Object({ reportDocumentId: Type.String(), writingProfileDocumentId: Type.String(), intellectualProfileDocumentId: Type.String(), userApproval: Type.String() });
+      tools.push({
+        name: 'activate_writing_profile', label: 'Activate writing profile',
+        description: 'Snapshot reviewed profile documents globally. Call only after explicit user approval in this conversation and quote that approval in userApproval.',
+        parameters: ActivateParams,
+        async execute(_id, params: any) {
+          const run = getRunContext();
+          if (!run || run.skillId !== 'writing-profile') throw new Error('profile activation is restricted to the writing-profile skill');
+          if (!params.userApproval.trim()) throw new Error('explicit user approval is required');
+          if (!extensions.verifyApproval?.(run.conversationId, params.userApproval.trim())) {
+            throw new Error('userApproval must quote the latest user message verbatim');
+          }
+          return jsonResult(extensions.profiles!.activate(project, params));
+        },
+      });
+    }
+  }
+  return tools;
 }

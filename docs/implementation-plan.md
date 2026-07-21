@@ -54,7 +54,7 @@ them.
 | 4 | Agent tools (v1) | §10.2 — six read/propose tools; no fs, no shell, no web. |
 | 5 | Supported Markdown profile | Architecture §17.1 minus YAML metadata: ATX headings, emphasis/strong, lists, blockquotes, links, code spans/blocks, pipe tables, footnotes, Pandoc citations. Same profile as the spike. |
 | 6 | Model credentials | Development: `MOONSHOT_API_KEY` / `DEEPSEEK_API_KEY` env vars as fallback; **primary: settings UI storing keys via Electron `safeStorage`** (gnome-keyring on the dev box; landed 2026-07-19 with the settings panel). Linux needs `--password-store=gnome-libsecret` under Hyprland (auto-detect fails). Never in project files. |
-| 7 | Pandoc | Not needed in M1 (no export). When reached: configured system Pandoc in dev, bundle for distribution. |
+| 7 | Pandoc | **2026-07-21:** configured system Pandoc remains a development convenience; Linux release builds download, checksum-verify, and bundle pinned Pandoc 3.10 for corpus conversion. |
 | 8 | Project identity | `project.json` with `formatVersion`, `projectId` (uuid), `mainDocument`. Documents addressed by uuid in DB, looked up by relative path on open; renames reconcile path→uuid, never re-id. |
 | 9 | Workspace vs project data | Workspace: platform config dir (`~/.config/texeris`, `~/Library/Application Support/texeris`) — `config.json` (model modes), later style profile + archive index. Project: user folder with `.texeris/` (history DB, cache). |
 | 10 | Recoverable autosave | Every revision commit triggers atomic file write (tmp + rename). DB keeps change records + periodic snapshots. Startup reconciles hash mismatches; incomplete tmp writes are cleaned, never silently chosen. |
@@ -606,7 +606,8 @@ permanent delete; a freshly created project opens on welcome.md.
 
 1. **docx import/export** (owner ask, top priority): Pandoc both ways —
    import .docx into a project document, export manuscript to .docx for
-   collaborators/supervisors. Decide bundled-vs-system Pandoc.
+   collaborators/supervisors. Use the already-decided bundled Pandoc 3.10
+   component; add golden import/export samples before exposing the workflow.
 2. **App-level spellchecker**: native is unreliable (PR #2); codex's
    nspell + dictionary-en design (~0.6 MB) is the seed; needs a
    dictionary-distribution decision for the language picker.

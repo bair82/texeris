@@ -60,6 +60,7 @@ export default function AppShell({
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
   const [newDocRequested, setNewDocRequested] = useState(0);
+  const [profileSourceOpen, setProfileSourceOpen] = useState(false);
   const uiRef = useRef<UiState>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -295,6 +296,9 @@ export default function AppShell({
         case 'chat:new':
           getChatCommands()?.newConversation();
           break;
+        case 'chat:build-writing-profile':
+          setProfileSourceOpen(true);
+          break;
         case 'help:shortcuts':
           setShortcutsOpen((v) => !v);
           break;
@@ -426,6 +430,9 @@ export default function AppShell({
             <PatchReview documentId={openDocId} />
             <ChatPanel
               documentId={openDocId}
+              onOpenDocument={(id) => {
+                void refreshDocs().then(() => openDoc(id));
+              }}
               initialConversationId={ui.openConversationId ?? null}
               onConversationChange={(id) => patchUi({ openConversationId: id })}
             />
@@ -439,6 +446,31 @@ export default function AppShell({
       {trashOpen && (
         <TrashDialog onClose={() => setTrashOpen(false)} onRestored={onRestoredDoc} />
       )}
+      {profileSourceOpen && (
+        <div className="settings-overlay" onClick={() => setProfileSourceOpen(false)}>
+          <div className="profile-source-dialog" onClick={(event) => event.stopPropagation()}>
+            <h2>Build writing profile</h2>
+            <p>Choose individual writing files or recursively analyze a folder.</p>
+            <div className="patch-actions">
+              <button onClick={() => void beginProfile('files')}>Choose files…</button>
+              <button onClick={() => void beginProfile('folder')}>Choose folder…</button>
+              <button onClick={() => setProfileSourceOpen(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+
+  async function beginProfile(source: 'files' | 'folder'): Promise<void> {
+    try {
+      const result = await window.texeris.profile.begin({ source });
+      if (!result) return;
+      setProfileSourceOpen(false);
+      patchUi({ focusMode: false, sideVisible: true, openConversationId: result.conversationId }, true);
+      getChatCommands()?.openConversation(result.conversationId);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : String(error));
+    }
+  }
 }
