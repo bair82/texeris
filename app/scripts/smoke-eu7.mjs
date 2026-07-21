@@ -124,6 +124,15 @@ try {
   await waitFor(`!!window.texeris && !!document.querySelector('.tiptap-rendered')`, 'editor never mounted');
   check('welcome.md is seeded into the dev project', await evaluate(navHas('welcome.md')));
 
+  // An active project must still be able to reach the picker in order to
+  // create another project (and inspect its welcome.md), then return safely.
+  await evaluate(`document.querySelector('.footer-button').click(); true`);
+  await waitFor(`!!document.querySelector('.project-picker')`, 'project picker never opened');
+  check('active project can reopen the project picker', true);
+  await evaluate(`document.querySelector('.picker-back').click(); true`);
+  await waitFor(`!!document.querySelector('.tiptap-rendered')`, 'back from project picker never restored the project');
+  check('project picker returns to the active project', true);
+
   // create a scratch document, then trash it through the row menu
   await evaluate(`document.querySelector('.nav-action:not(.import-action):not(.trash-action)').click(); true`);
   await evaluate(setInput('.nav-new-form input', 'scratch'));

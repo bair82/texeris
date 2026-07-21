@@ -43,9 +43,12 @@ export const PROJECT_SWITCH_FLAG = 'texeris:project-switch';
  */
 export default function AppShell({
   onOpenSettings,
+  onOpenProjectPicker,
   mainDocument,
 }: {
   onOpenSettings: () => void;
+  /** Return to the project picker to open or create a project. */
+  onOpenProjectPicker: () => void;
   mainDocument: string;
 }) {
   const [ui, setUi] = useState<UiState | null>(null);
@@ -251,6 +254,9 @@ export default function AppShell({
           setNewDocRequested((n) => n + 1);
           break;
         }
+        case 'file:new-project':
+          onOpenProjectPicker();
+          break;
         case 'file:import-document':
           void onImportDoc();
           break;
@@ -294,7 +300,7 @@ export default function AppShell({
           break;
       }
     },
-    [onImportDoc, patchUi, toggleNav, toggleSide, toggleFocus],
+    [onImportDoc, onOpenProjectPicker, patchUi, toggleNav, toggleSide, toggleFocus],
   );
 
   // App-menu commands from main.

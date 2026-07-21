@@ -1790,6 +1790,20 @@ body.col-resizing {
   color: var(--text-muted);
 }
 
+.picker-back {
+  margin: 0 0 16px;
+  padding: 0;
+  border: 0;
+  color: var(--accent);
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.picker-back:hover {
+  text-decoration: underline;
+}
+
 .picker-actions {
   display: flex;
   gap: 10px;

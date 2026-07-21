@@ -10,6 +10,7 @@ export default function App() {
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [project, setProject] = useState<ProjectInfo | null | undefined>(undefined);
   const [showSettings, setShowSettings] = useState(false);
+  const [showProjectPicker, setShowProjectPicker] = useState(false);
 
   useEffect(() => {
     void initAppearance().catch(console.error);
@@ -27,31 +28,27 @@ export default function App() {
   if (project === undefined) {
     return null; // loading
   }
-  if (project === null) {
-    return <ProjectPicker />;
+  if (project === null || showProjectPicker) {
+    return <ProjectPicker onBack={project ? () => setShowProjectPicker(false) : undefined} />;
   }
 
   return (
     <main className="app-shell">
-      <AppShell onOpenSettings={() => setShowSettings(true)} mainDocument={project.mainDocument} />
+      <AppShell
+        onOpenSettings={() => setShowSettings(true)}
+        onOpenProjectPicker={() => setShowProjectPicker(true)}
+        mainDocument={project.mainDocument}
+      />
       <footer className="app-footer">
         <span className="project-chip" title={project.root}>
           {project.root.split('/').pop()}
         </span>
         <button
           className="footer-button"
-          title="Switch project"
-          onClick={() => {
-            void (async () => {
-              try {
-                await window.texeris.project.openDialog();
-              } catch {
-                /* user cancelled or open failed — stay */
-              }
-            })();
-          }}
+          title="Open or create a project"
+          onClick={() => setShowProjectPicker(true)}
         >
-          switch
+          projects…
         </button>
         <span className="footer-version">
           {info && `Texeris · Electron ${info.electronVersion} · Node ${info.nodeVersion}`}
