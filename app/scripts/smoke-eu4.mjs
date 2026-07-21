@@ -136,22 +136,22 @@ try {
   );
   check('selection count appears on select-all', true);
 
-  // spellcheck setting round-trips over IPC
+  // spellcheck setting round-trips over IPC (default: off since 2026-07-21)
   const settings = await evaluate(`window.texeris.settings.get()`);
   check(
-    'spellcheck settings exposed',
-    settings?.spellcheck?.enabled === true && Array.isArray(settings.spellcheck.availableLanguages),
+    'spellcheck settings exposed (off by default)',
+    settings?.spellcheck?.enabled === false && Array.isArray(settings.spellcheck.availableLanguages),
     JSON.stringify(settings?.spellcheck),
   );
-  await evaluate(`window.texeris.settings.setSpellcheck({ enabled: false, language: 'en-US' })`);
-  const disabled = await evaluate(`window.texeris.settings.get().then(s => s.spellcheck.enabled)`);
-  check('spellcheck disable applies + persists', disabled === false);
-  const persisted = JSON.parse(fs.readFileSync(path.join(configDir, 'texeris', 'config.json'), 'utf8'));
-  check('spellcheck persisted to config.json', persisted.spellcheck?.enabled === false);
   await evaluate(`window.texeris.settings.setSpellcheck({ enabled: true, language: 'en-US' })`);
+  const enabled = await evaluate(`window.texeris.settings.get().then(s => s.spellcheck.enabled)`);
+  check('spellcheck enable applies + persists', enabled === true);
+  const persisted = JSON.parse(fs.readFileSync(path.join(configDir, 'texeris', 'config.json'), 'utf8'));
+  check('spellcheck persisted to config.json', persisted.spellcheck?.enabled === true);
+  await evaluate(`window.texeris.settings.setSpellcheck({ enabled: false, language: 'en-US' })`);
   check(
-    'spellcheck re-enable works',
-    (await evaluate(`window.texeris.settings.get().then(s => s.spellcheck.enabled)`)) === true,
+    'spellcheck disable works',
+    (await evaluate(`window.texeris.settings.get().then(s => s.spellcheck.enabled)`)) === false,
   );
 
   proc.kill('SIGTERM');

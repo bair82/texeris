@@ -32,7 +32,7 @@ export const DEFAULT_CONFIG: WorkspaceConfig = {
     fast: { provider: 'deepseek', model: 'deepseek-v4-flash' },
     deep: { provider: 'moonshotai', model: 'kimi-k3' },
   },
-  spellcheck: { enabled: true, language: 'en-US' },
+  spellcheck: { enabled: false, language: 'en-US' },
 };
 
 export function workspaceDir(): string {
