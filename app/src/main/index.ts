@@ -95,15 +95,21 @@ app.whenReady().then(() => {
   const credentials = new CredentialsService(safeStorage);
   const manager = new ProjectManager();
 
-  // Spellcheck preference (M1.5 EU4): apply before any window is created.
-  session.defaultSession.setSpellCheckerEnabled(config.spellcheck.enabled);
-  if (config.spellcheck.enabled) {
-    const available = session.defaultSession.availableSpellCheckerLanguages;
-    const language = available.includes(config.spellcheck.language)
-      ? config.spellcheck.language
-      : (available[0] ?? 'en-US');
-    session.defaultSession.setSpellCheckerLanguages([language]);
-  }
+  // Spellcheck preference (M1.5 EU4). Applied at boot AND for every new
+  // webContents — on Linux the session's spellchecker can ignore too-early
+  // configuration (owner report: needed an off/on toggle to kick in).
+  const applySpellcheck = () => {
+    session.defaultSession.setSpellCheckerEnabled(config.spellcheck.enabled);
+    if (config.spellcheck.enabled) {
+      const available = session.defaultSession.availableSpellCheckerLanguages;
+      const language = available.includes(config.spellcheck.language)
+        ? config.spellcheck.language
+        : (available[0] ?? 'en-US');
+      session.defaultSession.setSpellCheckerLanguages([language]);
+    }
+  };
+  applySpellcheck();
+  app.on('web-contents-created', applySpellcheck);
 
   let runtime: PiAgentRuntime | null = null;
   let conversations: ConversationService | null = null;

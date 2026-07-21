@@ -496,6 +496,9 @@ export class RawSession implements EditorSession {
           cmHighlightField,
           cmSearchField,
           rawTheme,
+          // CM defaults spellcheck="false" on its contentDOM — allow the
+          // Chromium spellchecker (EU4) in raw mode too.
+          EditorView.contentAttributes.of({ spellcheck: 'true' }),
           // Custom-drawn cursor + selection: the native caret can be
           // invisible under Electron/Wayland (owner report).
           drawSelection(),
