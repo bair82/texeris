@@ -30,9 +30,9 @@ for (const script of SMOKE) {
     env: process.env,
   });
   if (result.status !== 0) {
-    // Back-to-back Electron launches are racy; one retry before failing.
+    // Back-to-back Electron launches are racy (worse under load); retry once.
     console.log(`=== ${script} failed (exit ${result.status}), retrying once ===`);
-    spawnSync('sleep', ['5']);
+    spawnSync('sleep', ['10']);
     result = spawnSync(process.execPath, [script], {
       cwd: new URL('..', import.meta.url).pathname,
       stdio: 'inherit',

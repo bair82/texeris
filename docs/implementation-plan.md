@@ -570,7 +570,8 @@ Follow-up (2026-07-21, owner feedback): footnotes are MANAGED, not just
 inserted — a renumber plugin (`editor/tiptap/footnote-renumber.ts`)
 keeps labels in document order after every footnote-affecting
 transaction: inserting before an existing footnote renumbers everything,
-deleting a ref heals the numbering. Insert uses transient unique labels
+deleting a ref heals the numbering, and definition blocks are physically
+re-sorted to match the numbering (anchored at the first def). Insert uses transient unique labels
 (max+1) and puts ref + def out in ONE PM transaction (the plugin must
 run after both exist, or the def attaches to a stale label — caught by
 `smoke-eu6`). Orphaned definitions keep their content (never silent

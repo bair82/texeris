@@ -30,16 +30,22 @@ export default function Toolbar({ editor }: { editor: Editor }) {
    * so the transient unique label maps the pair unambiguously (M1.5 EU6). */
   const insertFootnote = () => {
     let max = 0;
-    editor.state.doc.descendants((node) => {
+    let refsBefore = 0;
+    editor.state.doc.descendants((node, pos) => {
       if (node.type.name === 'footnoteRef' || node.type.name === 'footnoteDef') {
         const n = Number.parseInt(String(node.attrs.label), 10);
         if (Number.isFinite(n)) {
           max = Math.max(max, n);
         }
+        if (node.type.name === 'footnoteRef' && pos < editor.state.selection.from) {
+          refsBefore += 1;
+        }
       }
       return true;
     });
     const label = String(max + 1);
+    // the new ref's label after renumbering = its index in document order
+    const finalLabel = String(refsBefore + 1);
     const { schema } = editor.state;
     const refNode = schema.nodes.footnoteRef.create({ label });
     const defNode = schema.nodes.footnoteDef.create(
@@ -57,12 +63,13 @@ export default function Toolbar({ editor }: { editor: Editor }) {
     });
     tr = tr.insert(insertAt, defNode);
     editor.view.dispatch(tr);
-    // cursor into the fresh definition (the last one) after renumbering
+    // cursor into the new def — after reordering it may not be the last one
     const target = ((): number | null => {
       let found: number | null = null;
       editor.state.doc.descendants((node, pos) => {
-        if (node.type.name === 'footnoteDef') {
+        if (found === null && node.type.name === 'footnoteDef' && String(node.attrs.label) === finalLabel) {
           found = pos + 2;
+          return false;
         }
         return true;
       });

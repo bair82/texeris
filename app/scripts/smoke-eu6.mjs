@@ -125,12 +125,14 @@ try {
   const renumbered = await waitFor(
     `window.texeris.doc.getText().then(d => {
       const t = d.text;
-      return t.includes('[^1]:') && t.includes('[^2]:') && t.indexOf('[^1]') < t.indexOf('[^2]');
+      return t.includes('[^1]:') && t.includes('[^2]:')
+        && t.indexOf('[^1]') < t.indexOf('[^2]')
+        && t.indexOf('[^1]:') < t.indexOf('[^2]:');
     })`,
     'footnotes never renumbered after inserting before an existing one',
     40,
   );
-  check('inserting before an existing footnote renumbers in document order', renumbered);
+  check('inserting before an existing footnote renumbers + reorders in document order', renumbered);
 
   // delete the first ref → numbering heals, orphaned definition kept
   await evaluate(caretToStart);
@@ -141,7 +143,9 @@ try {
   const healed = await waitFor(
     `window.texeris.doc.getText().then(d => {
       const t = d.text;
-      return t.includes('[^1]:') && t.includes('[^2]:') && !/\\[\\^2\\](?!:)/.test(t);
+      return t.includes('[^1]:') && t.includes('[^2]:')
+        && !/\\[\\^2\\](?!:)/.test(t)
+        && t.indexOf('[^1]:') < t.indexOf('[^2]:');
     })`,
     'footnote numbering never healed after delete',
     40,
