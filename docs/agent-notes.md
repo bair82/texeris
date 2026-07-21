@@ -92,3 +92,19 @@ toolbar; theme/font/size/width prefs in `config.json` under `appearance`,
 broadcast over `settings:appearance-changed` and applied as CSS
 vars/data-theme (light palette added; new colors go through vars, not
 hex literals). EU7 unclaimed.
+
+**kimi, 2026-07-21** — EU7 (trash view + welcome.md onboarding) done on
+`kimi/main`; M1.5 is complete (EU1–EU7 all landed). Trash dialog (nav
+header icon): restore resumes a doc under the same id with history
+(renames to "<name> (restored).md" on path clash) and opens it; permanent
+delete removes row + revisions + checkpoints + patches + file (FK
+children first, one tx). createProject seeds welcome.md as rev 1 and
+points ui.state.openDocumentId at it (the dev harness re-points at the
+manuscript, so smokes/dev runs are unaffected). Gotchas worth knowing:
+AppShell's beforeunload ui-state flush is now skipped on project-switch
+reloads via PROJECT_SWITCH_FLAG (sessionStorage) — it used to write the
+outgoing project's blob into the incoming project's db, silently
+clobbering e.g. the seeded openDocumentId; createDocument refuses paths
+owned by trashed rows (UNIQUE path entanglement); agent
+list_project_documents filters trashed. 150 unit + 13 smokes green.
+Next up per the ranked backlog: docx import/export (owner's top ask).
