@@ -89,7 +89,8 @@ when product or architecture decisions change, update them.
 - Spellcheck dictionaries are downloaded lazily by Chromium on first
   enable into `<userData>/Dictionaries` (shared:
   `~/.config/@texeris/app/Dictionaries`) — until the download finishes,
-  no underline appears even when everything is configured.
+  no underline appears even when everything is configured. Full
+  spellcheck investigation record (open issues): `docs/spellcheck-notes.md`.
 - gnome-keyring runs and owns `org.freedesktop.secrets`, so Electron
   `safeStorage` is viable for credential storage — but only with
   `--password-store=gnome-libsecret` (set in `app/src/main/index.ts`);

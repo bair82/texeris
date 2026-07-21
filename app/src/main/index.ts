@@ -101,12 +101,11 @@ app.whenReady().then(() => {
   const credentials = new CredentialsService(safeStorage);
   const manager = new ProjectManager();
 
-  // Spellcheck preference (M1.5 EU4). Applied at boot AND for every new
-  // webContents — on Linux the session's spellchecker can ignore too-early
-  // configuration (owner report: needed an off/on toggle to kick in).
-  // NOTE: Chromium downloads the language dictionary lazily on first enable
-  // (into <userData>/Dictionaries); until the download finishes, no
-  // underline appears — that was the real cause of the "toggle ritual".
+  // Spellcheck preference (M1.5 EU4). Chromium downloads the language
+  // dictionary lazily on first enable (into <userData>/Dictionaries).
+  // Re-apply when a page is ready: on Linux the checker only "arms" for
+  // editable content that exists at apply time, so the boot-time apply
+  // alone leaves the first page unchecked (docs/spellcheck-notes.md).
   const applySpellcheck = () => {
     session.defaultSession.setSpellCheckerEnabled(config.spellcheck.enabled);
     if (config.spellcheck.enabled) {
@@ -118,7 +117,13 @@ app.whenReady().then(() => {
     }
   };
   applySpellcheck();
-  app.on('web-contents-created', applySpellcheck);
+  app.on('web-contents-created', (_event, contents) => {
+    contents.on('did-finish-load', () => {
+      applySpellcheck();
+      // and once more shortly after — the arming races page setup
+      setTimeout(applySpellcheck, 3000);
+    });
+  });
 
   let runtime: PiAgentRuntime | null = null;
   let conversations: ConversationService | null = null;
