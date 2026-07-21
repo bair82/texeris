@@ -583,6 +583,25 @@ seeded into new projects explaining autosave/modes/scopes/patches/
 checkpoints.
 *DoD:* delete → trash → restore works; new project opens on welcome.md.
 
+### Post-M1.5 backlog (owner review 2026-07-21, ranked)
+
+1. **docx import/export** (owner ask, top priority): Pandoc both ways —
+   import .docx into a project document, export manuscript to .docx for
+   collaborators/supervisors. Decide bundled-vs-system Pandoc.
+2. **App-level spellchecker**: native is unreliable (PR #2); codex's
+   nspell + dictionary-en design (~0.6 MB) is the seed; needs a
+   dictionary-distribution decision for the language picker.
+3. **Citations UI** (M2 core): CSL JSON library per project, insert-
+   citation picker with search, bibliography rendering.
+4. **Images/figures**: paste/drag image → copy to project assets + link;
+   render in rendered mode.
+5. **Math (KaTeX)**: inline/block render + Markdown round trip.
+6. **Section manipulation**: outline fold + move-section up/down.
+7. **Undo story beyond per-session**: designed answer (revision-based),
+   mode/doc switches currently wipe editor undo history.
+8. **More UI themes** (owner: not important now).
+9. **Split view** (two documents side by side) — later.
+
 Execution order: EU1 → EU7, one commit per package. Coordination:
 `agent:kimi` / `agent:codex` issues per package (codex picks what it
 wants; notes on the board).
