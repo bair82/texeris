@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { COMMANDS } from '../../../shared/commands';
 
 /**
@@ -7,6 +8,18 @@ import { COMMANDS } from '../../../shared/commands';
  */
 export default function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
   const sections = [...new Set(COMMANDS.map((c) => c.section))];
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
     <div className="settings-overlay" onClick={onClose}>
       <div className="settings-panel shortcuts-panel" onClick={(e) => e.stopPropagation()}>

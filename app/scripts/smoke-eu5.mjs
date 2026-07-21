@@ -144,6 +144,17 @@ try {
   await waitFor(`!!document.querySelector('.cm-raw')`, 'raw mode never mounted');
   check('mode toggle command switches to raw', true);
 
+  // shortcuts overlay opens via palette and closes on Esc
+  await runPaletteCommand('keyboard shortcuts');
+  await waitFor(`!!document.querySelector('.shortcuts-panel')`, 'shortcuts overlay never opened');
+  check('shortcuts overlay opens via palette', true);
+  await evaluate(`document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); true`);
+  await sleep(300);
+  check(
+    'Esc closes the shortcuts overlay',
+    !(await evaluate(`!!document.querySelector('.shortcuts-panel')`)),
+  );
+
   proc.kill('SIGTERM');
 } finally {
   proc?.kill('SIGKILL');
