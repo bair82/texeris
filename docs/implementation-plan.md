@@ -310,7 +310,10 @@ Three regions (spec §9), editor is the visual centre:
 
 - **ProjectNav:** file list, heading outline (click → scroll), checkpoints.
 - **EditorRegion:** rendered mode default; raw toggle; patch highlights;
-  status bar with revision seq, save state, actor of last change.
+  status bar with revision seq, save state, actor of last change, and typed
+  workspace-operation feedback. Progress is non-dismissible; success and
+  warnings auto-clear; errors persist until dismissed. Contextual recovery
+  actions remain adjacent to the editor/panel they affect.
 - **ConversationPanel:** messages with streaming; **context indicator chip**
   (scope selector: selection/section/document — visible at all times);
   Fast/Deep toggle; proposed patches appear as cards → open PatchReview.

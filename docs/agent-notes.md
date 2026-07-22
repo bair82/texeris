@@ -154,3 +154,11 @@ explicit lossy/scanned-file guidance and 100 MB/1,000-page limits. PDF is the
 default document export through sanitized, self-contained Pandoc HTML and an
 isolated Electron A4 `printToPDF` renderer. A real Electron smoke exports a PDF
 and re-imports its selectable text. OCR/viewing/annotations/options are deferred.
+
+**codex, 2026-07-22** — workspace operation feedback standardized in the
+editor status bar. Import/export now use typed progress, success, warning, and
+error states instead of translucent floating notices; completed states
+auto-clear, errors persist, long details truncate with a full hover title, and
+all non-progress states are dismissible. Contextual/actionable errors remain
+with their owning editor or panel. A general console is deferred until the app
+has durable background jobs or logs that justify history and filtering.

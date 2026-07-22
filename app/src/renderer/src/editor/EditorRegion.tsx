@@ -62,6 +62,11 @@ interface EditorNotice {
   onAction?: () => void;
 }
 
+export interface WorkspaceStatus {
+  message: string;
+  tone: 'progress' | 'success' | 'warning' | 'error';
+}
+
 interface EditorRegionProps {
   /** The document to show; the region (re)opens whenever this changes. */
   openDocId: string | null;
@@ -74,6 +79,9 @@ interface EditorRegionProps {
   onModeChange(mode: EditorMode): void;
   /** Report the committed revision (drives the nav outline refresh). */
   onRevisionChange(revision: number): void;
+  /** Workspace-wide operation feedback temporarily replaces the word count. */
+  workspaceStatus?: WorkspaceStatus | null;
+  onDismissWorkspaceStatus?(): void;
 }
 
 /**
@@ -91,6 +99,8 @@ export default function EditorRegion({
   onDocState,
   onModeChange,
   onRevisionChange,
+  workspaceStatus,
+  onDismissWorkspaceStatus,
 }: EditorRegionProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sessionRef = useRef<EditorSession | null>(null);
@@ -449,11 +459,30 @@ export default function EditorRegion({
             </button>
           ))}
         </div>
-        <span className="word-count">
-          {wordCount !== null && `${wordCount.toLocaleString('en-US')} words`}
-          {selStats &&
-            ` · ${selStats.words.toLocaleString('en-US')} words, ${selStats.chars.toLocaleString('en-US')} chars selected`}
-        </span>
+        {workspaceStatus ? (
+          <div
+            className={`workspace-status-message status-${workspaceStatus.tone}`}
+            role={workspaceStatus.tone === 'error' ? 'alert' : 'status'}
+            title={workspaceStatus.message}
+          >
+            <span>{workspaceStatus.message}</span>
+            {workspaceStatus.tone !== 'progress' && (
+              <button
+                type="button"
+                aria-label="Dismiss status message"
+                onClick={onDismissWorkspaceStatus}
+              >
+                ×
+              </button>
+            )}
+          </div>
+        ) : (
+          <span className="word-count">
+            {wordCount !== null && `${wordCount.toLocaleString('en-US')} words`}
+            {selStats &&
+              ` · ${selStats.words.toLocaleString('en-US')} words, ${selStats.chars.toLocaleString('en-US')} chars selected`}
+          </span>
+        )}
         <div className="status-right">
           <span className="status-chip">
             {revision !== null ? `rev ${revision}` : '…'} ·{' '}

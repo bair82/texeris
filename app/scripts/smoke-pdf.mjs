@@ -95,30 +95,53 @@ try {
     if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
     return result.result.value;
   };
+  const waitFor = async (expression, label, attempts = 80) => {
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      if (await evaluate(expression)) return true;
+      await sleep(250);
+    }
+    check(label, false, `timed out: ${expression}`);
+    return false;
+  };
+  const setInput = (selector, value) => `(async () => {
+    const input = document.querySelector(${JSON.stringify(selector)});
+    if (!input) return false;
+    const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    set.call(input, ${JSON.stringify(value)});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  })()`;
+  const runPaletteCommand = async (query) => {
+    await evaluate("document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true })); true");
+    await waitFor("!!document.querySelector('.palette-input')", 'command palette did not open');
+    await evaluate(setInput('.palette-input', query));
+    await sleep(150);
+    await evaluate("document.querySelector('.palette-input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); true");
+  };
   for (let attempt = 0; attempt < 80; attempt++) {
     if (await evaluate('!!window.texeris')) break;
     await sleep(250);
   }
 
-  const phrase = 'PDF round trip preserves selectable academic prose.';
-  const source = `# PDF Round Trip\n\n${Array(16).fill(phrase).join(' ')}\n`;
-  const exported = await evaluate(`(async () => {
-    const created = await window.texeris.doc.create('pdf-source.md');
-    const current = await window.texeris.doc.getText(created.id);
-    await window.texeris.doc.commit({
-      documentId: created.id,
-      splices: [{ from: 0, to: current.text.length, deletedText: current.text, insertedText: ${JSON.stringify(source)} }],
-      kind: 'paste',
-    });
-    return window.texeris.doc.exportDialog(created.id);
-  })()`);
-  check('export returns PDF format', exported?.format === 'pdf', JSON.stringify(exported));
+  const phrase = 'The Geometry of Attention';
+  await waitFor("!!document.querySelector('.tiptap-rendered')", 'editor never mounted');
+  await runPaletteCommand('export document');
+  await waitFor(`document.querySelector('.workspace-status-message')?.textContent.includes('Exported to')`, 'export completion did not reach the status bar');
+  check(
+    'export completion uses the status bar',
+    await evaluate(`document.querySelector('.workspace-status-message')?.classList.contains('status-warning')`),
+  );
   const bytes = fs.readFileSync(outputPath);
   check('Chromium wrote a non-empty PDF', bytes.length > 1_000 && bytes.subarray(0, 5).toString() === '%PDF-', `${bytes.length} bytes`);
 
-  const imported = await evaluate('window.texeris.doc.importDialog()');
-  check('PDF import returns a Markdown document', imported?.path === 'round-trip.md', JSON.stringify(imported));
-  check('PDF import reports lossy conversion', imported?.warnings?.some((warning) => /lossy/i.test(warning)), JSON.stringify(imported?.warnings));
+  await runPaletteCommand('import document');
+  await waitFor(`document.querySelector('.workspace-status-message')?.textContent.includes('Imported round-trip.md')`, 'import completion did not reach the status bar');
+  check(
+    'lossy import warning uses the status bar warning state',
+    await evaluate(`document.querySelector('.workspace-status-message')?.classList.contains('status-warning')`),
+  );
+  const imported = await evaluate(`window.texeris.doc.list().then(docs => docs.find(doc => doc.path === 'round-trip.md'))`);
+  check('PDF import creates a Markdown document', Boolean(imported), JSON.stringify(imported));
   const importedText = await evaluate(`window.texeris.doc.getText(${JSON.stringify(imported?.id)})`);
   check('exported text is selectable and re-imported', importedText?.text?.includes(phrase), importedText?.text?.slice(0, 160));
 

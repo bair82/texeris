@@ -115,34 +115,6 @@ button {
   min-height: 0;
 }
 
-.operation-notice {
-  position: fixed;
-  right: 20px;
-  bottom: 20px;
-  z-index: 30;
-  display: flex;
-  max-width: min(560px, calc(100vw - 40px));
-  gap: 12px;
-  align-items: flex-start;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel-bg);
-  color: var(--text);
-  box-shadow: 0 8px 28px rgb(0 0 0 / 25%);
-  font-size: 13px;
-}
-
-.operation-notice button {
-  border: 0;
-  padding: 0 2px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font-size: 18px;
-  line-height: 16px;
-}
-
 .imported-image {
   display: inline-flex;
   max-width: 100%;
@@ -620,6 +592,39 @@ body.col-resizing {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.workspace-status-message {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.workspace-status-message span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-status-message button {
+  flex: none;
+  border: 0;
+  padding: 0 2px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.workspace-status-message.status-progress { color: var(--accent); }
+.workspace-status-message.status-success { color: var(--green); }
+.workspace-status-message.status-warning { color: var(--amber); }
+.workspace-status-message.status-error { color: var(--red); }
 
 .status-chip {
   font-size: 12px;

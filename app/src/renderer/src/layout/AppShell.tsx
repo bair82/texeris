@@ -4,7 +4,7 @@ import type { DocumentInfo } from '../../../shared/domain-types';
 import type { UiState, UiStateDoc } from '../../../shared/ui-types';
 import ChatPanel from '../ChatPanel';
 import PatchReview from '../PatchReview';
-import EditorRegion from '../editor/EditorRegion';
+import EditorRegion, { type WorkspaceStatus } from '../editor/EditorRegion';
 import {
   getChatCommands,
   getEditorCommands,
@@ -62,7 +62,7 @@ export default function AppShell({
   const [trashOpen, setTrashOpen] = useState(false);
   const [newDocRequested, setNewDocRequested] = useState(0);
   const [profileSourceOpen, setProfileSourceOpen] = useState(false);
-  const [operationNotice, setOperationNotice] = useState<string | null>(null);
+  const [operationNotice, setOperationNotice] = useState<WorkspaceStatus | null>(null);
   const uiRef = useRef<UiState>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exportingRef = useRef(false);
@@ -94,6 +94,19 @@ export default function AppShell({
       void window.texeris.doc.list().then(setDocs);
     });
   }, []);
+
+  // Completed operations should be visible but not permanent. Warnings stay
+  // longer; errors remain until the user dismisses them.
+  useEffect(() => {
+    if (!operationNotice || operationNotice.tone === 'progress' || operationNotice.tone === 'error') {
+      return;
+    }
+    const timer = window.setTimeout(
+      () => setOperationNotice(null),
+      operationNotice.tone === 'warning' ? 12_000 : 6_000,
+    );
+    return () => window.clearTimeout(timer);
+  }, [operationNotice]);
 
   const persist = useCallback((immediate: boolean) => {
     if (saveTimer.current) {
@@ -217,18 +230,25 @@ export default function AppShell({
 
   const onImportDoc = useCallback(async () => {
     try {
+      setOperationNotice({ message: 'Importing document…', tone: 'progress' });
       const imported = await window.texeris.doc.importDialog();
       if (imported) {
         setDocs(await window.texeris.doc.list());
         openDoc(imported.id);
-        setOperationNotice(
-          imported.warnings.length
+        setOperationNotice({
+          message: imported.warnings.length
             ? `Imported ${imported.path}. ${imported.warnings.join(' ')}`
             : `Imported ${imported.path}.`,
-        );
+          tone: imported.warnings.length ? 'warning' : 'success',
+        });
+      } else {
+        setOperationNotice(null);
       }
     } catch (error) {
-      setOperationNotice(`Import failed: ${error instanceof Error ? error.message : String(error)}`);
+      setOperationNotice({
+        message: `Import failed: ${error instanceof Error ? error.message : String(error)}`,
+        tone: 'error',
+      });
     }
   }, [openDoc]);
 
@@ -237,19 +257,23 @@ export default function AppShell({
     exportingRef.current = true;
     try {
       getEditorCommands()?.flush();
-      setOperationNotice('Exporting document…');
+      setOperationNotice({ message: 'Exporting document…', tone: 'progress' });
       const exported = await window.texeris.doc.exportDialog(openDocId);
       if (exported) {
-        setOperationNotice(
-          exported.warnings.length
+        setOperationNotice({
+          message: exported.warnings.length
             ? `Exported to ${exported.path}. ${exported.warnings.join(' ')}`
             : `Exported to ${exported.path}.`,
-        );
+          tone: exported.warnings.length ? 'warning' : 'success',
+        });
       } else {
         setOperationNotice(null);
       }
     } catch (error) {
-      setOperationNotice(`Export failed: ${error instanceof Error ? error.message : String(error)}`);
+      setOperationNotice({
+        message: `Export failed: ${error instanceof Error ? error.message : String(error)}`,
+        tone: 'error',
+      });
     } finally {
       exportingRef.current = false;
     }
@@ -469,6 +493,8 @@ export default function AppShell({
         onDocState={onDocState}
         onModeChange={onModeChange}
         onRevisionChange={onRevisionChange}
+        workspaceStatus={operationNotice}
+        onDismissWorkspaceStatus={() => setOperationNotice(null)}
       />
       {sideVisible && (
         <>
@@ -493,12 +519,6 @@ export default function AppShell({
       )}
       {paletteOpen && (
         <CommandPalette onRun={runCommand} onClose={() => setPaletteOpen(false)} />
-      )}
-      {operationNotice && (
-        <div className="operation-notice" role="status">
-          <span>{operationNotice}</span>
-          <button type="button" aria-label="Dismiss notification" onClick={() => setOperationNotice(null)}>×</button>
-        </div>
       )}
       {shortcutsOpen && <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />}
       {trashOpen && (
