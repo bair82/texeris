@@ -640,6 +640,11 @@ right-click and a document launcher produce the expected native labels.
    mode/doc switches currently wipe editor undo history.
 8. **More UI themes** (owner: not important now).
 9. **Split view** (two documents side by side) — later.
+10. **Context-menu AI shortcuts** — intentionally deferred until real writing
+    sessions reveal a small set of repeated, context-sensitive actions that are
+    genuinely faster from a right-click menu. Avoid adding generic AI commands
+    merely to fill the surface; promote workflows here only after their utility
+    is clear.
 
 Execution order: EU1 → EU7, one commit per package. Coordination:
 `agent:kimi` / `agent:codex` issues per package (codex picks what it
