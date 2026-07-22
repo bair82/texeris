@@ -185,3 +185,11 @@ until at least next week. Codex owns repository maintenance and integration in
 the meantime. Peer review is welcome when both agents are available, but an
 unavailable agent is not a merge dependency; the active maintainer self-reviews,
 records verification evidence, and keeps PR metadata current.
+
+**codex, 2026-07-22** — began G0 contradiction repair after PR #3 merged.
+Faux mode remains disposable by default, but isolated EU4/EU6 persistence
+smokes now explicitly opt into temporary-config writes; both pass. Vitest now
+uses the proven `forks` pool by default, and the documented test command exits
+cleanly (185 passed, 2 conditional skips). The aggregate run exposed a separate
+restart race in `smoke.mjs`: CDP connected before the preload bridge was ready.
+The smoke now waits for that bridge and its restart-survival path passes.

@@ -535,7 +535,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const req = Value.Decode(SetAppearanceRequestSchema, raw);
     const appearance: AppearanceConfig = { ...deps.config.appearance, ...req };
     deps.config.appearance = appearance;
-    if (!process.env.TEXERIS_FAUX_PROVIDER) saveWorkspaceConfig(deps.config);
+    if (shouldPersistWorkspaceConfig()) saveWorkspaceConfig(deps.config);
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send(SettingsChannels.appearanceChanged, appearance);
     }
@@ -555,14 +555,14 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       session.defaultSession.setSpellCheckerLanguages([language]);
     }
     deps.config.spellcheck = { enabled: req.enabled, language };
-    if (!process.env.TEXERIS_FAUX_PROVIDER) saveWorkspaceConfig(deps.config);
+    if (shouldPersistWorkspaceConfig()) saveWorkspaceConfig(deps.config);
     return { enabled: req.enabled, language };
   });
 
   ipcMain.handle(SettingsChannels.setPatchStyleMode, (_event, raw: unknown) => {
     const req = Value.Decode(SetPatchStyleModeRequestSchema, raw);
     deps.config.patchStyleMode = req.mode;
-    if (!process.env.TEXERIS_FAUX_PROVIDER) saveWorkspaceConfig(deps.config);
+    if (shouldPersistWorkspaceConfig()) saveWorkspaceConfig(deps.config);
     return { mode: req.mode };
   });
 
@@ -598,4 +598,12 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     new UiStateService(deps.requireProject().db).set(state);
     return { ok: true };
   });
+}
+/**
+ * Faux-provider sessions are disposable by default so a local smoke/dev run
+ * cannot alter a person's workspace settings. Isolated persistence smokes opt
+ * in explicitly after supplying their own temporary XDG_CONFIG_HOME.
+ */
+function shouldPersistWorkspaceConfig(): boolean {
+  return !process.env.TEXERIS_FAUX_PROVIDER || process.env.TEXERIS_PERSIST_FAUX_CONFIG === '1';
 }

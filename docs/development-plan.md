@@ -75,12 +75,17 @@ rapidly turning a prototype into a real application.
    as written. The suite retries broad failures rather than identifying known
    deterministic versus environmental failures. The credential smoke is
    separate and requires a real key, which is reasonable but should be
-   classified clearly.
+   classified clearly. **Resolved 2026-07-22:** isolated persistence smokes
+   explicitly opt into faux-config writes while normal faux runs remain
+   disposable; EU4 and EU6 pass. A follow-up restart-race in the primary smoke
+   also now waits for the preload bridge, rather than only a CDP page target.
 4. **The default Vitest command has an intermittent shutdown stall.** The same
    185 tests complete under the explicit `forks` pool, but the documented
    `pnpm test` command has also reached the end of execution without emitting
    a result or exiting. The test runner/pool choice needs to be stabilized and
-   encoded instead of worked around ad hoc.
+   encoded instead of worked around ad hoc. **Resolved 2026-07-22:** the
+   Vitest config now selects the `forks` pool and the documented command exits
+   cleanly with the 185-test baseline.
 5. **A dependency audit is not clean.** The current lockfile reports one high
    severity advisory in the development packaging chain (`fast-uri` 3.1.3 via
    electron-builder; patched in 3.1.4). It is not a shipped runtime path, but it

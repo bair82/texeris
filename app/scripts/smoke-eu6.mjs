@@ -35,6 +35,9 @@ try {
       ...process.env,
       XDG_CONFIG_HOME: configDir,
       TEXERIS_FAUX_PROVIDER: '1',
+      // Faux normally never writes a user's config; this smoke owns a tmp dir
+      // and explicitly verifies persistence.
+      TEXERIS_PERSIST_FAUX_CONFIG: '1',
       TEXERIS_PROJECT_DIR: projectDir,
       ELECTRON_ENABLE_LOGGING: '1',
       TEXERIS_SMOKE: '1',
