@@ -14,7 +14,10 @@
     "prepare:pandoc": "node scripts/prepare-pandoc.mjs",
     "dist": "pnpm run prepare:pandoc && electron-vite build && electron-builder",
     "dist:linux": "pnpm run prepare:pandoc && electron-vite build && electron-builder --linux",
-    "smoke": "node scripts/smoke-all.mjs"
+    "smoke": "pnpm run smoke:offline",
+    "smoke:offline": "node scripts/smoke-all.mjs",
+    "smoke:main": "node scripts/smoke.mjs",
+    "smoke:platform": "node scripts/smoke-settings.mjs"
   },
   "dependencies": {
     "@sinclair/typebox": "^0.34.52",

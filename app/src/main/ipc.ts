@@ -194,6 +194,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
   ipcMain.handle(ChatChannels.deleteConversation, (_event, raw: unknown) => {
     const req = Value.Decode(ConversationRequestSchema, raw);
+    deps.requireRuntime().cancelConversation(req.conversationId);
     deps.requireConversations().deleteConversation(req.conversationId);
     return { deleted: true };
   });
@@ -238,6 +239,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
   ipcMain.handle(ProfileChannels.begin, async (event, raw: unknown) => {
     const req = Value.Decode(ProfileBeginRequestSchema, raw);
+    deps.requireRuntime().assertIdle();
     const win = BrowserWindow.fromWebContents(event.sender);
     const result = await dialog.showOpenDialog(win!, {
       title: req.source === 'folder' ? 'Choose writing corpus folder' : 'Choose writing files',

@@ -36,6 +36,10 @@ export interface AgentRuntime {
   startTurn(input: StartTurnRequest): Promise<{ runId: string }>;
   events(runId: string): AsyncIterable<NormalizedAgentEvent>;
   cancel(runId: string): Promise<void>;
+  /** Reject work that would overlap the single foreground run. */
+  assertIdle(): void;
+  /** Abort and detach a run before its conversation is deleted. */
+  cancelConversation(conversationId: string): void;
 }
 
 /** Simple async push-queue: producers push/close, consumers iterate. */
@@ -125,6 +129,7 @@ export class PiAgentRuntime implements AgentRuntime {
   }
 
   async startTurn(input: StartTurnRequest): Promise<{ runId: string }> {
+    this.assertIdle();
     const { project } = this.options;
     const assembled = assembleContext(project, input.scope);
     const modeConfig = this.options.config.modes[input.mode];
@@ -139,12 +144,6 @@ export class PiAgentRuntime implements AgentRuntime {
     const skill = skillById(conversationContext.skillId);
     const agent = this.agentFor(input.conversationId, model, skill?.id);
     if (agent.state.isStreaming) {
-      const stillActive = [...this.runs.values()].some(
-        (r) => r.conversationId === input.conversationId,
-      );
-      if (stillActive) {
-        throw new Error('a turn is already in progress for this conversation');
-      }
       // Our run map cleared at agent_end; the agent may still be settling
       // listeners — wait for that, then proceed.
       await agent.waitForIdle();
@@ -208,6 +207,10 @@ export class PiAgentRuntime implements AgentRuntime {
     queue.push({ type: 'run_start', runId, mode: input.mode });
 
     agent.prompt(input.text).catch((err: unknown) => {
+      // A deletion or project switch may already have aborted, finalized, and
+      // detached this run. Never let a late rejected prompt write through the
+      // replacement project's services.
+      if (!this.runs.has(runId)) return;
       queue.push({
         type: 'run_end',
         runId,
@@ -236,22 +239,36 @@ export class PiAgentRuntime implements AgentRuntime {
     this.runs.get(runId)?.agent.abort();
   }
 
+  assertIdle(): void {
+    if (this.runs.size > 0) {
+      throw new Error('another turn is already in progress; cancel it before starting new work');
+    }
+  }
+
+  cancelConversation(conversationId: string): void {
+    const run = [...this.runs.values()].find((candidate) => candidate.conversationId === conversationId);
+    if (run) this.abortAndTeardown(run, 'conversation deleted');
+    this.agents.delete(conversationId);
+  }
+
   /** Swap the project (project manager): agents and pending runs reset. */
   setProject(
     project: ProjectContext,
     conversations: ConversationService,
     patches: PatchService,
   ): void {
+    // Detach old agents before changing service ownership. Otherwise a late
+    // agent_end would append old-project messages through the new project's
+    // ConversationService.
+    for (const run of [...this.runs.values()]) {
+      this.abortAndTeardown(run, 'project switched');
+    }
     this.options.project = project;
     this.options.conversations = conversations;
     this.options.patches = patches;
     this.coordinator.cancelAll();
     this.coordinator = this.makeCoordinator(project);
     this.styleGate.setPatchService(patches);
-    for (const run of this.runs.values()) {
-      run.agent.abort();
-    }
-    this.runs.clear();
     this.agents.clear();
   }
 
@@ -380,6 +397,23 @@ export class PiAgentRuntime implements AgentRuntime {
       this.activeRunContext = null;
     }
     this.runs.delete(run.runId);
+  }
+
+  private abortAndTeardown(run: ActiveRun, reason: string): void {
+    run.agent.abort();
+    this.options.conversations.finishRun(run.runId, {
+      status: 'aborted',
+      error: reason,
+    });
+    this.styleGate.finalize(run.runId);
+    run.queue.push({
+      type: 'run_end',
+      runId: run.runId,
+      status: 'aborted',
+      errorMessage: reason,
+      manifest: run.manifest,
+    });
+    this.teardown(run);
   }
 }
 

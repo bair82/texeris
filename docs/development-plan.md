@@ -69,6 +69,9 @@ rapidly turning a prototype into a real application.
    is reconciled, “done” means branch-local, not repository-integrated.
 2. **There is no CI.** Round-trip safety is described as CI-guarded, but there
    is no `.github/workflows` directory. Tests rely on whoever last ran them.
+   **Resolved 2026-07-22:** Linux CI now installs from the lockfile, typechecks,
+   tests, builds, prepares the pinned Pandoc resource, packages Linux, and
+   inspects the packaged result. The first remote run remains the evidence gate.
 3. **The aggregate offline smoke is not truthful.** `smoke-all.mjs` includes
    EU6, whose final assertion requires a persisted `config.json`; faux-provider
    mode explicitly skips settings persistence. The test therefore cannot pass
@@ -79,6 +82,8 @@ rapidly turning a prototype into a real application.
    explicitly opt into faux-config writes while normal faux runs remain
    disposable; EU4 and EU6 pass. A follow-up restart-race in the primary smoke
    also now waits for the preload bridge, rather than only a CDP page target.
+   The aggregate runner now reports every attempt and emits a machine-readable
+   final summary rather than relying on an unstructured long-lived stream.
 4. **The default Vitest command has an intermittent shutdown stall.** The same
    185 tests complete under the explicit `forks` pool, but the documented
    `pnpm test` command has also reached the end of execution without emitting
@@ -98,18 +103,23 @@ rapidly turning a prototype into a real application.
    `corpus_grants` and `delegated_results` referencing the conversation without
    cascades. The existing deletion test covers only a plain conversation. A
    profile conversation can therefore fail to delete, and deleting a running
-   conversation is not explicitly handled.
+   conversation is not explicitly handled. **Resolved 2026-07-22:** deletion
+   removes delegated results, corpus sources, and grants in one transaction;
+   an active run is aborted and detached before deletion.
 2. **Run context is global while the runtime model is per conversation.**
    `PiAgentRuntime` permits agents/runs for multiple conversations but stores one
    `activeRunContext`; coordinator event routing also reads that singleton.
    Concurrent turns, or switching conversations and starting another turn,
    can misattribute document ids, patch origins, profile events, or delegated
    results. The near-term product should either enforce one foreground run
-   globally or make every tool/event path explicitly run-scoped.
+   globally or make every tool/event path explicitly run-scoped. **Resolved
+   2026-07-22 (near-term invariant):** Texeris now rejects all overlapping
+   foreground turns and detaches the current run before a project switch.
 3. **The active-document outline is partially regressed.** Chat correctly
    builds scopes with the active document id, but `startTurn` refreshes the
    outline without that id and can reset the scope picker to the main
-   document’s headings after a send.
+   document’s headings after a send. **Resolved 2026-07-22:** the refresh keeps
+   the active document id, with an Electron smoke covering the non-main case.
 4. **Corpus “snapshot” semantics are inconsistent.** Converted derivatives are
    cached, but every later read re-hashes the original absolute path and fails
    if the source moved, disappeared, or changed. This is a linked source, not an

@@ -263,7 +263,7 @@ export default function ChatPanel({
         return;
       }
       try {
-        setHeadings(await window.texeris.doc.outline());
+        setHeadings(await window.texeris.doc.outline(documentId ?? undefined));
         // Echo the user's message immediately — the run may take a while.
         setMessages((m) => [...m, { seq: -Date.now(), role: 'user', text: turn.text }]);
         await window.texeris.chat.startTurn({ conversationId, ...turn });

@@ -193,3 +193,12 @@ uses the proven `forks` pool by default, and the documented test command exits
 cleanly (185 passed, 2 conditional skips). The aggregate run exposed a separate
 restart race in `smoke.mjs`: CDP connected before the preload bridge was ready.
 The smoke now waits for that bridge and its restart-survival path passes.
+
+**codex, 2026-07-22** — completed the next G0 reliability slice: smoke commands
+are named (`smoke:offline`, `smoke:main`, `smoke:platform`) and the aggregate
+runner emits per-attempt plus JSON summary records; Linux CI added for install,
+typecheck, tests, build, Pandoc preparation, Linux packaging, and packaged
+resource inspection. Conversation deletion now removes profile grants/sources
+and delegations transactionally; active runs are detached before deletion or a
+project swap. Only one foreground agent turn is permitted globally. Fixed the
+chat outline refresh to preserve the active non-main document; EU3 covers it.
