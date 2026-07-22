@@ -11,6 +11,7 @@ import {
 import { RevisionService } from './revision';
 import { UiStateService } from './uiState';
 import { seedWelcomeDocument } from './welcome';
+import { reconcileImageAssetsBestEffort } from './assets';
 
 /**
  * Project service (plan §4.8, §7.1): a project is a user folder with a
@@ -131,6 +132,9 @@ export function openProject(root: string): ProjectContext {
     cleanOrphanTmpFiles(path.dirname(path.join(root, doc.path)));
     revisions.importExternalChange(doc.id);
   }
+  // Interrupted image uploads and externally removed references are
+  // reconciled after canonical files have been imported.
+  reconcileImageAssetsBestEffort(root, db);
   return ctx;
 }
 

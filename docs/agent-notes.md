@@ -134,3 +134,9 @@ DOCX: Pandoc extracts embedded media to project-relative per-document assets;
 the rendered editor preserves/displays images and captions through a constrained
 `texeris-asset:` protocol; DOCX export re-embeds them. The real document passes
 import → schema/roundtrip → export with media intact.
+
+**codex, 2026-07-22** — image authoring completed on top of the interchange
+pipeline: raster paste/drag works in rendered and raw modes via main-owned,
+hashed project assets; selected rendered images expose alt text and captions.
+Revision-aware reconciliation hides deleted-but-restorable media and removes
+true orphans. Typecheck and 170 tests pass.

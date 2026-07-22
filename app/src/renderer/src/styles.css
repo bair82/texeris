@@ -156,6 +156,11 @@ button {
   height: auto;
 }
 
+.imported-image.ProseMirror-selectednode img {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .imported-image-caption {
   color: var(--muted-text);
   font-size: 0.88em;
@@ -738,6 +743,30 @@ body.col-resizing {
   padding: 3px 8px;
   font-size: 12px;
   width: 200px;
+}
+
+.toolbar-image-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.toolbar-image-form label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolbar-image-form input {
+  width: 150px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 3px 7px;
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 12px;
 }
 
 /* ------------------------------ search panel ------------------------------ */

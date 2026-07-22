@@ -18,6 +18,7 @@ import {
   CheckpointListRequestSchema,
   CheckpointRestoreRequestSchema,
   DocChannels,
+  DocAddImageRequestSchema,
   DocCommitRequestSchema,
   DocCreateRequestSchema,
   DocGetTextRequestSchema,
@@ -73,6 +74,7 @@ import {
   setMainDocument,
   trashDocument,
 } from './services/documents';
+import { addImageAsset } from './services/assets';
 import { createDocument, ensureDocument } from './services/project';
 import { ProfileBeginRequestSchema, ProfileChannels } from '../shared/profile-types';
 import type { CorpusService } from './services/corpus';
@@ -351,6 +353,12 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   ipcMain.handle(DocChannels.duplicate, (_event, raw: unknown) => {
     const req = Value.Decode(DocIdRequestSchema, raw);
     return duplicateDocument(deps.requireProject(), req.documentId);
+  });
+
+  ipcMain.handle(DocChannels.addImage, (_event, raw: unknown) => {
+    const req = Value.Decode(DocAddImageRequestSchema, raw);
+    const project = deps.requireProject();
+    return addImageAsset(project.root, project.db, req);
   });
 
   ipcMain.handle(DocChannels.importDialog, async (event) => {

@@ -104,6 +104,18 @@ describe('trashDocument', () => {
     expect(ctx.revisions.getTextAt(id, 1)).toBe('text\n');
   });
 
+  it('hides document assets while trashed and restores them with the document', () => {
+    const relative = 'assets/draft/media/figure.png';
+    fs.mkdirSync(path.dirname(path.join(root, relative)), { recursive: true });
+    fs.writeFileSync(path.join(root, relative), 'image');
+    const id = makeDoc('draft.md', `![Figure](${relative})\n`);
+    trashDocument(ctx, id);
+    expect(fs.existsSync(path.join(root, relative))).toBe(false);
+    expect(fs.existsSync(path.join(root, '.texeris', 'asset-trash', relative))).toBe(true);
+    restoreDocument(ctx, id);
+    expect(fs.existsSync(path.join(root, relative))).toBe(true);
+  });
+
   it('refuses the main document and double-trashing', () => {
     expect(() => trashDocument(ctx, mainId)).toThrow(/main document/);
     const id = makeDoc('draft.md');
@@ -296,7 +308,10 @@ describe('restoreDocument', () => {
 
 describe('deleteTrashedDocument', () => {
   it('removes the row, history, checkpoints, patches, and the trash file', () => {
-    const id = makeDoc('draft.md', 'text\n');
+    const asset = 'assets/draft/media/figure.png';
+    fs.mkdirSync(path.dirname(path.join(root, asset)), { recursive: true });
+    fs.writeFileSync(path.join(root, asset), 'image');
+    const id = makeDoc('draft.md', `text\n\n![Figure](${asset})\n`);
     new CheckpointService(ctx.db, ctx.revisions).create(id, 'before the end');
     const proposed = new PatchService(ctx.db, ctx.revisions).propose(
       {
@@ -332,6 +347,7 @@ describe('deleteTrashedDocument', () => {
       expect((ctx.db.prepare(orphanQuery).get() as { n: number }).n).toBe(0);
     }
     expect(fs.existsSync(path.join(root, '.texeris', 'trash', `${id}.md`))).toBe(false);
+    expect(fs.existsSync(path.join(root, '.texeris', 'asset-trash', asset))).toBe(false);
   });
 
   it('refuses to delete a live document', () => {

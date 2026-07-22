@@ -5,6 +5,7 @@
  *  2. switching rendered → raw → rendered creates NO revision
  *  3. typing in raw mode coalesces into the same sitting's revision
  *  4. restart → content and full revision history intact
+ *  5. pasted image → project asset + editable alt/caption → restart intact
  *
  * Usage: pnpm build first, then: node scripts/smoke-editor.mjs
  */
@@ -209,7 +210,46 @@ try {
     `revision ${afterSwitch.revision}, want ${baseRevision + 1}`,
   );
 
-  // 4. restart → content + history intact
+  // Paste a real 1x1 PNG through the DOM path used by clipboard images.
+  const pasted = await evaluate(cdp, `
+    (() => {
+      const base64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+      const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([bytes], 'smoke-figure.png', { type: 'image/png' }));
+      return document.querySelector('.tiptap-rendered').dispatchEvent(
+        new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }),
+      );
+    })()
+  `);
+  check('image paste was handled by the editor', pasted === false);
+  await waitFor(cdp, `!!document.querySelector('.imported-image img')`, 'pasted image never rendered');
+  await waitFor(cdp, `!!document.querySelector('[aria-label="Image alt text"]')`, 'image metadata controls never appeared');
+  await evaluate(cdp, `
+    (() => {
+      const change = (selector, value) => {
+        const input = document.querySelector(selector);
+        const previous = input.value;
+        input.value = value;
+        input._valueTracker?.setValue(previous);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+      change('[aria-label="Image alt text"]', 'A tiny test figure');
+      change('[aria-label="Image caption"]', 'Smoke caption');
+      return true;
+    })()
+  `);
+  await sleep(6500);
+  const afterImage = await evaluate(cdp, 'window.texeris.doc.getText()');
+  check(
+    'image alt text and caption committed canonically',
+    afterImage.text.includes('alt="A tiny test figure"') &&
+      afterImage.text.includes('<figcaption>Smoke caption</figcaption>') &&
+      /assets\/manuscript\/media\/smoke-figure-[a-f0-9]{12}\.png/.test(afterImage.text),
+    afterImage.text.slice(-300),
+  );
+
+  // 5. restart → content + history intact
   app.proc.kill('SIGTERM');
   await sleep(1000);
   app = await launchApp(projectDir);
@@ -219,8 +259,11 @@ try {
   const afterRestart = await evaluate(cdp, 'window.texeris.doc.getText()');
   check(
     'content survives restart',
-    afterRestart.text.includes('Typed by the smoke test.') && afterRestart.text.includes('Raw edit.'),
+    afterRestart.text.includes('Typed by the smoke test.') &&
+      afterRestart.text.includes('Raw edit.') &&
+      afterRestart.text.includes('Smoke caption'),
   );
+  await waitFor(cdp, `!!document.querySelector('.imported-image img')`, 'image did not render after restart');
   check(
     'revision history survives restart',
     afterRestart.revision === baseRevision + 1,

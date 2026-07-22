@@ -35,6 +35,19 @@ export const DocCreateRequestSchema = Type.Object({
 });
 export type DocCreateRequest = Static<typeof DocCreateRequestSchema>;
 
+export const DocAddImageRequestSchema = Type.Object({
+  documentId: Type.String(),
+  sourceName: Type.String({ minLength: 1, maxLength: 255 }),
+  mediaType: Type.String({ minLength: 1, maxLength: 64 }),
+  dataBase64: Type.String({ minLength: 1, maxLength: 28_000_000 }),
+});
+export type DocAddImageRequest = Static<typeof DocAddImageRequestSchema>;
+
+export interface AddedImageAsset {
+  path: string;
+  alt: string;
+}
+
 export interface DocumentImportResult {
   id: string;
   path: string;
@@ -125,6 +138,7 @@ export const DocChannels = {
   rename: 'texeris:doc-rename',
   trash: 'texeris:doc-trash',
   duplicate: 'texeris:doc-duplicate',
+  addImage: 'texeris:doc-add-image',
   importDialog: 'texeris:doc-import-dialog',
   exportDialog: 'texeris:doc-export-dialog',
   setMain: 'texeris:doc-set-main',

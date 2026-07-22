@@ -497,6 +497,7 @@ Example names:
 - Preserve responsive and predictable cursor, selection, keyboard, composition, undo, and redo behaviour in both modes.
 - Support a defined Markdown dialect.
 - Support headings, lists, emphasis, links, quotations, code where useful, tables, footnotes, and citation markers.
+- Support pasting and dragging common raster images into project-owned assets, with editable alt text and optional captions; deleting an image must not strand public asset files or break revision restore.
 - Provide undo and redo.
 - Search and replace.
 - Navigate by headings.

@@ -1267,6 +1267,14 @@ in canonical Markdown. The sandboxed renderer loads only allowlisted image
 extensions beneath the active project root through the `texeris-asset:`
 protocol; traversal and arbitrary filesystem URLs are rejected. Export gives
 Pandoc the project root as its resource path so those images are re-embedded.
+Paste and drag/drop use the same layout: the renderer sends validated image
+bytes over the narrow preload bridge, the main process writes a content-hashed
+asset, and the editor inserts only its project-relative reference. Alt text and
+captions are image-node attributes serialized into controlled HTML. Asset
+reconciliation runs after canonical revisions and at project open: current
+references stay public, files needed only by an older revision move to hidden
+`.texeris/asset-trash/`, and files referenced by no actual revision are
+removed. Restoring a revision moves its assets back before they are rendered.
 
 PDF is a distinct, lower-fidelity case. It is ingested as extracted text via a
 dedicated PDF extractor and is labelled accordingly; Texeris does not present

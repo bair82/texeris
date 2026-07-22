@@ -5,6 +5,7 @@ import { minimalSplice } from '../../shared/text-splice';
 import { atomicWriteText, hashText } from './document';
 import type { ProjectContext } from './project';
 import { convertToMarkdown, formatForPath, writePandocExport, type InterchangeFormat } from './pandoc';
+import { reconcileImageAssetsBestEffort } from './assets';
 
 /**
  * Document management (M1.5 EU3): rename (ids never change), trash (file
@@ -141,6 +142,7 @@ export function trashDocument(ctx: ProjectContext, documentId: string): void {
     fs.renameSync(to, from);
     throw err;
   }
+  reconcileImageAssetsBestEffort(ctx.root, ctx.db);
 }
 
 /** Duplicate under "<name> copy.md" (numbered when taken), new id + history. */
@@ -370,6 +372,7 @@ export function restoreDocument(ctx: ProjectContext, documentId: string): Docume
     fs.renameSync(to, trashFile);
     throw err;
   }
+  reconcileImageAssetsBestEffort(ctx.root, ctx.db);
   return { id: row.id, path: target, title: titleFor(target) };
 }
 
@@ -417,4 +420,5 @@ export function deleteTrashedDocument(ctx: ProjectContext, documentId: string): 
     }
     throw err;
   }
+  reconcileImageAssetsBestEffort(ctx.root, ctx.db);
 }

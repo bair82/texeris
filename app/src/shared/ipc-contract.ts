@@ -9,6 +9,7 @@ import type {
 } from './chat-types';
 import type {
   DocCommitRequest,
+  AddedImageAsset,
   DocEvent,
   DocText,
   DocumentExportResult,
@@ -82,6 +83,12 @@ export interface TexerisApi {
     rename(documentId: string, name: string): Promise<{ id: string; path: string; title: string }>;
     trash(documentId: string): Promise<{ trashed: boolean }>;
     duplicate(documentId: string): Promise<{ id: string; path: string; title: string }>;
+    addImage(request: {
+      documentId: string;
+      sourceName: string;
+      mediaType: string;
+      dataBase64: string;
+    }): Promise<AddedImageAsset>;
     importDialog(): Promise<DocumentImportResult | null>;
     exportDialog(documentId: string): Promise<DocumentExportResult | null>;
     setMain(documentId: string): Promise<ProjectInfo>;

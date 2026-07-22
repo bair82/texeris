@@ -13,6 +13,7 @@ import {
   summarizeSplices,
 } from '../../shared/text-splice';
 import { atomicWriteText, hashText } from './document';
+import { reconcileImageAssetsBestEffort } from './assets';
 
 /** Full-text snapshot is stored on every SNAPSHOT_EVERY-th revision (§7.2). */
 export const SNAPSHOT_EVERY = 25;
@@ -91,10 +92,13 @@ export class RevisionService {
     if (meta.actor === 'user' && meta.source.kind === 'typing') {
       const amended = this.tryAmendTip(doc, newText, splices, meta);
       if (amended !== null) {
+        reconcileImageAssetsBestEffort(this.projectRoot, this.db);
         return amended;
       }
     }
-    return this.commitInternal(doc, baseText, splices, meta, { writeFile: true });
+    const seq = this.commitInternal(doc, baseText, splices, meta, { writeFile: true });
+    reconcileImageAssetsBestEffort(this.projectRoot, this.db);
+    return seq;
   }
 
   /**
@@ -216,6 +220,7 @@ export class RevisionService {
       },
       { writeFile: false },
     );
+    reconcileImageAssetsBestEffort(this.projectRoot, this.db);
     return { kind: 'imported', seq };
   }
 

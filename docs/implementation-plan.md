@@ -602,6 +602,20 @@ used to write the outgoing project's blob into the incoming project's db.
 *DoD:* `smoke-eu7.mjs`: trash → restore (reopens, trash empty) → trash →
 permanent delete; a freshly created project opens on welcome.md.
 
+**Image authoring.** ✅ done 2026-07-22 (codex). Paste and drag/drop work in
+both rendered and raw editor modes through a typed, main-process-owned asset
+ingest path (PNG/JPEG/GIF/WebP/AVIF, 20 MB limit, content-hash deduplication).
+Rendered image selection exposes alt-text and optional-caption fields; the
+existing Markdown/controlled-HTML bridge and `texeris-asset:` protocol keep
+the canonical reference portable and the preview sandboxed. Revision-time and
+startup reconciliation removes true orphans while hiding files used only by
+older revisions in `.texeris/asset-trash/`; revision/document restore brings
+them back, and permanent document deletion prunes them. Unit tests cover
+ingest, deduplication, validation, orphan cleanup, revision recovery, and
+document trash/restore.
+`smoke-editor.mjs` also pastes a real PNG, edits its alt text/caption, and
+verifies the canonical figure and rendered image survive restart.
+
 ### Post-M1.5 backlog (owner review 2026-07-21, ranked)
 
 1. **App-level spellchecker**: native is unreliable (PR #2); codex's
@@ -609,8 +623,6 @@ permanent delete; a freshly created project opens on welcome.md.
    dictionary-distribution decision for the language picker.
 2. **Citations UI** (M2 core): CSL JSON library per project, insert-
    citation picker with search, bibliography rendering.
-4. **Images/figures**: paste/drag image → copy to project assets + link;
-   render in rendered mode.
 5. **Math (KaTeX)**: inline/block render + Markdown round trip.
 6. **Section manipulation**: outline fold + move-section up/down.
 7. **Undo story beyond per-session**: designed answer (revision-based),

@@ -28,6 +28,34 @@ function countWords(text: string): number {
   return count;
 }
 
+function fileBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error('could not read image'));
+    reader.onload = () => {
+      const result = String(reader.result ?? '');
+      const comma = result.indexOf(',');
+      if (comma < 0) reject(new Error('could not encode image'));
+      else resolve(result.slice(comma + 1));
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function imageMediaType(file: File): string {
+  if (file.type) return file.type;
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  const types: Record<string, string> = {
+    avif: 'image/avif',
+    gif: 'image/gif',
+    jpeg: 'image/jpeg',
+    jpg: 'image/jpeg',
+    png: 'image/png',
+    webp: 'image/webp',
+  };
+  return types[extension ?? ''] ?? '';
+}
+
 interface EditorNotice {
   text: string;
   actionLabel?: string;
@@ -155,6 +183,19 @@ export default function EditorRegion({
         onDirty: () => {
           dirtyRef.current = true;
           setSaveState('dirty');
+        },
+        uploadImage: async (file: File) => {
+          const mediaType = imageMediaType(file);
+          const sourceName = file.name || `pasted-image.${mediaType.split('/')[1] || 'png'}`;
+          return window.texeris.doc.addImage({
+            documentId,
+            sourceName,
+            mediaType,
+            dataBase64: await fileBase64(file),
+          });
+        },
+        onImageError: (error: unknown) => {
+          setNotice({ text: `image could not be added: ${error instanceof Error ? error.message : String(error)}` });
         },
       };
       const session = forMode === 'rendered' ? new RenderedSession(Options) : new RawSession(Options);
