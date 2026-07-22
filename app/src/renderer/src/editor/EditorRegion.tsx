@@ -316,6 +316,11 @@ export default function EditorRegion({
       toggleMode: () =>
         switchModeRef.current(modeRef.current === 'rendered' ? 'raw' : 'rendered'),
       flush: () => sessionRef.current?.flush(),
+      contextAt: (x, y) => ({
+        kind: 'editor',
+        ...(sessionRef.current?.prepareContextAt(x, y) ?? { image: false, canUndo: false, canRedo: false }),
+      }),
+      contextAction: (action) => sessionRef.current?.contextAction(action) ?? false,
     });
   }, []);
 

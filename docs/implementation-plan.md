@@ -532,7 +532,8 @@ Native Chromium underlines are unreliable in rendered mode and cannot remain
 stable in raw CodeMirror mode: CM redraws text nodes and destroys the native
 marker (confirmed by a brief underline flash during a real-key test).
 Raw mode therefore needs an application-level checker with CM decorations.
-Right-click suggestion menus are a later follow-up.
+Native right-click suggestions and Add to Dictionary are available whenever
+Chromium reports a misspelling, but do not solve the unreliable-underline gap.
 Word count + selection count (words/chars) in the editor status bar,
 polled at 500 ms; Markdown syntax tokens don't count as words.
 *DoD:* `smoke-eu4.mjs`: live count while typing, select-all selection
@@ -615,6 +616,16 @@ ingest, deduplication, validation, orphan cleanup, revision recovery, and
 document trash/restore.
 `smoke-editor.mjs` also pastes a real PNG, edits its alt text/caption, and
 verifies the canonical figure and rendered image survive restart.
+
+**Native context menus.** ✅ done 2026-07-22 (codex). A typed renderer/main
+handshake describes the element under a real right-click while Electron owns
+the platform menu and privileged edit, spelling, link, and image-copy actions.
+Renderer-routed actions cover editor history and image details/deletion,
+document open/rename/duplicate/reveal/set-main/trash, conversation
+open/rename/delete, and message copy. Document and conversation ellipsis
+buttons open the same native menu definitions. Main-process unit tests cover
+menu policy and action routing; `smoke-eu5.mjs` verifies both a real editor
+right-click and a document launcher produce the expected native labels.
 
 ### Post-M1.5 backlog (owner review 2026-07-21, ranked)
 

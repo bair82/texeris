@@ -89,6 +89,8 @@ export interface EditorCommands {
   toggleHistory(): void;
   toggleMode(): void;
   flush(): void;
+  contextAt(x: number, y: number): import('../../../shared/context-menu-types').ContextDescriptor;
+  contextAction(action: import('../../../shared/context-menu-types').ContextAction): boolean;
 }
 
 let editorCommands: EditorCommands | null = null;

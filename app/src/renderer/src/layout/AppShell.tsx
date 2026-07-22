@@ -16,6 +16,7 @@ import CommandPalette from './CommandPalette';
 import ProjectNav from './ProjectNav';
 import ShortcutsOverlay from './ShortcutsOverlay';
 import TrashDialog from './TrashDialog';
+import { describeContextAt, dispatchContextAction } from '../contextMenuBridge';
 
 const DEFAULT_NAV_WIDTH = 232;
 const DEFAULT_SIDE_WIDTH = 400;
@@ -329,6 +330,20 @@ export default function AppShell({
 
   // App-menu commands from main.
   useEffect(() => window.texeris.onMenuCommand(runCommand), [runCommand]);
+
+  useEffect(() => {
+    const offDescribe = window.texeris.contextMenu.onDescribe((request) => {
+      void window.texeris.contextMenu.reply(
+        request.requestId,
+        describeContextAt(request.x, request.y),
+      );
+    });
+    const offAction = window.texeris.contextMenu.onAction((event) => {
+      if (event.context.kind === 'editor' && getEditorCommands()?.contextAction(event.action)) return;
+      dispatchContextAction(event);
+    });
+    return () => { offDescribe(); offAction(); };
+  }, []);
 
   // Ctrl+K / Ctrl+P fallback for environments where menu accelerators don't
   // fire (menu accelerators win when both work — the key never reaches us).

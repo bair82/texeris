@@ -12,6 +12,7 @@ import type {
 import type { HeadingInfo } from '../../shared/doc-types';
 import { getEditorSelection, registerChatCommands } from './editor/editorBridge';
 import MarkdownView from './MarkdownView';
+import { registerContextActionHandler, showContextMenu } from './contextMenuBridge';
 
 interface StreamingState {
   runId: string;
@@ -182,6 +183,32 @@ export default function ChatPanel({
     }
   };
 
+  useEffect(() => registerContextActionHandler((event) => {
+    if (event.context.kind === 'conversation') {
+      const context = event.context;
+      const conversation = conversations.find((item) => item.id === context.conversationId);
+      if (!conversation) return false;
+      if (event.action === 'conversation:open') {
+        void switchConversation(conversation.id); setPickerOpen(false);
+      } else if (event.action === 'conversation:rename') {
+        setPickerOpen(true); setRenamingId(conversation.id); setRenameText(conversation.title);
+      } else if (event.action === 'conversation:delete') {
+        setPickerOpen(true); setConfirmDeleteId(conversation.id);
+      } else return false;
+      return true;
+    }
+    if (event.context.kind === 'message' && event.action === 'message:copy') {
+      const context = event.context;
+      const message = messages.find((item) => item.seq === context.seq);
+      if (!message) return false;
+      void navigator.clipboard.writeText(message.text);
+      setCopiedSeq(message.seq);
+      setTimeout(() => setCopiedSeq((seq) => seq === message.seq ? null : seq), 1200);
+      return true;
+    }
+    return false;
+  }), [conversations, messages, switchConversation]);
+
   useEffect(() => {
     return window.texeris.chat.onEvent((event: NormalizedAgentEvent) => {
       if (event.type === 'run_start') {
@@ -337,7 +364,12 @@ export default function ChatPanel({
             <div className="conv-picker">
               <ul className="conv-list">
                 {conversations.map((c) => (
-                  <li key={c.id} className={c.id === conversationId ? 'active' : ''}>
+                  <li
+                    key={c.id}
+                    className={c.id === conversationId ? 'active' : ''}
+                    data-context-conversation-id={c.id}
+                    data-context-conversation-active={c.id === conversationId}
+                  >
                     {renamingId === c.id ? (
                       <input
                         autoFocus
@@ -377,20 +409,12 @@ export default function ChatPanel({
                         </button>
                         <button
                           className="conv-row-action"
-                          title="Rename"
-                          onClick={() => {
-                            setRenamingId(c.id);
-                            setRenameText(c.title);
-                          }}
+                          title="Conversation actions"
+                          onClick={(event) => showContextMenu({
+                            kind: 'conversation', conversationId: c.id, active: c.id === conversationId,
+                          }, event.currentTarget)}
                         >
-                          ✎
-                        </button>
-                        <button
-                          className="conv-row-action conv-delete"
-                          title="Delete conversation"
-                          onClick={() => setConfirmDeleteId(c.id)}
-                        >
-                          ×
+                          ⋯
                         </button>
                       </>
                     )}
@@ -457,7 +481,11 @@ export default function ChatPanel({
           </details>
         )}
         {messages.map((m) => (
-          <div key={m.seq} className={`msg msg-${m.role}`}>
+          <div
+            key={m.seq}
+            className={`msg msg-${m.role}`}
+            data-context-message-seq={m.seq}
+          >
             {m.role === 'tool' ? (
               <span className="tool-chip">
                 {m.isError ? '⚠' : '⚙'} {m.toolName}

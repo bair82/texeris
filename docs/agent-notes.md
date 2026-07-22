@@ -140,3 +140,10 @@ pipeline: raster paste/drag works in rendered and raw modes via main-owned,
 hashed project assets; selected rendered images expose alt text and captions.
 Revision-aware reconciliation hides deleted-but-restorable media and removes
 true orphans. Typecheck and 170 tests pass.
+
+**codex, 2026-07-22** — workspace-wide native context menus added through a
+typed renderer/main handshake. Editor/edit/spelling/link/image actions,
+document management, conversation management, and message copy now use
+Electron menus; document/conversation ellipsis buttons share those definitions.
+Menu policy/routing is unit-tested and EU5 checks real right-click + launcher
+menus without trying to drive the OS-owned popup through CDP.

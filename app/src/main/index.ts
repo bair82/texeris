@@ -21,6 +21,7 @@ import { watchProjectFiles } from './services/watcher';
 import type { Models } from '@earendil-works/pi-ai';
 import { CorpusService } from './services/corpus';
 import { WritingProfileService } from './services/profile';
+import { attachContextMenu, registerContextMenuHandlers } from './contextMenu';
 
 /** Pi requires Node >= 22.19; assert the Electron-bundled Node at startup. */
 const MIN_NODE_VERSION = [22, 19, 0] as const;
@@ -100,6 +101,7 @@ function createWindow(): void {
       spellcheck: true,
     },
   });
+  attachContextMenu(win);
 
   if (process.env.TEXERIS_SPELLCHECK_DIAGNOSTIC) {
     win.webContents.on('context-menu', (_event, params) => {
@@ -135,6 +137,7 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   assertNodeVersion();
+  registerContextMenuHandlers();
 
   // Faux runs are deliberately disposable.  They must never inherit a
   // person's workspace config or recents merely because a smoke command

@@ -364,44 +364,6 @@ body.col-resizing {
   position: relative;
 }
 
-.nav-menu-wrap:has(.nav-menu) .nav-file-menu-btn {
-  opacity: 1;
-}
-
-.nav-menu {
-  position: absolute;
-  right: 0;
-  top: 24px;
-  z-index: 20;
-  min-width: 168px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  padding: 4px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-}
-
-.nav-menu button {
-  display: block;
-  width: 100%;
-  padding: 5px 10px;
-  background: none;
-  border: none;
-  border-radius: 5px;
-  color: var(--text);
-  font-size: 12.5px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.nav-menu button:hover {
-  background: rgba(255, 255, 255, 0.07);
-}
-
-.nav-menu .nav-menu-danger {
-  color: var(--red);
-}
-
 .nav-rename-form {
   flex: 1;
   padding: 2px 0;
@@ -1268,10 +1230,6 @@ body.col-resizing {
 .conv-row-action:hover {
   color: var(--text);
   background: rgba(255, 255, 255, 0.08);
-}
-
-.conv-delete:hover {
-  color: var(--red);
 }
 
 .conv-rename-input {

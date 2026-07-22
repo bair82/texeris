@@ -18,6 +18,7 @@ import { UiChannels } from '../shared/ui-types';
 import { ProjectChannels, type ProjectInfo } from '../shared/project-types';
 import { HistoryChannels } from '../shared/doc-types';
 import { ProfileChannels } from '../shared/profile-types';
+import { ContextMenuChannels, type ContextActionEvent, type ContextDescribeRequest } from '../shared/context-menu-types';
 
 const api: TexerisApi = {
   async getAppInfo() {
@@ -33,6 +34,20 @@ const api: TexerisApi = {
     return () => {
       ipcRenderer.removeListener(MenuCommandChannel, listener);
     };
+  },
+  contextMenu: {
+    onDescribe: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => callback(payload as ContextDescribeRequest);
+      ipcRenderer.on(ContextMenuChannels.describe, listener);
+      return () => ipcRenderer.removeListener(ContextMenuChannels.describe, listener);
+    },
+    reply: (requestId, context) => ipcRenderer.invoke(ContextMenuChannels.reply, { requestId, context }),
+    show: (context, x, y) => ipcRenderer.invoke(ContextMenuChannels.show, { context, x, y }),
+    onAction: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => callback(payload as ContextActionEvent);
+      ipcRenderer.on(ContextMenuChannels.action, listener);
+      return () => ipcRenderer.removeListener(ContextMenuChannels.action, listener);
+    },
   },
   chat: {
     getOrCreateConversation: () =>

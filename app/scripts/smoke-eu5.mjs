@@ -1,6 +1,7 @@
 /**
- * EU5 smoke (keyboard UX): Ctrl+K opens the command palette, filtering
- * narrows commands, Enter runs one (find panel, focus mode, mode toggle).
+ * EU5 smoke (keyboard + native menu UX): Ctrl+K opens the command palette,
+ * filtering narrows commands, Enter runs one, and editor/document context
+ * menu entry points reach Electron's native menu builder.
  *
  * Usage: pnpm build first, then: node scripts/smoke-eu5.mjs
  */
@@ -14,6 +15,7 @@ const ELECTRON = new URL('../node_modules/electron/dist/electron', import.meta.u
 const APP_DIR = new URL('..', import.meta.url).pathname;
 
 let failures = 0;
+let stderr = '';
 function check(label, condition, detail = '') {
   if (condition) {
     console.log(`ok   ${label}`);
@@ -34,13 +36,13 @@ try {
       TEXERIS_PROJECT_DIR: projectDir,
       ELECTRON_ENABLE_LOGGING: '1',
       TEXERIS_SMOKE: '1',
+      TEXERIS_CONTEXT_MENU_DIAGNOSTIC: '1',
     },
   });
   const wsUrl = await new Promise((resolve, reject) => {
-    let buf = '';
     proc.stderr.on('data', (d) => {
-      buf += d;
-      const m = buf.match(/DevTools listening on (ws:\/\/\S+)/);
+      stderr += d;
+      const m = stderr.match(/DevTools listening on (ws:\/\/\S+)/);
       if (m) resolve(m[1]);
     });
     proc.on('exit', () => reject(new Error('electron exited early')));
@@ -70,12 +72,15 @@ try {
       pending.delete(msg.id);
     }
   };
-  const evaluate = async (expression) => {
+  const send = (method, params = {}) => {
     const id = ++msgId;
-    const res = await new Promise((resolve, reject) => {
-      pending.set(id, (msg) => (msg.error ? reject(new Error(msg.error.message)) : resolve(msg.result)));
-      ws.send(JSON.stringify({ id, method: 'Runtime.evaluate', params: { expression, awaitPromise: true, returnByValue: true } }));
+    return new Promise((resolve, reject) => {
+      pending.set(id, (msg) => msg.error ? reject(new Error(msg.error.message)) : resolve(msg.result));
+      ws.send(JSON.stringify({ id, method, params }));
     });
+  };
+  const evaluate = async (expression) => {
+    const res = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
     if (res.exceptionDetails) throw new Error(JSON.stringify(res.exceptionDetails));
     return res.result.value;
   };
@@ -143,6 +148,29 @@ try {
   await runPaletteCommand('toggle rendered');
   await waitFor(`!!document.querySelector('.cm-raw')`, 'raw mode never mounted');
   check('mode toggle command switches to raw', true);
+
+  // Native menu handshake: a real CDP right click reaches Electron main,
+  // renderer describes the raw editor target, and main builds its labels.
+  const point = await evaluate(`(() => { const r = document.querySelector('.cm-raw').getBoundingClientRect(); return { x: r.left + 80, y: r.top + 80 }; })()`);
+  await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: point.x, y: point.y, button: 'right', clickCount: 1 });
+  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: point.x, y: point.y, button: 'right', clickCount: 1 });
+  await sleep(500);
+  check(
+    'right-click builds the native editor menu',
+    stderr.includes('[context-menu-diagnostic]') && stderr.includes('"kind":"editor"') && stderr.includes('"Paste"'),
+    stderr.split('\n').filter((line) => line.includes('context-menu-diagnostic')).at(-1) ?? '',
+  );
+  await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
+  await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' });
+
+  await evaluate(`document.querySelector('.nav-file-menu-btn').click(); true`);
+  await sleep(300);
+  check(
+    'document ellipsis uses the native document menu',
+    stderr.includes('"kind":"document"') && stderr.includes('"Rename…"'),
+  );
+  await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
+  await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' });
 
   // shortcuts overlay opens via palette and closes on Esc
   await runPaletteCommand('keyboard shortcuts');

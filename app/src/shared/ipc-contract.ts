@@ -28,6 +28,7 @@ import type { CheckpointInfo, DocumentInfo, RevisionInfo } from './domain-types'
 import type { ProjectInfo } from './project-types';
 import type { ProfileBeginRequest } from './profile-types';
 import type { PatchStyleMode } from './settings-types';
+import type { ContextActionEvent, ContextDescribeRequest, ContextDescriptor } from './context-menu-types';
 
 /**
  * IPC contract shared by main, preload, and renderer.
@@ -53,6 +54,12 @@ export interface TexerisApi {
   getAppInfo(): Promise<AppInfo>;
   /** Subscribe to app-menu commands; returns an unsubscribe fn. */
   onMenuCommand(callback: (commandId: string) => void): () => void;
+  contextMenu: {
+    onDescribe(callback: (request: ContextDescribeRequest) => void): () => void;
+    reply(requestId: string, context: ContextDescriptor): Promise<{ shown: boolean }>;
+    show(context: ContextDescriptor, x: number, y: number): Promise<{ shown: boolean }>;
+    onAction(callback: (event: ContextActionEvent) => void): () => void;
+  };
   chat: {
     getOrCreateConversation(): Promise<{ conversationId: string }>;
     newConversation(): Promise<{ conversationId: string }>;

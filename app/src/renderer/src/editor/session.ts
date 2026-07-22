@@ -23,7 +23,7 @@ import {
   lineNumbers,
 } from '@codemirror/view';
 import { EditorState, StateEffect, StateField } from '@codemirror/state';
-import { defaultKeymap, history, historyKeymap, redo as cmRedo, undo as cmUndo } from '@codemirror/commands';
+import { defaultKeymap, history, historyKeymap, redo as cmRedo, redoDepth, undo as cmUndo, undoDepth } from '@codemirror/commands';
 import { markdown as markdownLang } from '@codemirror/lang-markdown';
 import type { TextSplice } from '../../../shared/domain-types';
 import { ChangeAccumulator } from './accumulator';
@@ -74,6 +74,8 @@ export interface EditorSession {
   undo(): boolean;
   redo(): boolean;
   focus(): void;
+  prepareContextAt(x: number, y: number): { image: boolean; canUndo: boolean; canRedo: boolean };
+  contextAction(action: string): boolean;
 }
 
 export interface SessionOptions {
@@ -483,6 +485,38 @@ export class RenderedSession implements EditorSession {
   focus(): void {
     this.editor.commands.focus();
   }
+
+  prepareContextAt(x: number, y: number) {
+    const hit = this.editor.view.posAtCoords({ left: x, top: y });
+    let imagePosition: number | null = null;
+    for (const candidate of [hit?.inside, hit?.pos, hit ? hit.pos - 1 : undefined]) {
+      if (candidate !== undefined && candidate >= 0 && this.editor.state.doc.nodeAt(candidate)?.type.name === 'image') {
+        imagePosition = candidate;
+        break;
+      }
+    }
+    if (imagePosition !== null) {
+      this.editor.view.dispatch(
+        this.editor.state.tr.setSelection(NodeSelection.create(this.editor.state.doc, imagePosition)),
+      );
+    }
+    return {
+      image: imagePosition !== null,
+      canUndo: this.editor.can().undo(),
+      canRedo: this.editor.can().redo(),
+    };
+  }
+
+  contextAction(action: string): boolean {
+    if (action === 'editor:undo') return this.undo();
+    if (action === 'editor:redo') return this.redo();
+    if (action === 'editor:image-delete') return this.editor.commands.deleteSelection();
+    if (action === 'editor:image-details') {
+      requestAnimationFrame(() => document.querySelector<HTMLInputElement>('[aria-label="Image alt text"]')?.focus());
+      return true;
+    }
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -776,5 +810,19 @@ export class RawSession implements EditorSession {
 
   focus(): void {
     this.view.focus();
+  }
+
+  prepareContextAt() {
+    return {
+      image: false,
+      canUndo: undoDepth(this.view.state) > 0,
+      canRedo: redoDepth(this.view.state) > 0,
+    };
+  }
+
+  contextAction(action: string): boolean {
+    if (action === 'editor:undo') return this.undo();
+    if (action === 'editor:redo') return this.redo();
+    return false;
   }
 }

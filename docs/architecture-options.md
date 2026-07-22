@@ -393,6 +393,18 @@ type AppRequest =
 
 Validate IPC payloads at runtime. TypeScript types alone do not protect a process boundary.
 
+## 7.5 Native context menus
+
+Electron's main process owns platform context-menu construction. On a native
+`webContents` context event it asks the sandboxed renderer for a narrow typed
+descriptor of the target (generic editor, image, document, conversation, or
+message), validates the reply, and combines it with Electron's trusted edit,
+selection, link, and spelling metadata. Privileged operations such as opening
+external links, replacing misspellings, and copying image pixels remain in the
+main process. Domain actions return as typed renderer events and reuse the
+same handlers as explicit ellipsis launchers. This keeps native behaviour
+without granting the renderer Node or arbitrary menu authority.
+
 ---
 
 ## 8. Project storage model
