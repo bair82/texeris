@@ -7,16 +7,19 @@ import type {
   ModelMode,
   NormalizedAgentEvent,
   UiMessage,
+  DelegationRecord,
 } from '../../shared/chat-types';
 import type { HeadingInfo } from '../../shared/doc-types';
 import { getEditorSelection, registerChatCommands } from './editor/editorBridge';
 import MarkdownView from './MarkdownView';
+import { registerContextActionHandler, showContextMenu } from './contextMenuBridge';
 
 interface StreamingState {
   runId: string;
   text: string;
   thinking: string;
   tools: Array<{ toolCallId: string; toolName: string; isError?: boolean }>;
+  delegations: Array<{ id: string; role: string; status: string; summary: string }>;
 }
 
 interface LastTurn {
@@ -30,11 +33,16 @@ interface ChatPanelProps {
   initialConversationId?: string | null;
   /** Report the active conversation so the shell can persist it. */
   onConversationChange?(conversationId: string): void;
+  /** The document currently shown in the editor is the default chat target. */
+  documentId: string | null;
+  onOpenDocument?(documentId: string): void;
 }
 
 export default function ChatPanel({
   initialConversationId = null,
   onConversationChange,
+  documentId,
+  onOpenDocument,
 }: ChatPanelProps) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationListItem[]>([]);
@@ -44,6 +52,7 @@ export default function ChatPanel({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [runs, setRuns] = useState<AgentRunRecord[]>([]);
+  const [delegations, setDelegations] = useState<DelegationRecord[]>([]);
   const [showUsage, setShowUsage] = useState(false);
   const [headings, setHeadings] = useState<HeadingInfo[]>([]);
   const [mode, setMode] = useState<ModelMode>('fast');
@@ -79,10 +88,18 @@ export default function ChatPanel({
       setConversationId(id);
       setMessages(await window.texeris.chat.listMessages(id));
       setRuns(await window.texeris.chat.listRuns(id));
-      setHeadings(await window.texeris.doc.outline());
+      setDelegations(await window.texeris.chat.listDelegations(id));
+      setHeadings(await window.texeris.doc.outline(documentId ?? undefined));
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Keep the scope menu aligned with the document beside the chat panel.
+  useEffect(() => {
+    if (documentId) {
+      void window.texeris.doc.outline(documentId).then(setHeadings);
+    }
+  }, [documentId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -112,6 +129,7 @@ export default function ChatPanel({
       setConversationId(id);
       setMessages(await window.texeris.chat.listMessages(id));
       setRuns(await window.texeris.chat.listRuns(id));
+      setDelegations(await window.texeris.chat.listDelegations(id));
       setManifest(null);
       setError(null);
       setStreaming(null);
@@ -125,6 +143,7 @@ export default function ChatPanel({
     setConversationId(id);
     setMessages([]);
     setRuns([]);
+    setDelegations([]);
     setManifest(null);
     setError(null);
     await refreshConversations();
@@ -137,8 +156,11 @@ export default function ChatPanel({
       newConversation: () => {
         void newConversation();
       },
+      openConversation: (id) => {
+        void switchConversation(id);
+      },
     });
-  }, [newConversation]);
+  }, [newConversation, switchConversation]);
 
   const submitRename = async () => {
     if (!renamingId) {
@@ -161,10 +183,36 @@ export default function ChatPanel({
     }
   };
 
+  useEffect(() => registerContextActionHandler((event) => {
+    if (event.context.kind === 'conversation') {
+      const context = event.context;
+      const conversation = conversations.find((item) => item.id === context.conversationId);
+      if (!conversation) return false;
+      if (event.action === 'conversation:open') {
+        void switchConversation(conversation.id); setPickerOpen(false);
+      } else if (event.action === 'conversation:rename') {
+        setPickerOpen(true); setRenamingId(conversation.id); setRenameText(conversation.title);
+      } else if (event.action === 'conversation:delete') {
+        setPickerOpen(true); setConfirmDeleteId(conversation.id);
+      } else return false;
+      return true;
+    }
+    if (event.context.kind === 'message' && event.action === 'message:copy') {
+      const context = event.context;
+      const message = messages.find((item) => item.seq === context.seq);
+      if (!message) return false;
+      void navigator.clipboard.writeText(message.text);
+      setCopiedSeq(message.seq);
+      setTimeout(() => setCopiedSeq((seq) => seq === message.seq ? null : seq), 1200);
+      return true;
+    }
+    return false;
+  }), [conversations, messages, switchConversation]);
+
   useEffect(() => {
     return window.texeris.chat.onEvent((event: NormalizedAgentEvent) => {
       if (event.type === 'run_start') {
-        setStreaming({ runId: event.runId, text: '', thinking: '', tools: [] });
+        setStreaming({ runId: event.runId, text: '', thinking: '', tools: [], delegations: [] });
         setError(null);
       } else if (event.type === 'text_delta') {
         setStreaming((s) => (s ? { ...s, text: s.text + event.delta } : s));
@@ -194,10 +242,20 @@ export default function ChatPanel({
         if (conversationId) {
           void window.texeris.chat.listMessages(conversationId).then(setMessages);
           void window.texeris.chat.listRuns(conversationId).then(setRuns);
+          void window.texeris.chat.listDelegations(conversationId).then(setDelegations);
         }
+      } else if (event.type === 'delegation_start' || event.type === 'delegation_end') {
+        setStreaming((s) => {
+          if (!s || s.runId !== event.runId) return s;
+          const next = { id: event.delegationId, role: event.role, status: event.status, summary: event.summary };
+          const found = s.delegations.some((d) => d.id === event.delegationId);
+          return { ...s, delegations: found ? s.delegations.map((d) => d.id === next.id ? next : d) : [...s.delegations, next] };
+        });
+      } else if (event.type === 'profile_artifacts_created') {
+        onOpenDocument?.(event.writingProfileDocumentId);
       }
     });
-  }, [conversationId]);
+  }, [conversationId, onOpenDocument]);
 
   const startTurn = useCallback(
     async (turn: LastTurn) => {
@@ -214,7 +272,7 @@ export default function ChatPanel({
         setError(err instanceof Error ? err.message : String(err));
       }
     },
-    [conversationId, streaming],
+    [conversationId, documentId, streaming],
   );
 
   const send = useCallback(async () => {
@@ -228,12 +286,16 @@ export default function ChatPanel({
         setError('no active editor selection — select some text first');
         return;
       }
-      effectiveScope = { kind: 'selection', ...selection };
+      effectiveScope = { kind: 'selection', documentId: documentId ?? undefined, ...selection };
     }
     const text = input.trim();
     setInput('');
-    await startTurn({ text, mode, scope: effectiveScope });
-  }, [input, mode, scope, startTurn]);
+    await startTurn({
+      text,
+      mode,
+      scope: { ...effectiveScope, documentId: documentId ?? undefined },
+    });
+  }, [documentId, input, mode, scope, startTurn]);
 
   const cancel = useCallback(() => {
     if (streaming) {
@@ -302,7 +364,12 @@ export default function ChatPanel({
             <div className="conv-picker">
               <ul className="conv-list">
                 {conversations.map((c) => (
-                  <li key={c.id} className={c.id === conversationId ? 'active' : ''}>
+                  <li
+                    key={c.id}
+                    className={c.id === conversationId ? 'active' : ''}
+                    data-context-conversation-id={c.id}
+                    data-context-conversation-active={c.id === conversationId}
+                  >
                     {renamingId === c.id ? (
                       <input
                         autoFocus
@@ -342,20 +409,12 @@ export default function ChatPanel({
                         </button>
                         <button
                           className="conv-row-action"
-                          title="Rename"
-                          onClick={() => {
-                            setRenamingId(c.id);
-                            setRenameText(c.title);
-                          }}
+                          title="Conversation actions"
+                          onClick={(event) => showContextMenu({
+                            kind: 'conversation', conversationId: c.id, active: c.id === conversationId,
+                          }, event.currentTarget)}
                         >
-                          ✎
-                        </button>
-                        <button
-                          className="conv-row-action conv-delete"
-                          title="Delete conversation"
-                          onClick={() => setConfirmDeleteId(c.id)}
-                        >
-                          ×
+                          ⋯
                         </button>
                       </>
                     )}
@@ -407,8 +466,26 @@ export default function ChatPanel({
       )}
 
       <div className="chat-messages">
+        {delegations.length > 0 && (
+          <details className="delegation-card delegation-history">
+            <summary>Delegated work ({delegations.length})</summary>
+            {delegations.map((delegation) => (
+              <details key={delegation.id}>
+                <summary>
+                  {delegation.status === 'completed' ? '✓' : delegation.status === 'running' ? '◌' : '⚠'}{' '}
+                  {delegation.role} · {delegation.model}
+                </summary>
+                <p>{delegation.summary ?? delegation.task}</p>
+              </details>
+            ))}
+          </details>
+        )}
         {messages.map((m) => (
-          <div key={m.seq} className={`msg msg-${m.role}`}>
+          <div
+            key={m.seq}
+            className={`msg msg-${m.role}`}
+            data-context-message-seq={m.seq}
+          >
             {m.role === 'tool' ? (
               <span className="tool-chip">
                 {m.isError ? '⚠' : '⚙'} {m.toolName}
@@ -436,6 +513,12 @@ export default function ChatPanel({
         ))}
         {streaming && (
           <div className="msg msg-assistant streaming">
+            {streaming.delegations.map((delegation) => (
+              <details className="delegation-card" key={delegation.id}>
+                <summary>{delegation.status === 'running' ? '◌' : delegation.status === 'completed' ? '✓' : '⚠'} {delegation.role}</summary>
+                <p>{delegation.summary}</p>
+              </details>
+            ))}
             {streaming.thinking && (
               <details className="thinking">
                 <summary>Reasoning</summary>

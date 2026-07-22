@@ -4,7 +4,7 @@
 **Audience:** Product owner, designer, developer, early testers  
 **Primary platforms:** macOS and Linux  
 **Initial deployment:** Personal, local desktop application  
-**Working title:** Scholarly Writing Workspace (placeholder)
+**Product name:** Texeris
 
 ---
 
@@ -337,7 +337,8 @@ The user can:
 - Create an empty project.
 - Open an existing project.
 - Import a Markdown document.
-- Potentially import DOCX or another format through conversion.
+- Import Markdown, DOCX, ODT, RTF, or a text-bearing PDF as a new revisioned
+  Markdown document.
 - Add previous documents to the writing archive.
 
 A new project may begin with:
@@ -497,7 +498,16 @@ Example names:
 - Preserve responsive and predictable cursor, selection, keyboard, composition, undo, and redo behaviour in both modes.
 - Support a defined Markdown dialect.
 - Support headings, lists, emphasis, links, quotations, code where useful, tables, footnotes, and citation markers.
+- Support pasting and dragging common raster images into project-owned assets, with editable alt text and optional captions; deleting an image must not strand public asset files or break revision restore.
 - Provide undo and redo.
+- Provide platform-native context menus for editing, links, images, documents,
+  conversations, and messages; toolbar/ellipsis launchers should reuse the same
+  actions rather than maintain parallel menus. Document menus include export
+  for that document without requiring it to become the active editor first.
+- Show transient workspace operations in the editor status bar with consistent
+  progress, success, warning, and error states. Keep actionable recovery
+  notices and panel-specific errors beside the surface they affect; do not use
+  floating translucent notifications for routine completion feedback.
 - Search and replace.
 - Navigate by headings.
 - Automatically preserve work.
@@ -637,7 +647,8 @@ The actual content sent to the model may be reduced to fit model limits, but the
 
 ### Likely
 
-- Import DOCX and PDF text through conversion or extraction.
+- Import DOCX and PDF text through conversion or extraction. PDF corpus
+  derivatives retain page markers for later source attribution.
 - Filter by document type, project, date, or status.
 - Detect duplicate imports.
 - Re-index changed files.
@@ -772,6 +783,13 @@ The application should not require the user to choose among many provider-specif
 - Use templates or reference documents.
 - Store export presets per project.
 - Produce an export report containing warnings.
+
+The first deterministic interchange workflow exports PDF, Markdown, DOCX, ODT,
+and RTF through a native save dialog. PDF is the default: a fixed A4 academic
+layout is produced from sanitized Pandoc HTML by an isolated Electron print
+renderer. Exports are derived artifacts and never replace the canonical project
+Markdown; citation markers may be preserved, but a formatted bibliography
+awaits the reference-library workflow.
 
 ### Exploratory
 
@@ -944,6 +962,15 @@ The first usable release should prioritise the complete writing loop over featur
 14. DOCX and Markdown export; PDF if practical in the first release.
 15. Named checkpoints.
 
+**Implementation audit, 2026-07-22:** the core editor/agent/revision loop,
+projects, checkpoints, and deterministic Markdown/office/PDF interchange work
+on the current development branch. macOS distribution, the reusable writing
+archive, the full editable profile lifecycle, packaged rewrite/tick skills,
+and structured references/bibliography export remain incomplete. The active
+ordering and exit gates are maintained in
+[`development-plan.md`](development-plan.md); phase labels below remain product
+hypotheses rather than implementation status.
+
 ### 13.2 Can wait until the core loop is proven
 
 - Semantic archive search.
@@ -1039,7 +1066,7 @@ The following ideas should remain available without being allowed to dominate in
 
 - Search scholarly databases and the open web.
 - Save search results into a project.
-- Import and extract PDFs.
+- OCR and layout-aware extraction for scanned or structurally complex PDFs.
 - Ask questions over attached papers.
 - Preserve page-level source locations.
 - Build literature matrices or evidence tables.

@@ -8,6 +8,7 @@ import type {
   RunStatus,
   UiMessage,
   UsageSummary,
+  DelegationRecord,
 } from '../../shared/chat-types';
 
 interface RunRow {
@@ -22,6 +23,10 @@ interface RunRow {
   usage_json: string | null;
   context_manifest_json: string | null;
   error_json: string | null;
+  parent_run_id?: string | null;
+  role_id?: string | null;
+  skill_id?: string | null;
+  skill_version?: number | null;
 }
 
 function mapRun(row: RunRow): AgentRunRecord {
@@ -41,6 +46,10 @@ function mapRun(row: RunRow): AgentRunRecord {
     error: row.error_json
       ? (JSON.parse(row.error_json) as { message: string }).message
       : null,
+    parentRunId: row.parent_run_id ?? null,
+    roleId: row.role_id ?? null,
+    skillId: row.skill_id ?? null,
+    skillVersion: row.skill_version ?? null,
   };
 }
 
@@ -65,12 +74,20 @@ export class ConversationService {
   }
 
   /** Start a fresh conversation (prior ones stay in history storage). */
-  startNewConversation(): string {
+  startNewConversation(skill?: { id: string; version: number }): string {
     const id = randomUUID();
     this.db
-      .prepare('INSERT INTO conversations (id, title, created_at) VALUES (?, ?, ?)')
-      .run(id, 'Conversation', new Date().toISOString());
+      .prepare('INSERT INTO conversations (id, title, created_at, skill_id, skill_version) VALUES (?, ?, ?, ?, ?)')
+      .run(id, skill ? 'Build writing profile' : 'Conversation', new Date().toISOString(), skill?.id ?? null, skill?.version ?? null);
     return id;
+  }
+
+  context(conversationId: string): { skillId: string | null; skillVersion: number | null; corpusGrantId: string | null } {
+    const row = this.db.prepare(
+      'SELECT skill_id, skill_version, corpus_grant_id FROM conversations WHERE id = ?',
+    ).get(conversationId) as { skill_id: string | null; skill_version: number | null; corpus_grant_id: string | null } | undefined;
+    if (!row) throw new Error(`unknown conversation: ${conversationId}`);
+    return { skillId: row.skill_id, skillVersion: row.skill_version, corpusGrantId: row.corpus_grant_id };
   }
 
   /** All conversations, newest first, for the picker (M1.5 EU3). */
@@ -168,6 +185,16 @@ export class ConversationService {
     return rows.map((row) => JSON.parse(row.payload_json) as AgentMessage);
   }
 
+  latestUserText(conversationId: string): string {
+    const row = this.db.prepare(
+      `SELECT payload_json FROM messages
+       WHERE conversation_id = ? AND role = 'user' ORDER BY seq DESC LIMIT 1`,
+    ).get(conversationId) as { payload_json: string } | undefined;
+    if (!row) return '';
+    const message = JSON.parse(row.payload_json) as AgentMessage;
+    return message.role === 'user' ? userText(message.content) : '';
+  }
+
   /** Renderer-facing view of the transcript. */
   listUiMessages(conversationId: string): UiMessage[] {
     const rows = this.db
@@ -208,14 +235,16 @@ export class ConversationService {
     provider: string;
     model: string;
     manifest: ContextManifest;
+    skillId?: string | null;
+    skillVersion?: number | null;
   }): string {
     const id = randomUUID();
     this.db
       .prepare(
         `INSERT INTO agent_runs
            (id, conversation_id, model_mode, provider, model, status,
-            started_at, usage_json, context_manifest_json)
-         VALUES (?, ?, ?, ?, ?, 'running', ?, NULL, ?)`,
+            started_at, usage_json, context_manifest_json, skill_id, skill_version)
+         VALUES (?, ?, ?, ?, ?, 'running', ?, NULL, ?, ?, ?)`,
       )
       .run(
         id,
@@ -225,6 +254,8 @@ export class ConversationService {
         input.model,
         new Date().toISOString(),
         JSON.stringify(input.manifest),
+        input.skillId ?? null,
+        input.skillVersion ?? null,
       );
     return id;
   }
@@ -252,7 +283,8 @@ export class ConversationService {
     const rows = this.db
       .prepare(
         `SELECT id, conversation_id, model_mode, provider, model, status,
-                started_at, ended_at, usage_json, context_manifest_json, error_json
+                started_at, ended_at, usage_json, context_manifest_json, error_json,
+                parent_run_id, role_id, skill_id, skill_version
          FROM agent_runs WHERE conversation_id = ? ORDER BY started_at`,
       )
       .all(conversationId) as unknown as RunRow[];
@@ -264,11 +296,29 @@ export class ConversationService {
     const row = this.db
       .prepare(
         `SELECT id, conversation_id, model_mode, provider, model, status,
-                started_at, ended_at, usage_json, context_manifest_json, error_json
+                started_at, ended_at, usage_json, context_manifest_json, error_json,
+                parent_run_id, role_id, skill_id, skill_version
          FROM agent_runs WHERE conversation_id = ? ORDER BY rowid DESC LIMIT 1`,
       )
       .get(conversationId) as RunRow | undefined;
     return row ? mapRun(row) : null;
+  }
+
+  listDelegations(conversationId: string): DelegationRecord[] {
+    const rows = this.db.prepare(
+      `SELECT id, parent_run_id, role_id, status, task, summary, provider, model,
+              created_at, ended_at
+       FROM delegated_results WHERE conversation_id = ? ORDER BY created_at`,
+    ).all(conversationId) as Array<{
+      id: string; parent_run_id: string; role_id: string; status: DelegationRecord['status'];
+      task: string; summary: string | null; provider: string; model: string;
+      created_at: string; ended_at: string | null;
+    }>;
+    return rows.map((row) => ({
+      id: row.id, parentRunId: row.parent_run_id, role: row.role_id,
+      status: row.status, task: row.task, summary: row.summary,
+      provider: row.provider, model: row.model, createdAt: row.created_at, endedAt: row.ended_at,
+    }));
   }
 }
 

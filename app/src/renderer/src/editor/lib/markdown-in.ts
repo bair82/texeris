@@ -9,6 +9,7 @@ import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
 import { findCitations } from './citations';
+import { parseHtmlImage, parseHtmlTable } from './html-table';
 
 export interface PMMarkJSON {
   type: string;
@@ -52,32 +53,33 @@ function pushText(out: PMNodeJSON[], text: string, marks: Mark[]): void {
 
 function inlines(nodes: MdNode[], marks: Mark[]): PMNodeJSON[] {
   const out: PMNodeJSON[] = [];
+  let activeMarks = marks;
   for (const node of nodes) {
     switch (node.type) {
       case 'text': {
         const value = node.value ?? '';
         let pos = 0;
         for (const span of findCitations(value)) {
-          pushText(out, value.slice(pos, span.from), marks);
+          pushText(out, value.slice(pos, span.from), activeMarks);
           out.push({ type: 'citation', attrs: { items: span.items, raw: span.raw } });
           pos = span.to;
         }
-        pushText(out, value.slice(pos), marks);
+        pushText(out, value.slice(pos), activeMarks);
         break;
       }
       case 'emphasis':
-        out.push(...inlines(node.children ?? [], [...marks, { type: 'italic' }]));
+        out.push(...inlines(node.children ?? [], [...activeMarks, { type: 'italic' }]));
         break;
       case 'strong':
-        out.push(...inlines(node.children ?? [], [...marks, { type: 'bold' }]));
+        out.push(...inlines(node.children ?? [], [...activeMarks, { type: 'bold' }]));
         break;
       case 'delete':
-        out.push(...inlines(node.children ?? [], [...marks, { type: 'strike' }]));
+        out.push(...inlines(node.children ?? [], [...activeMarks, { type: 'strike' }]));
         break;
       case 'link': {
         const attrs: Record<string, unknown> = { href: node.url ?? '' };
         if (node.title) attrs.title = node.title;
-        out.push(...inlines(node.children ?? [], [...marks, { type: 'link', attrs }]));
+        out.push(...inlines(node.children ?? [], [...activeMarks, { type: 'link', attrs }]));
         break;
       }
       case 'inlineCode':
@@ -94,15 +96,24 @@ function inlines(nodes: MdNode[], marks: Mark[]): PMNodeJSON[] {
         out.push({ type: 'hardBreak' });
         break;
       case 'image':
-        // Outside the profile: degrade to the alt text (or URL) literally.
-        pushText(out, node.alt ?? node.url ?? '', marks);
+        out.push({
+          type: 'image',
+          attrs: { src: node.url ?? '', alt: node.alt ?? '', title: node.title ?? null, width: null, height: null, caption: null },
+        });
         break;
-      case 'html':
-        pushText(out, node.value ?? '', marks);
+      case 'html': {
+        const html = (node.value ?? '').trim().toLowerCase();
+        if (html === '<u>') activeMarks = [...activeMarks, { type: 'underline' }];
+        else if (html === '</u>') activeMarks = activeMarks.filter((mark) => mark.type !== 'underline');
+        else if (html.startsWith('<img')) {
+          const parsed = parseHtmlImage(node.value ?? '');
+          if (parsed?.content?.[0]) out.push(parsed.content[0]);
+        } else if (!html.startsWith('<!--')) pushText(out, node.value ?? '', activeMarks);
         break;
+      }
       default:
         // Unknown inline: degrade to any literal value.
-        if (node.value) pushText(out, node.value, marks);
+        if (node.value) pushText(out, node.value, activeMarks);
         break;
     }
   }
@@ -176,7 +187,15 @@ function blocks(nodes: MdNode[]): PMNodeJSON[] {
         break;
       }
       case 'html': {
-        out.push({ type: 'paragraph', content: [{ type: 'text', text: node.value ?? '' }] });
+        const value = node.value ?? '';
+        if (/^\s*<!--(?:[\s\S]*?)-->\s*$/.test(value)) break;
+        const table = parseHtmlTable(value);
+        if (table) out.push(table);
+        else {
+          const image = parseHtmlImage(value);
+          if (image) out.push(image);
+          else out.push({ type: 'paragraph', content: [{ type: 'text', text: value }] });
+        }
         break;
       }
       default:

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
  * First-run project flow: shown when no project is open. Open an existing
  * project folder, pick a recent one, or create a new project.
  */
-export default function ProjectPicker() {
+export default function ProjectPicker({ onBack }: { onBack?: () => void }) {
   const [recents, setRecents] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
@@ -54,6 +54,11 @@ export default function ProjectPicker() {
     <div className="project-picker">
       <h1>Texeris</h1>
       <p className="picker-sub">Open a project to start writing.</p>
+      {onBack && (
+        <button className="picker-back" onClick={onBack}>
+          ← Back to current project
+        </button>
+      )}
       {error && <p className="chat-error">{error}</p>}
       <div className="picker-actions">
         <button className="picker-primary" onClick={() => void openDialog()}>

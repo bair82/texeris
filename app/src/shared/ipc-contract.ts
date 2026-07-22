@@ -2,14 +2,18 @@ import { Type, type Static } from '@sinclair/typebox';
 import type {
   AgentRunRecord,
   ConversationListItem,
+  DelegationRecord,
   NormalizedAgentEvent,
   StartTurnRequest,
   UiMessage,
 } from './chat-types';
 import type {
   DocCommitRequest,
+  AddedImageAsset,
   DocEvent,
   DocText,
+  DocumentExportResult,
+  DocumentImportResult,
   HeadingInfo,
   TrashedDocumentInfo,
 } from './doc-types';
@@ -22,11 +26,16 @@ import type { AppearanceConfig, SettingsView } from './settings-types';
 import type { UiState } from './ui-types';
 import type { CheckpointInfo, DocumentInfo, RevisionInfo } from './domain-types';
 import type { ProjectInfo } from './project-types';
+import type { ProfileBeginRequest } from './profile-types';
+import type { PatchStyleMode } from './settings-types';
+import type { ContextActionEvent, ContextDescribeRequest, ContextDescriptor } from './context-menu-types';
 
 /**
  * IPC contract shared by main, preload, and renderer.
- * Every payload that crosses the contextBridge is validated against a
- * TypeBox schema on both sides; a malformed payload fails loudly.
+ * Renderer requests are validated by main against TypeBox schemas. Trusted
+ * main-originated events and most responses are currently typed but not
+ * decoded again in preload; see the contract-hardening item in the active
+ * development plan.
  */
 
 export const IpcChannels = {
@@ -47,6 +56,12 @@ export interface TexerisApi {
   getAppInfo(): Promise<AppInfo>;
   /** Subscribe to app-menu commands; returns an unsubscribe fn. */
   onMenuCommand(callback: (commandId: string) => void): () => void;
+  contextMenu: {
+    onDescribe(callback: (request: ContextDescribeRequest) => void): () => void;
+    reply(requestId: string, context: ContextDescriptor): Promise<{ shown: boolean }>;
+    show(context: ContextDescriptor, x: number, y: number): Promise<{ shown: boolean }>;
+    onAction(callback: (event: ContextActionEvent) => void): () => void;
+  };
   chat: {
     getOrCreateConversation(): Promise<{ conversationId: string }>;
     newConversation(): Promise<{ conversationId: string }>;
@@ -58,10 +73,14 @@ export interface TexerisApi {
     deleteConversation(conversationId: string): Promise<{ deleted: boolean }>;
     listMessages(conversationId: string): Promise<UiMessage[]>;
     listRuns(conversationId: string): Promise<AgentRunRecord[]>;
+    listDelegations(conversationId: string): Promise<DelegationRecord[]>;
     startTurn(request: StartTurnRequest): Promise<{ runId: string }>;
     cancel(runId: string): Promise<{ cancelled: boolean }>;
     /** Subscribe to normalized agent events; returns an unsubscribe fn. */
     onEvent(callback: (event: NormalizedAgentEvent) => void): () => void;
+  };
+  profile: {
+    begin(request: ProfileBeginRequest): Promise<{ conversationId: string; runId: string; sourceCount: number } | null>;
   };
   doc: {
     list(): Promise<DocumentInfo[]>;
@@ -73,7 +92,14 @@ export interface TexerisApi {
     rename(documentId: string, name: string): Promise<{ id: string; path: string; title: string }>;
     trash(documentId: string): Promise<{ trashed: boolean }>;
     duplicate(documentId: string): Promise<{ id: string; path: string; title: string }>;
-    importDialog(): Promise<{ id: string; path: string; title: string } | null>;
+    addImage(request: {
+      documentId: string;
+      sourceName: string;
+      mediaType: string;
+      dataBase64: string;
+    }): Promise<AddedImageAsset>;
+    importDialog(): Promise<DocumentImportResult | null>;
+    exportDialog(documentId: string): Promise<DocumentExportResult | null>;
     setMain(documentId: string): Promise<ProjectInfo>;
     reveal(documentId: string): Promise<{ revealed: boolean }>;
     trashList(): Promise<TrashedDocumentInfo[]>;
@@ -82,7 +108,7 @@ export interface TexerisApi {
     onEvent(callback: (event: DocEvent) => void): () => void;
   };
   patch: {
-    list(): Promise<PatchRecord[]>;
+    list(documentId?: string): Promise<PatchRecord[]>;
     get(patchId: string): Promise<PatchRecord>;
     accept(
       patchId: string,
@@ -100,6 +126,8 @@ export interface TexerisApi {
       language: string;
     }): Promise<{ enabled: boolean; language: string }>;
     setAppearance(input: Partial<AppearanceConfig>): Promise<AppearanceConfig>;
+    setPatchStyleMode(mode: PatchStyleMode): Promise<{ mode: PatchStyleMode }>;
+    disableWritingProfile(): Promise<{ disabled: boolean }>;
     /** Appearance changed anywhere (settings UI or another window); repaint. */
     onAppearanceChanged(callback: (appearance: AppearanceConfig) => void): () => void;
   };

@@ -31,4 +31,24 @@ describe('loadWorkspaceConfig', () => {
     // missing mode falls back to defaults
     expect(config.modes.deep).toEqual(DEFAULT_CONFIG.modes.deep);
   });
+
+  it('repairs persisted faux modes without discarding valid preferences', () => {
+    fs.writeFileSync(
+      path.join(dir, 'config.json'),
+      JSON.stringify({
+        modes: {
+          fast: { provider: 'faux', model: 'faux-model' },
+          deep: { provider: 'faux', model: 'faux-model' },
+        },
+        appearance: { theme: 'light', fontSize: 14 },
+      }),
+    );
+    const config = loadWorkspaceConfig(dir);
+    expect(config.modes).toEqual(DEFAULT_CONFIG.modes);
+    expect(config.appearance.theme).toBe('light');
+    expect(config.appearance.fontSize).toBe(14);
+    expect(JSON.parse(fs.readFileSync(path.join(dir, 'config.json'), 'utf8')).modes).toEqual(
+      DEFAULT_CONFIG.modes,
+    );
+  });
 });

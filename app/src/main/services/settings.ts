@@ -26,6 +26,8 @@ export interface WorkspaceConfig {
   };
   spellcheck: SpellcheckConfig;
   appearance: import('../../shared/settings-types').AppearanceConfig;
+  patchStyleMode: import('../../shared/settings-types').PatchStyleMode;
+  activeProfileId: string | null;
 }
 
 export const DEFAULT_CONFIG: WorkspaceConfig = {
@@ -40,6 +42,8 @@ export const DEFAULT_CONFIG: WorkspaceConfig = {
     fontSize: 16.5,
     editorWidth: 'comfortable',
   },
+  patchStyleMode: 'off',
+  activeProfileId: null,
 };
 
 export function workspaceDir(): string {
@@ -59,23 +63,66 @@ export function loadWorkspaceConfig(dir = workspaceDir()): WorkspaceConfig {
     atomicWriteText(file, JSON.stringify(DEFAULT_CONFIG, null, 2) + '\n');
     return DEFAULT_CONFIG;
   }
-  const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<WorkspaceConfig>;
-  return {
+  let parsed: Partial<WorkspaceConfig>;
+  try {
+    parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<WorkspaceConfig>;
+  } catch {
+    // A hand-edited config should never stop the desktop app from opening.
+    atomicWriteText(file, JSON.stringify(DEFAULT_CONFIG, null, 2) + '\n');
+    return structuredClone(DEFAULT_CONFIG);
+  }
+  const mode = (value: unknown, fallback: ModelModeConfig): ModelModeConfig => {
+    if (!value || typeof value !== 'object') return { ...fallback };
+    const candidate = value as Partial<ModelModeConfig>;
+    // faux is an in-process test provider, never a valid persisted choice.
+    if (candidate.provider === 'faux' && candidate.model === 'faux-model') return { ...fallback };
+    return typeof candidate.provider === 'string' && typeof candidate.model === 'string'
+      ? { provider: candidate.provider, model: candidate.model }
+      : { ...fallback };
+  };
+  const config: WorkspaceConfig = {
     modes: {
-      fast: parsed.modes?.fast ?? DEFAULT_CONFIG.modes.fast,
-      deep: parsed.modes?.deep ?? DEFAULT_CONFIG.modes.deep,
+      fast: mode(parsed.modes?.fast, DEFAULT_CONFIG.modes.fast),
+      deep: mode(parsed.modes?.deep, DEFAULT_CONFIG.modes.deep),
     },
     spellcheck: {
-      enabled: parsed.spellcheck?.enabled ?? DEFAULT_CONFIG.spellcheck.enabled,
-      language: parsed.spellcheck?.language ?? DEFAULT_CONFIG.spellcheck.language,
+      enabled:
+        typeof parsed.spellcheck?.enabled === 'boolean'
+          ? parsed.spellcheck.enabled
+          : DEFAULT_CONFIG.spellcheck.enabled,
+      language:
+        typeof parsed.spellcheck?.language === 'string'
+          ? parsed.spellcheck.language
+          : DEFAULT_CONFIG.spellcheck.language,
     },
     appearance: {
-      theme: parsed.appearance?.theme ?? DEFAULT_CONFIG.appearance.theme,
-      fontFamily: parsed.appearance?.fontFamily ?? DEFAULT_CONFIG.appearance.fontFamily,
-      fontSize: parsed.appearance?.fontSize ?? DEFAULT_CONFIG.appearance.fontSize,
-      editorWidth: parsed.appearance?.editorWidth ?? DEFAULT_CONFIG.appearance.editorWidth,
+      theme:
+        parsed.appearance?.theme === 'dark' || parsed.appearance?.theme === 'light' || parsed.appearance?.theme === 'system'
+          ? parsed.appearance.theme
+          : DEFAULT_CONFIG.appearance.theme,
+      fontFamily:
+        parsed.appearance?.fontFamily === 'serif' || parsed.appearance?.fontFamily === 'sans' || parsed.appearance?.fontFamily === 'mono'
+          ? parsed.appearance.fontFamily
+          : DEFAULT_CONFIG.appearance.fontFamily,
+      fontSize:
+        typeof parsed.appearance?.fontSize === 'number' && parsed.appearance.fontSize >= 12 && parsed.appearance.fontSize <= 24
+          ? parsed.appearance.fontSize
+          : DEFAULT_CONFIG.appearance.fontSize,
+      editorWidth:
+        parsed.appearance?.editorWidth === 'comfortable' || parsed.appearance?.editorWidth === 'wide' || parsed.appearance?.editorWidth === 'full'
+          ? parsed.appearance.editorWidth
+          : DEFAULT_CONFIG.appearance.editorWidth,
     },
+    patchStyleMode:
+      parsed.patchStyleMode === 'audit' || parsed.patchStyleMode === 'revise-once'
+        ? parsed.patchStyleMode
+        : 'off',
+    activeProfileId:
+      typeof parsed.activeProfileId === 'string' ? parsed.activeProfileId : null,
   };
+  // Persist a repaired faux/invalid config so the next normal launch is safe too.
+  if (JSON.stringify(parsed) !== JSON.stringify(config)) saveWorkspaceConfig(config, dir);
+  return config;
 }
 
 /** Persist the full config back to config.json (spellcheck lives here). */

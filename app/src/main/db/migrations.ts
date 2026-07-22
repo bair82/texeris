@@ -129,4 +129,64 @@ export const migrations: ReadonlyArray<(db: DatabaseSync) => void> = [
   (db) => {
     db.exec('ALTER TABLE documents ADD COLUMN trashed_at TEXT');
   },
+  // 0003: skills, delegated runs, scoped profile corpora, and patch style
+  // reviews. These are application-level records: Pi sessions remain an
+  // implementation detail and never become the source of truth.
+  (db) => {
+    db.exec(`
+      ALTER TABLE conversations ADD COLUMN skill_id TEXT;
+      ALTER TABLE conversations ADD COLUMN skill_version INTEGER;
+      ALTER TABLE conversations ADD COLUMN corpus_grant_id TEXT;
+
+      ALTER TABLE agent_runs ADD COLUMN parent_run_id TEXT;
+      ALTER TABLE agent_runs ADD COLUMN role_id TEXT;
+      ALTER TABLE agent_runs ADD COLUMN skill_id TEXT;
+      ALTER TABLE agent_runs ADD COLUMN skill_version INTEGER;
+      ALTER TABLE agent_runs ADD COLUMN result_json TEXT;
+
+      ALTER TABLE patches ADD COLUMN style_review_json TEXT;
+
+      CREATE TABLE corpus_grants(
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL REFERENCES conversations(id),
+        created_at TEXT NOT NULL,
+        source_kind TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active'
+      );
+
+      CREATE TABLE corpus_sources(
+        id TEXT PRIMARY KEY,
+        grant_id TEXT NOT NULL REFERENCES corpus_grants(id),
+        original_path TEXT NOT NULL,
+        canonical_path TEXT NOT NULL,
+        source_hash TEXT NOT NULL,
+        source_size INTEGER NOT NULL,
+        source_mtime TEXT NOT NULL,
+        format TEXT NOT NULL,
+        markdown_path TEXT NOT NULL,
+        markdown_hash TEXT NOT NULL,
+        converter TEXT NOT NULL,
+        detected_date TEXT,
+        date_confidence TEXT,
+        conversion_warnings_json TEXT NOT NULL DEFAULT '[]'
+      );
+
+      CREATE TABLE delegated_results(
+        id TEXT PRIMARY KEY,
+        parent_run_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL REFERENCES conversations(id),
+        role_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        task TEXT NOT NULL,
+        summary TEXT,
+        result_json TEXT,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        usage_json TEXT,
+        error_json TEXT,
+        created_at TEXT NOT NULL,
+        ended_at TEXT
+      );
+    `);
+  },
 ];

@@ -4,6 +4,10 @@ import * as path from 'node:path';
 import { minimalSplice } from '../../shared/text-splice';
 import { atomicWriteText, hashText } from './document';
 import type { ProjectContext } from './project';
+import { convertToMarkdown, formatForPath, writePandocExport, type InterchangeFormat } from './pandoc';
+import { reconcileImageAssetsBestEffort } from './assets';
+import { extractPdfText, MAX_PDF_BYTES, PdfExtractionError, pdfDocumentMarkdown } from './pdf';
+import { buildPdfPrintHtml } from './pdfExportHtml';
 
 /**
  * Document management (M1.5 EU3): rename (ids never change), trash (file
@@ -21,6 +25,18 @@ export interface DocumentHandle {
   path: string;
   title: string;
 }
+
+export interface DocumentImportResult extends DocumentHandle {
+  warnings: string[];
+}
+
+export interface DocumentExportResult {
+  path: string;
+  format: InterchangeFormat;
+  warnings: string[];
+}
+
+export type PdfRenderer = (html: string) => Promise<Buffer>;
 
 interface DocumentRow {
   id: string;
@@ -117,11 +133,20 @@ export function trashDocument(ctx: ProjectContext, documentId: string): void {
     throw new Error('the main document cannot be trashed');
   }
   const trashDir = path.join(ctx.root, TRASH_DIR);
+  const from = path.join(ctx.root, row.path);
+  const to = path.join(trashDir, `${row.id}.md`);
   fs.mkdirSync(trashDir, { recursive: true });
-  fs.renameSync(path.join(ctx.root, row.path), path.join(trashDir, `${row.id}.md`));
-  ctx.db
-    .prepare('UPDATE documents SET trashed_at = ? WHERE id = ?')
-    .run(new Date().toISOString(), row.id);
+  fs.renameSync(from, to);
+  try {
+    ctx.db
+      .prepare('UPDATE documents SET trashed_at = ? WHERE id = ?')
+      .run(new Date().toISOString(), row.id);
+  } catch (err) {
+    // Keep the file and row together when SQLite rejects the state change.
+    fs.renameSync(to, from);
+    throw err;
+  }
+  reconcileImageAssetsBestEffort(ctx.root, ctx.db);
 }
 
 /** Duplicate under "<name> copy.md" (numbered when taken), new id + history. */
@@ -139,16 +164,93 @@ export function duplicateDocument(ctx: ProjectContext, documentId: string): Docu
 }
 
 /** Copy a Markdown file from anywhere into the project root. */
-export function importDocumentFile(ctx: ProjectContext, sourcePath: string): DocumentHandle {
+export async function importDocumentFile(ctx: ProjectContext, sourcePath: string): Promise<DocumentImportResult> {
   const original = path.basename(sourcePath);
-  const base = original.replace(/\.md$/i, '');
+  const base = original.replace(/\.(?:md|markdown|mdown|txt|docx|odt|rtf|pdf)$/i, '');
   let target = `${base}.md`;
   for (let n = 2; pathTaken(ctx, target); n++) {
     target = `${base}-${n}.md`;
   }
-  const content = fs.readFileSync(sourcePath, 'utf8');
-  const id = registerImported(ctx, target, content, `imported from ${original}`);
-  return { id, path: target, title: titleFor(target) };
+  const isPdf = path.extname(sourcePath).toLowerCase() === '.pdf';
+  if (isPdf && fs.statSync(sourcePath).size > MAX_PDF_BYTES) {
+    throw new PdfExtractionError(`PDF exceeds the ${MAX_PDF_BYTES / (1024 * 1024)} MB import limit.`, 'too-large');
+  }
+  const bytes = fs.readFileSync(sourcePath);
+  const assetRelativeDir = path.posix.join('assets', path.basename(target, '.md'));
+  const assetDir = path.join(ctx.root, ...assetRelativeDir.split('/'));
+  let converted;
+  try {
+    if (isPdf) {
+      const extracted = await extractPdfText(bytes);
+      converted = {
+        markdown: pdfDocumentMarkdown(extracted),
+        converter: extracted.converter,
+        warnings: extracted.warnings,
+      };
+    } else {
+      converted = convertToMarkdown(sourcePath, bytes, {
+        mediaDir: assetDir,
+        mediaReferencePrefix: assetRelativeDir,
+      });
+    }
+  } catch (error) {
+    fs.rmSync(assetDir, { recursive: true, force: true });
+    throw error;
+  }
+  const content = converted.markdown;
+  let id: string;
+  try {
+    id = registerImported(ctx, target, content, `imported from ${original}`);
+  } catch (error) {
+    fs.rmSync(assetDir, { recursive: true, force: true });
+    throw error;
+  }
+  return { id, path: target, title: titleFor(target), warnings: converted.warnings };
+}
+
+/** Export a snapshot of a live document without changing its canonical Markdown or history. */
+export async function exportDocumentFile(
+  ctx: ProjectContext,
+  documentId: string,
+  outputPath: string,
+  renderPdf?: PdfRenderer,
+): Promise<DocumentExportResult> {
+  const row = docRow(ctx, documentId);
+  assertLive(row);
+  const format = formatForPath(outputPath);
+  if (!format) throw new Error('choose a PDF, Markdown, DOCX, ODT, or RTF filename');
+  const sourcePath = path.resolve(ctx.root, row.path);
+  if (path.resolve(outputPath) === sourcePath) throw new Error('choose a different path from the canonical project document');
+  const text = fs.readFileSync(sourcePath, 'utf8');
+  const tempPath = path.join(
+    path.dirname(outputPath),
+    `.${path.basename(outputPath)}.${randomUUID()}.tmp${path.extname(outputPath)}`,
+  );
+  try {
+    let warnings: string[] = [];
+    if (format === 'markdown') {
+      atomicWriteText(tempPath, text);
+    } else if (format === 'pdf') {
+      if (!renderPdf) throw new Error('PDF rendering is unavailable');
+      const prepared = buildPdfPrintHtml(text, row.title, ctx.root);
+      const bytes = await renderPdf(prepared.html);
+      if (!bytes.subarray(0, 5).equals(Buffer.from('%PDF-'))) {
+        throw new Error('PDF rendering returned an invalid file');
+      }
+      fs.writeFileSync(tempPath, bytes, { flag: 'wx' });
+      warnings = prepared.warnings;
+    } else {
+      warnings = writePandocExport(text, tempPath, format, ctx.root);
+    }
+    fs.renameSync(tempPath, outputPath);
+    if (/\[@[-\w]+/.test(text)) {
+      warnings.push('Citation markers were preserved where possible, but no bibliography was rendered because this project has no reference library yet.');
+    }
+    return { path: outputPath, format, warnings };
+  } catch (error) {
+    fs.rmSync(tempPath, { force: true });
+    throw error;
+  }
 }
 
 /** Register a file-backed document and record its content as rev 1. */
@@ -173,6 +275,39 @@ export function registerImported(
     summary,
   });
   return id;
+}
+
+/** Create a uniquely named, revisioned Markdown report produced by a skill. */
+export function createGeneratedDocument(
+  ctx: ProjectContext,
+  preferredName: string,
+  content: string,
+  origin: { conversationId: string; agentRunId: string },
+): DocumentHandle {
+  const safe = assertValidName(preferredName);
+  const base = safe.replace(/\.md$/i, '');
+  let target = safe;
+  for (let n = 2; pathTaken(ctx, target); n++) {
+    target = `${base} ${n}.md`;
+  }
+  atomicWriteText(path.join(ctx.root, target), '');
+  const id = randomUUID();
+  ctx.db
+    .prepare(
+      `INSERT INTO documents (id, path, title, created_at, current_revision, content_hash)
+       VALUES (?, ?, ?, ?, 0, ?)`,
+    )
+    .run(id, target, titleFor(target), new Date().toISOString(), hashText(''));
+  ctx.revisions.commit(id, [minimalSplice('', content)], {
+    actor: 'agent',
+    source: {
+      kind: 'report',
+      conversationId: origin.conversationId,
+      agentRunId: origin.agentRunId,
+    },
+    summary: 'generated writing-profile artifact',
+  });
+  return { id, path: target, title: titleFor(target) };
 }
 
 /** Designate an existing live document as the project's main document. */
@@ -256,9 +391,15 @@ export function restoreDocument(ctx: ProjectContext, documentId: string): Docume
   const to = path.join(ctx.root, target);
   fs.mkdirSync(path.dirname(to), { recursive: true });
   fs.renameSync(trashFile, to);
-  ctx.db
-    .prepare('UPDATE documents SET path = ?, title = ?, trashed_at = NULL WHERE id = ?')
-    .run(target, titleFor(target), row.id);
+  try {
+    ctx.db
+      .prepare('UPDATE documents SET path = ?, title = ?, trashed_at = NULL WHERE id = ?')
+      .run(target, titleFor(target), row.id);
+  } catch (err) {
+    fs.renameSync(to, trashFile);
+    throw err;
+  }
+  reconcileImageAssetsBestEffort(ctx.root, ctx.db);
   return { id: row.id, path: target, title: titleFor(target) };
 }
 
@@ -272,6 +413,11 @@ export function deleteTrashedDocument(ctx: ProjectContext, documentId: string): 
   if (row.trashed_at === null) {
     throw new Error(`document is not in the trash: ${row.path}`);
   }
+  const trashFile = path.join(ctx.root, TRASH_DIR, `${row.id}.md`);
+  // Remove the user-visible file first, but retain enough data to restore it
+  // if SQLite rejects the matching history deletion.
+  const contents = fs.existsSync(trashFile) ? fs.readFileSync(trashFile) : null;
+  fs.rmSync(trashFile, { force: true });
   ctx.db.exec('BEGIN');
   try {
     ctx.db
@@ -295,7 +441,11 @@ export function deleteTrashedDocument(ctx: ProjectContext, documentId: string): 
     ctx.db.exec('COMMIT');
   } catch (err) {
     ctx.db.exec('ROLLBACK');
+    if (contents !== null) {
+      fs.mkdirSync(path.dirname(trashFile), { recursive: true });
+      fs.writeFileSync(trashFile, contents);
+    }
     throw err;
   }
-  fs.rmSync(path.join(ctx.root, TRASH_DIR, `${row.id}.md`), { force: true });
+  reconcileImageAssetsBestEffort(ctx.root, ctx.db);
 }

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   deleteTrashedDocument,
   duplicateDocument,
+  exportDocumentFile,
   importDocumentFile,
   listTrashedDocuments,
   renameDocument,
@@ -15,10 +16,12 @@ import {
 import { CheckpointService } from './checkpoint';
 import { PatchService } from './patch';
 import { createProject, ensureDocument, openProject, type ProjectContext } from './project';
+import { makeImageOnlyPdf, makeTextPdf } from './pdf-fixture.test-helper';
 
 let root: string;
 let ctx: ProjectContext;
 let mainId: string;
+let fakePandoc: string;
 
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'texeris-docs-'));
@@ -28,9 +31,19 @@ beforeEach(() => {
     actor: 'user',
     source: { kind: 'typing' },
   });
+  fakePandoc = path.join(root, 'fake-pandoc.sh');
+  fs.writeFileSync(fakePandoc, `#!/bin/sh
+for arg in "$@"; do
+  case "$arg" in --output) next=1;; *) if [ "$next" = 1 ]; then output="$arg"; next=; fi;; esac
+done
+if [ -n "$output" ]; then cat > "$output"; else printf '# Converted\\n'; fi
+`);
+  fs.chmodSync(fakePandoc, 0o755);
+  process.env.TEXERIS_PANDOC_PATH = fakePandoc;
 });
 
 afterEach(() => {
+  delete process.env.TEXERIS_PANDOC_PATH;
   ctx.db.close();
   fs.rmSync(root, { recursive: true, force: true });
 });
@@ -92,6 +105,18 @@ describe('trashDocument', () => {
     expect(ctx.revisions.getTextAt(id, 1)).toBe('text\n');
   });
 
+  it('hides document assets while trashed and restores them with the document', () => {
+    const relative = 'assets/draft/media/figure.png';
+    fs.mkdirSync(path.dirname(path.join(root, relative)), { recursive: true });
+    fs.writeFileSync(path.join(root, relative), 'image');
+    const id = makeDoc('draft.md', `![Figure](${relative})\n`);
+    trashDocument(ctx, id);
+    expect(fs.existsSync(path.join(root, relative))).toBe(false);
+    expect(fs.existsSync(path.join(root, '.texeris', 'asset-trash', relative))).toBe(true);
+    restoreDocument(ctx, id);
+    expect(fs.existsSync(path.join(root, relative))).toBe(true);
+  });
+
   it('refuses the main document and double-trashing', () => {
     expect(() => trashDocument(ctx, mainId)).toThrow(/main document/);
     const id = makeDoc('draft.md');
@@ -128,11 +153,11 @@ describe('duplicateDocument', () => {
 });
 
 describe('importDocumentFile', () => {
-  it('copies an external file into the project with rev 1', () => {
+  it('copies an external file into the project with rev 1', async () => {
     const source = path.join(root, '..', `import-${path.basename(root)}.md`);
     fs.writeFileSync(source, '# External\n');
     try {
-      const imported = importDocumentFile(ctx, source);
+      const imported = await importDocumentFile(ctx, source);
       expect(imported.path).toBe(`import-${path.basename(root)}.md`);
       expect(ctx.revisions.getTextAt(imported.id, 1)).toBe('# External\n');
     } finally {
@@ -140,16 +165,120 @@ describe('importDocumentFile', () => {
     }
   });
 
-  it('renames on conflict instead of overwriting', () => {
+  it('renames on conflict instead of overwriting', async () => {
     makeDoc('notes.md', 'mine\n');
     const source = path.join(root, '..', 'notes.md');
     fs.writeFileSync(source, 'theirs\n');
     try {
-      const imported = importDocumentFile(ctx, source);
+      const imported = await importDocumentFile(ctx, source);
       expect(imported.path).toBe('notes-2.md');
       expect(fs.readFileSync(path.join(root, 'notes.md'), 'utf8')).toBe('mine\n');
     } finally {
       fs.rmSync(source, { force: true });
+    }
+  });
+
+  it('converts DOCX-like sources into a revisioned Markdown document', async () => {
+    const source = path.join(root, '..', 'paper.docx');
+    fs.writeFileSync(source, 'binary placeholder');
+    try {
+      const imported = await importDocumentFile(ctx, source);
+      expect(imported.path).toBe('paper.md');
+      expect(ctx.revisions.getTextAt(imported.id, 1)).toBe('# Converted\n');
+      expect(imported.warnings).toHaveLength(1);
+    } finally {
+      fs.rmSync(source, { force: true });
+    }
+  });
+
+  it('normalizes Pandoc-specific Markdown while leaving ordinary Markdown byte-exact', async () => {
+    const pandocSource = path.join(root, '..', `pandoc-${path.basename(root)}.md`);
+    const ordinarySource = path.join(root, '..', `ordinary-${path.basename(root)}.md`);
+    fs.writeFileSync(pandocSource, '[Underlined]{.underline}\n\n+:---:+\n| A |\n+---+\n');
+    fs.writeFileSync(ordinarySource, '# Ordinary\n');
+    try {
+      const normalized = await importDocumentFile(ctx, pandocSource);
+      const ordinary = await importDocumentFile(ctx, ordinarySource);
+      expect(ctx.revisions.getTextAt(normalized.id, 1)).toBe('# Converted\n');
+      expect(normalized.warnings.join(' ')).toMatch(/normalized/);
+      expect(ctx.revisions.getTextAt(ordinary.id, 1)).toBe('# Ordinary\n');
+      expect(ordinary.warnings).toHaveLength(0);
+    } finally {
+      fs.rmSync(pandocSource, { force: true });
+      fs.rmSync(ordinarySource, { force: true });
+    }
+  });
+
+  it('imports a text PDF as clean revisioned Markdown', async () => {
+    const source = path.join(root, '..', `${path.basename(root)}-paper.pdf`);
+    fs.writeFileSync(source, makeTextPdf([
+      Array(8).fill('An imported academic PDF contains selectable prose.').join('\n'),
+      Array(8).fill('Its second page remains part of the same editable document.').join('\n'),
+    ]));
+    try {
+      const imported = await importDocumentFile(ctx, source);
+      expect(imported.path).toBe(`${path.basename(root)}-paper.md`);
+      expect(ctx.revisions.getTextAt(imported.id, 1)).toContain('selectable prose');
+      expect(ctx.revisions.getTextAt(imported.id, 1)).not.toContain('texeris:pdf-page');
+      expect(imported.warnings.join(' ')).toMatch(/lossy/i);
+    } finally {
+      fs.rmSync(source, { force: true });
+    }
+  });
+
+  it('does not register an image-only PDF', async () => {
+    const source = path.join(root, '..', `${path.basename(root)}-scan.pdf`);
+    fs.writeFileSync(source, makeImageOnlyPdf());
+    const before = (ctx.db.prepare('SELECT COUNT(*) AS n FROM documents').get() as { n: number }).n;
+    try {
+      await expect(importDocumentFile(ctx, source)).rejects.toThrow(/OCR is not supported/i);
+      const after = (ctx.db.prepare('SELECT COUNT(*) AS n FROM documents').get() as { n: number }).n;
+      expect(after).toBe(before);
+    } finally {
+      fs.rmSync(source, { force: true });
+    }
+  });
+});
+
+describe('exportDocumentFile', () => {
+  it('writes a DOCX derivative without changing the source document or revision', async () => {
+    const output = path.join(root, '..', `export-${path.basename(root)}.docx`);
+    try {
+      const result = await exportDocumentFile(ctx, mainId, output);
+      expect(result.format).toBe('docx');
+      expect(fs.readFileSync(output, 'utf8')).toBe('# Main\n');
+      expect(ctx.revisions.getTextAt(mainId, 1)).toBe('# Main\n');
+      expect(result.warnings).toHaveLength(1);
+    } finally {
+      fs.rmSync(output, { force: true });
+    }
+  });
+
+  it('warns about unrendered citations and refuses to overwrite the canonical file', async () => {
+    const id = makeDoc('cited.md', 'A claim [@source].\n');
+    const output = path.join(root, '..', `export-${path.basename(root)}.rtf`);
+    try {
+      expect((await exportDocumentFile(ctx, id, output)).warnings.join(' ')).toMatch(/bibliography/);
+      await expect(exportDocumentFile(ctx, id, path.join(root, 'cited.md'))).rejects.toThrow(/different path/);
+    } finally {
+      fs.rmSync(output, { force: true });
+    }
+  });
+
+  it('writes PDF bytes atomically through the injected renderer', async () => {
+    const output = path.join(root, '..', `export-${path.basename(root)}.pdf`);
+    let printHtml = '';
+    try {
+      const result = await exportDocumentFile(ctx, mainId, output, async (html) => {
+        printHtml = html;
+        return Buffer.from('%PDF-1.7\nsmoke');
+      });
+      expect(result.format).toBe('pdf');
+      expect(fs.readFileSync(output).subarray(0, 5).toString()).toBe('%PDF-');
+      expect(printHtml).toContain('size: A4 portrait');
+      expect(ctx.revisions.getTextAt(mainId, 1)).toBe('# Main\n');
+    } finally {
+      fs.rmSync(output, { force: true });
     }
   });
 });
@@ -227,7 +356,10 @@ describe('restoreDocument', () => {
 
 describe('deleteTrashedDocument', () => {
   it('removes the row, history, checkpoints, patches, and the trash file', () => {
-    const id = makeDoc('draft.md', 'text\n');
+    const asset = 'assets/draft/media/figure.png';
+    fs.mkdirSync(path.dirname(path.join(root, asset)), { recursive: true });
+    fs.writeFileSync(path.join(root, asset), 'image');
+    const id = makeDoc('draft.md', `text\n\n![Figure](${asset})\n`);
     new CheckpointService(ctx.db, ctx.revisions).create(id, 'before the end');
     const proposed = new PatchService(ctx.db, ctx.revisions).propose(
       {
@@ -263,6 +395,7 @@ describe('deleteTrashedDocument', () => {
       expect((ctx.db.prepare(orphanQuery).get() as { n: number }).n).toBe(0);
     }
     expect(fs.existsSync(path.join(root, '.texeris', 'trash', `${id}.md`))).toBe(false);
+    expect(fs.existsSync(path.join(root, '.texeris', 'asset-trash', asset))).toBe(false);
   });
 
   it('refuses to delete a live document', () => {

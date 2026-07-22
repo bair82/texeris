@@ -88,6 +88,9 @@ export interface EditorCommands {
   openSearch(): void;
   toggleHistory(): void;
   toggleMode(): void;
+  flush(): void;
+  contextAt(x: number, y: number): import('../../../shared/context-menu-types').ContextDescriptor;
+  contextAction(action: import('../../../shared/context-menu-types').ContextAction): boolean;
 }
 
 let editorCommands: EditorCommands | null = null;
@@ -108,6 +111,7 @@ export function getEditorCommands(): EditorCommands | null {
 /** Chat command surface (EU5). */
 export interface ChatCommands {
   newConversation(): void;
+  openConversation(conversationId: string): void;
 }
 
 let chatCommands: ChatCommands | null = null;

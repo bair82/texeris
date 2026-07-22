@@ -16,7 +16,9 @@ export interface CommandSpec {
 
 export const COMMANDS: readonly CommandSpec[] = [
   { id: 'file:new-document', section: 'File', title: 'New Document', accelerator: 'CmdOrCtrl+N' },
-  { id: 'file:import-document', section: 'File', title: 'Import Markdown File…' },
+  { id: 'file:new-project', section: 'File', title: 'New Project…' },
+  { id: 'file:import-document', section: 'File', title: 'Import Document…' },
+  { id: 'file:export-document', section: 'File', title: 'Export Document…' },
   { id: 'file:switch-project', section: 'File', title: 'Switch Project…', accelerator: 'CmdOrCtrl+O' },
 
   // undo/redo have no menu accelerator on purpose: the editors own
@@ -33,6 +35,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   { id: 'view:toggle-history', section: 'View', title: 'Revision History' },
 
   { id: 'chat:new', section: 'Chat', title: 'New Conversation' },
+  { id: 'chat:build-writing-profile', section: 'Chat', title: 'Build or Update Writing Profile…' },
 
   { id: 'help:shortcuts', section: 'Help', title: 'Keyboard Shortcuts', accelerator: 'CmdOrCtrl+/' },
 ] as const;

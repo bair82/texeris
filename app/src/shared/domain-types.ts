@@ -22,7 +22,7 @@ export type Actor = 'user' | 'agent' | 'external' | 'system';
 
 /** Audit link from a revision to whatever caused it (plan §7.3). */
 export interface RevisionSource {
-  kind: 'typing' | 'paste' | 'patch' | 'restore' | 'checkpoint' | 'external' | 'import';
+  kind: 'typing' | 'paste' | 'patch' | 'restore' | 'checkpoint' | 'external' | 'import' | 'report';
   conversationId?: string;
   agentRunId?: string;
   patchId?: string;

@@ -19,6 +19,16 @@ export default function Toolbar({ editor }: { editor: Editor }) {
 
   const [linkMode, setLinkMode] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
+  const imageAttrs = editor.isActive('image')
+    ? editor.getAttributes('image') as { alt?: string; caption?: string | null }
+    : null;
+  const imagePosition = imageAttrs ? editor.state.selection.from : null;
+  const updateImage = (attrs: Record<string, unknown>) => {
+    if (imagePosition === null) return;
+    // Keep the atom selected while a toolbar input owns DOM focus; otherwise
+    // the contextual fields would disappear after the first keystroke.
+    editor.chain().updateAttributes('image', attrs).setNodeSelection(imagePosition).run();
+  };
 
   const chain = () => editor.chain().focus();
   const active = (name: string, attrs?: Record<string, unknown>) =>
@@ -100,6 +110,9 @@ export default function Toolbar({ editor }: { editor: Editor }) {
       </button>
       <button title="Italic" className={active('italic')} onClick={() => chain().toggleItalic().run()}>
         <em>I</em>
+      </button>
+      <button title="Underline" className={active('underline')} onClick={() => chain().toggleMark('underline').run()}>
+        <u>U</u>
       </button>
       <button title="Strikethrough" className={active('strike')} onClick={() => chain().toggleStrike().run()}>
         <s>S</s>
@@ -199,6 +212,29 @@ export default function Toolbar({ editor }: { editor: Editor }) {
         </button>
       )}
       <span className="toolbar-sep" />
+      {imageAttrs && (
+        <span className="toolbar-image-form">
+          <label>
+            Alt text
+            <input
+              aria-label="Image alt text"
+              value={imageAttrs.alt ?? ''}
+              onChange={(event) => updateImage({ alt: event.target.value })}
+            />
+          </label>
+          <label>
+            Caption
+            <input
+              aria-label="Image caption"
+              placeholder="Optional"
+              value={imageAttrs.caption ?? ''}
+              onChange={(event) => updateImage({ caption: event.target.value || null })}
+            />
+          </label>
+          <button title="Delete image" onClick={() => editor.commands.deleteSelection()}>Delete image</button>
+        </span>
+      )}
+      {imageAttrs && <span className="toolbar-sep" />}
       <button title="Undo" disabled={!editor.can().undo()} onClick={() => chain().undo().run()}>
         ↩
       </button>

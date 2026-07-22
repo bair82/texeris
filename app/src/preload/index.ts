@@ -17,6 +17,8 @@ import type { AppearanceConfig } from '../shared/settings-types';
 import { UiChannels } from '../shared/ui-types';
 import { ProjectChannels, type ProjectInfo } from '../shared/project-types';
 import { HistoryChannels } from '../shared/doc-types';
+import { ProfileChannels } from '../shared/profile-types';
+import { ContextMenuChannels, type ContextActionEvent, type ContextDescribeRequest } from '../shared/context-menu-types';
 
 const api: TexerisApi = {
   async getAppInfo() {
@@ -33,6 +35,20 @@ const api: TexerisApi = {
       ipcRenderer.removeListener(MenuCommandChannel, listener);
     };
   },
+  contextMenu: {
+    onDescribe: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => callback(payload as ContextDescribeRequest);
+      ipcRenderer.on(ContextMenuChannels.describe, listener);
+      return () => ipcRenderer.removeListener(ContextMenuChannels.describe, listener);
+    },
+    reply: (requestId, context) => ipcRenderer.invoke(ContextMenuChannels.reply, { requestId, context }),
+    show: (context, x, y) => ipcRenderer.invoke(ContextMenuChannels.show, { context, x, y }),
+    onAction: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => callback(payload as ContextActionEvent);
+      ipcRenderer.on(ContextMenuChannels.action, listener);
+      return () => ipcRenderer.removeListener(ContextMenuChannels.action, listener);
+    },
+  },
   chat: {
     getOrCreateConversation: () =>
       ipcRenderer.invoke(ChatChannels.getOrCreateConversation),
@@ -46,6 +62,8 @@ const api: TexerisApi = {
       ipcRenderer.invoke(ChatChannels.listMessages, { conversationId }),
     listRuns: (conversationId) =>
       ipcRenderer.invoke(ChatChannels.listRuns, { conversationId }),
+    listDelegations: (conversationId) =>
+      ipcRenderer.invoke(ChatChannels.listDelegations, { conversationId }),
     startTurn: (request) => ipcRenderer.invoke(ChatChannels.startTurn, request),
     cancel: (runId) => ipcRenderer.invoke(ChatChannels.cancel, { runId }),
     onEvent: (callback) => {
@@ -58,6 +76,9 @@ const api: TexerisApi = {
       };
     },
   },
+  profile: {
+    begin: (request) => ipcRenderer.invoke(ProfileChannels.begin, request),
+  },
   doc: {
     list: () => ipcRenderer.invoke(DocChannels.list),
     outline: (documentId) => ipcRenderer.invoke(DocChannels.outline, { documentId }),
@@ -69,7 +90,9 @@ const api: TexerisApi = {
     rename: (documentId, name) => ipcRenderer.invoke(DocChannels.rename, { documentId, name }),
     trash: (documentId) => ipcRenderer.invoke(DocChannels.trash, { documentId }),
     duplicate: (documentId) => ipcRenderer.invoke(DocChannels.duplicate, { documentId }),
+    addImage: (request) => ipcRenderer.invoke(DocChannels.addImage, request),
     importDialog: () => ipcRenderer.invoke(DocChannels.importDialog),
+    exportDialog: (documentId) => ipcRenderer.invoke(DocChannels.exportDialog, { documentId }),
     setMain: (documentId) => ipcRenderer.invoke(DocChannels.setMain, { documentId }),
     reveal: (documentId) => ipcRenderer.invoke(DocChannels.reveal, { documentId }),
     trashList: () => ipcRenderer.invoke(DocChannels.trashList),
@@ -88,7 +111,7 @@ const api: TexerisApi = {
     },
   },
   patch: {
-    list: () => ipcRenderer.invoke(PatchChannels.list),
+    list: (documentId) => ipcRenderer.invoke(PatchChannels.list, { documentId }),
     get: (patchId) => ipcRenderer.invoke(PatchChannels.get, { patchId }),
     accept: (patchId, groupIds) =>
       ipcRenderer.invoke(PatchChannels.accept, { patchId, groupIds }),
@@ -114,6 +137,10 @@ const api: TexerisApi = {
       ipcRenderer.invoke(SettingsChannels.setSpellcheck, input),
     setAppearance: (input) =>
       ipcRenderer.invoke(SettingsChannels.setAppearance, input),
+    setPatchStyleMode: (mode) =>
+      ipcRenderer.invoke(SettingsChannels.setPatchStyleMode, { mode }),
+    disableWritingProfile: () =>
+      ipcRenderer.invoke(SettingsChannels.disableWritingProfile),
     onAppearanceChanged: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
         callback(payload as AppearanceConfig);

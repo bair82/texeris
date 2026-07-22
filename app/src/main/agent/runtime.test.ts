@@ -36,6 +36,8 @@ const CONFIG = {
     fontSize: 16.5,
     editorWidth: 'comfortable' as const,
   },
+  patchStyleMode: 'off' as const,
+  activeProfileId: null,
 };
 
 function makeRuntime(): PiAgentRuntime {
@@ -225,7 +227,7 @@ describe('PiAgentRuntime', () => {
     const origin = ctx.db
       .prepare('SELECT origin_json FROM patches WHERE id = ?')
       .get(proposed[0].id) as { origin_json: string };
-    expect(JSON.parse(origin.origin_json)).toEqual({ conversationId, runId });
+    expect(JSON.parse(origin.origin_json)).toEqual({ conversationId, agentRunId: runId });
 
     // acceptance records the agent revision linked to the patch
     const accepted = patches.accept(proposed[0].id);

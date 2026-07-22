@@ -6,6 +6,7 @@ import type {
   PatchRecord,
   PatchStatus,
   ProposePatchInput,
+  PatchStyleReview,
   ResolvedTextChange,
 } from '../../shared/patch-types';
 import { applyGroups, resolveAnchors, validateGroups } from '../../shared/patch-types';
@@ -52,6 +53,7 @@ export class PatchService {
   propose(
     input: ProposePatchInput & { documentId: string },
     origin: { conversationId?: string; agentRunId?: string } = {},
+    styleReview: PatchStyleReview | null = null,
   ): { patchId: string } | { conflict: PatchConflictItem[] } {
     const current = this.revisions.getCurrentRevision(input.documentId);
     if (input.baseRevision < 1 || input.baseRevision > current) {
@@ -83,8 +85,8 @@ export class PatchService {
       this.db
         .prepare(
           `INSERT INTO patches
-             (id, document_id, base_revision, origin_json, title, summary, status, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, 'proposed', ?)`,
+             (id, document_id, base_revision, origin_json, title, summary, status, created_at, style_review_json)
+           VALUES (?, ?, ?, ?, ?, ?, 'proposed', ?, ?)`,
         )
         .run(
           patchId,
@@ -94,6 +96,7 @@ export class PatchService {
           input.title,
           input.summary,
           now,
+          styleReview ? JSON.stringify(styleReview) : null,
         );
       const insertGroup = this.db.prepare(
         'INSERT INTO patch_groups (id, patch_id, idx, explanation, status) VALUES (?, ?, ?, ?, ?)',
@@ -132,7 +135,7 @@ export class PatchService {
 
   get(patchId: string): PatchRecord | null {    const row = this.db
       .prepare(
-        `SELECT id, document_id, base_revision, title, summary, status, created_at, resolved_at
+        `SELECT id, document_id, base_revision, title, summary, status, created_at, resolved_at, style_review_json
          FROM patches WHERE id = ?`,
       )
       .get(patchId) as
@@ -145,6 +148,7 @@ export class PatchService {
           status: string;
           created_at: string;
           resolved_at: string | null;
+          style_review_json: string | null;
         }
       | undefined;
     if (!row) {
@@ -203,8 +207,25 @@ export class PatchService {
       status: row.status as PatchStatus,
       createdAt: row.created_at,
       resolvedAt: row.resolved_at,
+      styleReview: row.style_review_json
+        ? (JSON.parse(row.style_review_json) as PatchStyleReview)
+        : null,
       groups,
     };
+  }
+
+  preview(input: ProposePatchInput & { documentId: string }):
+    | { ok: true; text: string }
+    | { ok: false; conflict: PatchConflictItem[] } {
+    const current = this.revisions.getCurrentRevision(input.documentId);
+    if (input.baseRevision < 1 || input.baseRevision > current) {
+      return { ok: false, conflict: [{ groupIdx: -1, changeIdx: -1, reason: 'base-revision-mismatch', message: `base revision ${input.baseRevision} out of range (1..${current}) — re-read the document` }] };
+    }
+    const text = this.revisions.getCurrentText(input.documentId);
+    const resolved = resolveAnchors(text, input.groups);
+    if (!resolved.ok) return { ok: false, conflict: resolved.conflicts };
+    const conflict = validateGroups(text, resolved.groups);
+    return conflict.length > 0 ? { ok: false, conflict } : { ok: true, text };
   }
 
   list(documentId?: string): PatchRecord[] {

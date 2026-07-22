@@ -11,7 +11,7 @@
  */
 
 import { Editor, Extension } from '@tiptap/core';
-import { Plugin, PluginKey, Selection, TextSelection } from '@tiptap/pm/state';
+import { NodeSelection, Plugin, PluginKey, Selection, TextSelection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import {
@@ -23,7 +23,7 @@ import {
   lineNumbers,
 } from '@codemirror/view';
 import { EditorState, StateEffect, StateField } from '@codemirror/state';
-import { defaultKeymap, history, historyKeymap, redo as cmRedo, undo as cmUndo } from '@codemirror/commands';
+import { defaultKeymap, history, historyKeymap, redo as cmRedo, redoDepth, undo as cmUndo, undoDepth } from '@codemirror/commands';
 import { markdown as markdownLang } from '@codemirror/lang-markdown';
 import type { TextSplice } from '../../../shared/domain-types';
 import { ChangeAccumulator } from './accumulator';
@@ -74,6 +74,8 @@ export interface EditorSession {
   undo(): boolean;
   redo(): boolean;
   focus(): void;
+  prepareContextAt(x: number, y: number): { image: boolean; canUndo: boolean; canRedo: boolean };
+  contextAction(action: string): boolean;
 }
 
 export interface SessionOptions {
@@ -82,6 +84,19 @@ export interface SessionOptions {
   onFlush: (splices: TextSplice[]) => void;
   /** Fired when the session gains uncommitted changes. */
   onDirty?: () => void;
+  /** Main-owned project asset ingest used by image paste/drop. */
+  uploadImage?: (file: File) => Promise<{ path: string; alt: string }>;
+  onImageError?: (error: unknown) => void;
+}
+
+function imageFiles(data: DataTransfer | null): File[] {
+  return Array.from(data?.files ?? []).filter(
+    (file) => file.type.startsWith('image/') || /\.(?:avif|gif|jpe?g|png|webp)$/i.test(file.name),
+  );
+}
+
+function markdownAlt(value: string): string {
+  return value.replace(/[\[\]\\]/g, (char) => `\\${char}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -203,9 +218,13 @@ export class RenderedSession implements EditorSession {
   private pastePending = false;
   private suppress = false;
   private highlightTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly uploadImage?: SessionOptions['uploadImage'];
+  private readonly onImageError?: SessionOptions['onImageError'];
 
   constructor(options: SessionOptions) {
     this.accumulator = new ChangeAccumulator(options.onFlush, options.onDirty);
+    this.uploadImage = options.uploadImage;
+    this.onImageError = options.onImageError;
     this.snapshot = options.text;
     this.editor = new Editor({
       extensions: [
@@ -215,6 +234,23 @@ export class RenderedSession implements EditorSession {
         footnoteRenumberExtension,
       ],
       content: markdownIn(options.text),
+      editorProps: {
+        handlePaste: (_view, event) => {
+          const files = imageFiles(event.clipboardData);
+          if (files.length === 0 || !this.uploadImage) return false;
+          event.preventDefault();
+          void this.insertImages(files);
+          return true;
+        },
+        handleDrop: (view, event) => {
+          const files = imageFiles(event.dataTransfer);
+          if (files.length === 0 || !this.uploadImage) return false;
+          event.preventDefault();
+          const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
+          void this.insertImages(files, coords?.pos);
+          return true;
+        },
+      },
       onUpdate: ({ editor }) => {
         const text = markdownOut(editor.getJSON() as PMNodeJSON);
         const prev = this.snapshot;
@@ -232,6 +268,35 @@ export class RenderedSession implements EditorSession {
         });
       },
     });
+  }
+
+  private async insertImages(files: File[], requestedPosition?: number): Promise<void> {
+    if (!this.uploadImage) return;
+    let position = requestedPosition;
+    try {
+      for (const file of files) {
+        const asset = await this.uploadImage(file);
+        const { state } = this.editor;
+        const resolved = Math.max(0, Math.min(position ?? state.selection.from, state.doc.content.size));
+        let tr = state.tr.setSelection(Selection.near(state.doc.resolve(resolved)));
+        const insertAt = tr.selection.from;
+        const node = state.schema.nodes.image.create({
+          src: asset.path,
+          alt: asset.alt,
+          title: null,
+          width: null,
+          height: null,
+          caption: null,
+        });
+        this.pastePending = true;
+        tr = tr.replaceSelectionWith(node);
+        tr = tr.setSelection(NodeSelection.create(tr.doc, insertAt)).scrollIntoView();
+        this.editor.view.dispatch(tr);
+        position = insertAt + node.nodeSize;
+      }
+    } catch (error) {
+      this.onImageError?.(error);
+    }
   }
 
   mount(el: HTMLElement): void {
@@ -420,6 +485,38 @@ export class RenderedSession implements EditorSession {
   focus(): void {
     this.editor.commands.focus();
   }
+
+  prepareContextAt(x: number, y: number) {
+    const hit = this.editor.view.posAtCoords({ left: x, top: y });
+    let imagePosition: number | null = null;
+    for (const candidate of [hit?.inside, hit?.pos, hit ? hit.pos - 1 : undefined]) {
+      if (candidate !== undefined && candidate >= 0 && this.editor.state.doc.nodeAt(candidate)?.type.name === 'image') {
+        imagePosition = candidate;
+        break;
+      }
+    }
+    if (imagePosition !== null) {
+      this.editor.view.dispatch(
+        this.editor.state.tr.setSelection(NodeSelection.create(this.editor.state.doc, imagePosition)),
+      );
+    }
+    return {
+      image: imagePosition !== null,
+      canUndo: this.editor.can().undo(),
+      canRedo: this.editor.can().redo(),
+    };
+  }
+
+  contextAction(action: string): boolean {
+    if (action === 'editor:undo') return this.undo();
+    if (action === 'editor:redo') return this.redo();
+    if (action === 'editor:image-delete') return this.editor.commands.deleteSelection();
+    if (action === 'editor:image-details') {
+      requestAnimationFrame(() => document.querySelector<HTMLInputElement>('[aria-label="Image alt text"]')?.focus());
+      return true;
+    }
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -507,9 +604,13 @@ export class RawSession implements EditorSession {
   private accumulator: ChangeAccumulator;
   private pastePending = false;
   private highlightTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly uploadImage?: SessionOptions['uploadImage'];
+  private readonly onImageError?: SessionOptions['onImageError'];
 
   constructor(options: SessionOptions) {
     this.accumulator = new ChangeAccumulator(options.onFlush, options.onDirty);
+    this.uploadImage = options.uploadImage;
+    this.onImageError = options.onImageError;
     let prevText = options.text;
     this.view = new EditorView({
       state: EditorState.create({
@@ -551,6 +652,39 @@ export class RawSession implements EditorSession {
     this.view.dom.addEventListener('paste', () => {
       this.pastePending = true;
     });
+    this.view.dom.addEventListener('paste', (event) => {
+      const files = imageFiles(event.clipboardData);
+      if (files.length === 0 || !this.uploadImage) return;
+      event.preventDefault();
+      void this.insertImages(files);
+    });
+    this.view.dom.addEventListener('drop', (event) => {
+      const files = imageFiles(event.dataTransfer);
+      if (files.length === 0 || !this.uploadImage) return;
+      event.preventDefault();
+      const position = this.view.posAtCoords({ x: event.clientX, y: event.clientY });
+      void this.insertImages(files, position ?? undefined);
+    });
+  }
+
+  private async insertImages(files: File[], requestedPosition?: number): Promise<void> {
+    if (!this.uploadImage) return;
+    let position = requestedPosition ?? this.view.state.selection.main.from;
+    try {
+      for (const file of files) {
+        const asset = await this.uploadImage(file);
+        const markdown = `![${markdownAlt(asset.alt)}](${asset.path})`;
+        const at = Math.max(0, Math.min(position, this.view.state.doc.length));
+        this.pastePending = true;
+        this.view.dispatch({
+          changes: { from: at, to: at, insert: markdown },
+          selection: { anchor: at + markdown.length },
+        });
+        position = at + markdown.length;
+      }
+    } catch (error) {
+      this.onImageError?.(error);
+    }
   }
 
   mount(el: HTMLElement): void {
@@ -676,5 +810,19 @@ export class RawSession implements EditorSession {
 
   focus(): void {
     this.view.focus();
+  }
+
+  prepareContextAt() {
+    return {
+      image: false,
+      canUndo: undoDepth(this.view.state) > 0,
+      canRedo: redoDepth(this.view.state) > 0,
+    };
+  }
+
+  contextAction(action: string): boolean {
+    if (action === 'editor:undo') return this.undo();
+    if (action === 'editor:redo') return this.redo();
+    return false;
   }
 }

@@ -35,6 +35,32 @@ export const DocCreateRequestSchema = Type.Object({
 });
 export type DocCreateRequest = Static<typeof DocCreateRequestSchema>;
 
+export const DocAddImageRequestSchema = Type.Object({
+  documentId: Type.String(),
+  sourceName: Type.String({ minLength: 1, maxLength: 255 }),
+  mediaType: Type.String({ minLength: 1, maxLength: 64 }),
+  dataBase64: Type.String({ minLength: 1, maxLength: 28_000_000 }),
+});
+export type DocAddImageRequest = Static<typeof DocAddImageRequestSchema>;
+
+export interface AddedImageAsset {
+  path: string;
+  alt: string;
+}
+
+export interface DocumentImportResult {
+  id: string;
+  path: string;
+  title: string;
+  warnings: string[];
+}
+
+export interface DocumentExportResult {
+  path: string;
+  format: 'markdown' | 'docx' | 'odt' | 'rtf' | 'pdf';
+  warnings: string[];
+}
+
 /** Document-management requests (M1.5 EU3) — all id-addressed, never path. */
 export const DocRenameRequestSchema = Type.Object({
   documentId: Type.String(),
@@ -112,7 +138,9 @@ export const DocChannels = {
   rename: 'texeris:doc-rename',
   trash: 'texeris:doc-trash',
   duplicate: 'texeris:doc-duplicate',
+  addImage: 'texeris:doc-add-image',
   importDialog: 'texeris:doc-import-dialog',
+  exportDialog: 'texeris:doc-export-dialog',
   setMain: 'texeris:doc-set-main',
   reveal: 'texeris:doc-reveal',
   trashList: 'texeris:doc-trash-list',

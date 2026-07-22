@@ -1,6 +1,6 @@
 /**
- * EU3 smoke (document & conversation management): rename a document through
- * the nav menu, set it as main, duplicate it, trash the duplicate, then
+ * EU3 smoke (document & conversation management): rename a document, set it
+ * as main, duplicate it, trash the duplicate, then
  * rename a conversation and reopen it after starting a new one.
  *
  * Usage: pnpm build first, then: node scripts/smoke-eu3.mjs
@@ -71,12 +71,15 @@ try {
       pending.delete(msg.id);
     }
   };
-  const evaluate = async (expression) => {
+  const send = (method, params = {}) => {
     const id = ++msgId;
-    const res = await new Promise((resolve, reject) => {
-      pending.set(id, (msg) => (msg.error ? reject(new Error(msg.error.message)) : resolve(msg.result)));
-      ws.send(JSON.stringify({ id, method: 'Runtime.evaluate', params: { expression, awaitPromise: true, returnByValue: true } }));
+    return new Promise((resolve, reject) => {
+      pending.set(id, (msg) => msg.error ? reject(new Error(msg.error.message)) : resolve(msg.result));
+      ws.send(JSON.stringify({ id, method, params }));
     });
+  };
+  const evaluate = async (expression) => {
+    const res = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
     if (res.exceptionDetails) throw new Error(JSON.stringify(res.exceptionDetails));
     return res.result.value;
   };
@@ -97,22 +100,14 @@ try {
     input.dispatchEvent(new Event('input', { bubbles: true }));
     return true;
   })()`;
-  const openMenu = (rowText) => `(() => {
-    const row = [...document.querySelectorAll('.nav-file-row')].find(r => r.textContent.includes(${JSON.stringify(rowText)}));
-    if (!row) return false;
-    row.querySelector('.nav-file-menu-btn').click();
-    return true;
+  const withDocument = (path, operation) => `(async () => {
+    const document = (await window.texeris.doc.list()).find(d => d.path === ${JSON.stringify(path)});
+    if (!document) throw new Error('missing document: ${path}');
+    return window.texeris.doc.${operation}(document.id${operation === 'rename' ? ", 'journal.md'" : ''});
   })()`;
-  const clickItem = (itemText) => `(() => {
-    const item = [...document.querySelectorAll('.nav-menu button')].find(b => b.textContent.includes(${JSON.stringify(itemText)}));
-    if (!item) return false;
-    item.click();
-    return true;
-  })()`;
-  const clickMenuItem = async (rowText, itemText) => {
-    if (!(await evaluate(openMenu(rowText)))) return 'no row';
-    await sleep(150); // React renders the menu after the click returns
-    return evaluate(clickItem(itemText));
+  const reload = async () => {
+    await evaluate(`location.reload(); true`);
+    await waitFor(`!!window.texeris && !!document.querySelector('.tiptap-rendered')`, 'app did not reload');
   };
 
   await waitFor(`!!window.texeris && !!document.querySelector('.tiptap-rendered')`, 'editor never mounted');
@@ -130,10 +125,10 @@ try {
     'notes.md never appeared in the nav',
   );
 
-  // rename it through the row menu
-  check('rename menu item clicked', (await clickMenuItem('notes.md', 'Rename')) === true);
-  await evaluate(setInput('.nav-rename-form input', 'journal.md'));
-  await evaluate(`document.querySelector('.nav-rename-form input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); true`);
+  // Native menus are OS-owned and cannot be selected reliably over CDP. EU5
+  // checks the actual popup; this lifecycle smoke exercises the same services.
+  await evaluate(withDocument('notes.md', 'rename'));
+  await reload();
   await waitFor(
     `[...document.querySelectorAll('.nav-file')].some(b => b.textContent.includes('journal.md'))`,
     'journal.md never appeared',
@@ -144,21 +139,22 @@ try {
   );
 
   // set it as the main document
-  check('set-main menu item clicked', (await clickMenuItem('journal.md', 'Set as main')) === true);
-  await sleep(400);
+  await evaluate(withDocument('journal.md', 'setMain'));
+  await reload();
   const json = JSON.parse(fs.readFileSync(path.join(projectDir, '.texeris', 'project.json'), 'utf8'));
   check('project.json points at the new main document', json.mainDocument === 'journal.md', json.mainDocument);
 
   // duplicate it
-  check('duplicate menu item clicked', (await clickMenuItem('journal.md', 'Duplicate')) === true);
+  await evaluate(withDocument('journal.md', 'duplicate'));
+  await reload();
   await waitFor(
     `[...document.querySelectorAll('.nav-file')].some(b => b.textContent.includes('journal copy.md'))`,
     'duplicate never appeared',
   );
 
-  // trash the duplicate (with inline confirm)
-  check('trash menu item clicked', (await clickMenuItem('journal copy.md', 'Move to trash')) === true);
-  await evaluate(`document.querySelector('.nav-confirm-yes').click(); true`);
+  // trash the duplicate
+  await evaluate(withDocument('journal copy.md', 'trash'));
+  await reload();
   await waitFor(
     `![...document.querySelectorAll('.nav-file')].some(b => b.textContent.includes('journal copy.md'))`,
     'trashed document still in the nav',
@@ -175,13 +171,12 @@ try {
     80,
   );
 
-  // rename the conversation through the picker
-  await evaluate(`document.querySelector('.conv-toggle').click(); true`);
-  await waitFor(`!!document.querySelector('.conv-picker')`, 'picker never opened');
-  await evaluate(`document.querySelector('.conv-row-action').click(); true`);
-  await evaluate(setInput('.conv-rename-input', 'smoke chat'));
-  await evaluate(`document.querySelector('.conv-rename-input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); true`);
-  await sleep(400);
+  // rename the current conversation
+  await evaluate(`(async () => {
+    const [conversation] = await window.texeris.chat.listConversations();
+    await window.texeris.chat.renameConversation(conversation.id, 'smoke chat');
+  })()`);
+  await reload();
   const toggleTitle = await evaluate(`document.querySelector('.conv-toggle').textContent`);
   check('conversation renamed', toggleTitle.includes('smoke chat'), toggleTitle);
 

@@ -23,7 +23,15 @@ export class ProjectManager {
 
   create(parentDir: string, name: string): ProjectContext {
     const trimmed = name.trim();
-    if (!trimmed || trimmed.includes('..') || path.isAbsolute(trimmed)) {
+    if (
+      !trimmed ||
+      trimmed === '.' ||
+      trimmed === '..' ||
+      trimmed.includes('..') ||
+      path.isAbsolute(trimmed) ||
+      trimmed.includes('/') ||
+      trimmed.includes('\\')
+    ) {
       throw new Error(`invalid project name ${JSON.stringify(name)}`);
     }
     const root = path.join(parentDir, trimmed);

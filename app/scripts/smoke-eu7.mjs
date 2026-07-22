@@ -72,12 +72,15 @@ try {
       pending.delete(msg.id);
     }
   };
-  const evaluate = async (expression) => {
+  const send = (method, params = {}) => {
     const id = ++msgId;
-    const res = await new Promise((resolve, reject) => {
-      pending.set(id, (msg) => (msg.error ? reject(new Error(msg.error.message)) : resolve(msg.result)));
-      ws.send(JSON.stringify({ id, method: 'Runtime.evaluate', params: { expression, awaitPromise: true, returnByValue: true } }));
+    return new Promise((resolve, reject) => {
+      pending.set(id, (msg) => msg.error ? reject(new Error(msg.error.message)) : resolve(msg.result));
+      ws.send(JSON.stringify({ id, method, params }));
     });
+  };
+  const evaluate = async (expression) => {
+    const res = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
     if (res.exceptionDetails) throw new Error(JSON.stringify(res.exceptionDetails));
     return res.result.value;
   };
@@ -100,20 +103,15 @@ try {
   })()`;
   const navHas = (name) =>
     `[...document.querySelectorAll('.nav-file')].some(b => b.textContent.includes(${JSON.stringify(name)}))`;
-  const trashViaMenu = async (name) => {
-    await evaluate(`(() => {
-      const row = [...document.querySelectorAll('.nav-file-row')].find(r => r.textContent.includes(${JSON.stringify(name)}));
-      if (!row) return false;
-      row.querySelector('.nav-file-menu-btn').click();
+  const trashDocument = async (name) => {
+    await evaluate(`(async () => {
+      const document = (await window.texeris.doc.list()).find(d => d.path === ${JSON.stringify(name)});
+      if (!document) return false;
+      await window.texeris.doc.trash(document.id);
+      location.reload();
       return true;
     })()`);
-    if (!(await waitFor(
-      `[...document.querySelectorAll('.nav-menu button')].some(b => b.textContent.includes('Move to trash'))`,
-      `row menu never opened for ${name}`,
-    ))) return false;
-    await evaluate(`[...document.querySelectorAll('.nav-menu button')].find(b => b.textContent.includes('Move to trash')).click(); true`);
-    if (!(await waitFor(`!!document.querySelector('.nav-confirm-yes')`, 'trash confirm never showed'))) return false;
-    await evaluate(`document.querySelector('.nav-confirm-yes').click(); true`);
+    await waitFor(`!!window.texeris && !!document.querySelector('.tiptap-rendered')`, 'app did not reload after trash');
     return waitFor(`!(${navHas(name)})`, `${name} still in the nav after trashing`);
   };
   const openTrashDialog = async () => {
@@ -124,13 +122,22 @@ try {
   await waitFor(`!!window.texeris && !!document.querySelector('.tiptap-rendered')`, 'editor never mounted');
   check('welcome.md is seeded into the dev project', await evaluate(navHas('welcome.md')));
 
+  // An active project must still be able to reach the picker in order to
+  // create another project (and inspect its welcome.md), then return safely.
+  await evaluate(`document.querySelector('.footer-button').click(); true`);
+  await waitFor(`!!document.querySelector('.project-picker')`, 'project picker never opened');
+  check('active project can reopen the project picker', true);
+  await evaluate(`document.querySelector('.picker-back').click(); true`);
+  await waitFor(`!!document.querySelector('.tiptap-rendered')`, 'back from project picker never restored the project');
+  check('project picker returns to the active project', true);
+
   // create a scratch document, then trash it through the row menu
   await evaluate(`document.querySelector('.nav-action:not(.import-action):not(.trash-action)').click(); true`);
   await evaluate(setInput('.nav-new-form input', 'scratch'));
   await evaluate(`document.querySelector('.nav-new-form input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); true`);
   await waitFor(navHas('scratch.md'), 'scratch.md never appeared in the nav');
 
-  await trashViaMenu('scratch.md');
+  await trashDocument('scratch.md');
   const trashFiles = () =>
     fs.existsSync(path.join(projectDir, '.texeris', 'trash'))
       ? fs.readdirSync(path.join(projectDir, '.texeris', 'trash'))
@@ -158,7 +165,7 @@ try {
   // close the dialog with the ✕ button, then trash scratch.md again
   await evaluate(`document.querySelector('.trash-panel header button').click(); true`);
   await waitFor(`!document.querySelector('.trash-panel')`, 'trash dialog did not close');
-  await trashViaMenu('scratch.md');
+  await trashDocument('scratch.md');
 
   // delete it permanently (with the inline confirm)
   await openTrashDialog();

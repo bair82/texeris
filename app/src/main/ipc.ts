@@ -18,6 +18,7 @@ import {
   CheckpointListRequestSchema,
   CheckpointRestoreRequestSchema,
   DocChannels,
+  DocAddImageRequestSchema,
   DocCommitRequestSchema,
   DocCreateRequestSchema,
   DocGetTextRequestSchema,
@@ -45,6 +46,7 @@ import {
   SetApiKeyRequestSchema,
   SetAppearanceRequestSchema,
   SetSpellcheckRequestSchema,
+  SetPatchStyleModeRequestSchema,
   SettingsChannels,
   type AppearanceConfig,
   type SettingsView,
@@ -64,6 +66,7 @@ import { extractHeadings } from './agent/markdown';
 import {
   deleteTrashedDocument,
   duplicateDocument,
+  exportDocumentFile,
   importDocumentFile,
   listTrashedDocuments,
   renameDocument,
@@ -71,7 +74,12 @@ import {
   setMainDocument,
   trashDocument,
 } from './services/documents';
+import { addImageAsset } from './services/assets';
 import { createDocument, ensureDocument } from './services/project';
+import { ProfileBeginRequestSchema, ProfileChannels } from '../shared/profile-types';
+import type { CorpusService } from './services/corpus';
+import type { WritingProfileService } from './services/profile';
+import { printHtmlToPdf } from './pdfExport';
 
 export interface IpcDeps {
   requireProject(): ProjectContext;
@@ -81,6 +89,8 @@ export interface IpcDeps {
   credentials: CredentialsService;
   config: WorkspaceConfig;
   manager: ProjectManager;
+  corpus: CorpusService;
+  profiles: WritingProfileService;
   adoptProject(ctx: ProjectContext): void;
 }
 
@@ -198,6 +208,11 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return deps.requireConversations().listRuns(req.conversationId);
   });
 
+  ipcMain.handle(ChatChannels.listDelegations, (_event, raw: unknown) => {
+    const req = Value.Decode(ConversationRequestSchema, raw);
+    return deps.requireConversations().listDelegations(req.conversationId);
+  });
+
   ipcMain.handle(ChatChannels.startTurn, async (event, raw: unknown) => {
     const req = Value.Decode(StartTurnRequestSchema, raw);
     const { runId } = await deps.requireRuntime().startTurn(req);
@@ -217,6 +232,36 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const req = Value.Decode(CancelRequestSchema, raw);
     await deps.requireRuntime().cancel(req.runId);
     return { cancelled: true };
+  });
+
+  // --------------------------------------------------------- writing profile
+
+  ipcMain.handle(ProfileChannels.begin, async (event, raw: unknown) => {
+    const req = Value.Decode(ProfileBeginRequestSchema, raw);
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showOpenDialog(win!, {
+      title: req.source === 'folder' ? 'Choose writing corpus folder' : 'Choose writing files',
+      properties: req.source === 'folder' ? ['openDirectory'] : ['openFile', 'multiSelections'],
+      filters: req.source === 'files'
+        ? [{ name: 'Writing documents', extensions: ['md', 'markdown', 'mdown', 'txt', 'html', 'htm', 'docx', 'odt', 'rtf', 'pdf'] }]
+        : undefined,
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const conversations = deps.requireConversations();
+    const conversationId = conversations.startNewConversation({ id: 'writing-profile', version: 1 });
+    const grant = await deps.corpus.createGrant(deps.requireProject(), conversationId, result.filePaths, req.source);
+    const { runId } = await deps.requireRuntime().startTurn({
+      conversationId,
+      text: 'Analyze the selected corpus and build my writing profile. Begin by reviewing the corpus inventory and conversion warnings. Delegate bounded corpus-analysis and metadata tasks where useful. Ask me before any lookup involving an ambiguous or apparently private work.',
+      mode: 'deep',
+      scope: { kind: 'document', documentId: mainDocId(deps.requireProject()) },
+    });
+    void (async () => {
+      for await (const agentEvent of deps.requireRuntime().events(runId)) {
+        if (!event.sender.isDestroyed()) event.sender.send(ChatChannels.event, agentEvent);
+      }
+    })();
+    return { conversationId, runId, sourceCount: grant.sources.length };
   });
 
   // -------------------------------------------------------------------- doc
@@ -311,17 +356,66 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return duplicateDocument(deps.requireProject(), req.documentId);
   });
 
+  ipcMain.handle(DocChannels.addImage, (_event, raw: unknown) => {
+    const req = Value.Decode(DocAddImageRequestSchema, raw);
+    const project = deps.requireProject();
+    return addImageAsset(project.root, project.db, req);
+  });
+
   ipcMain.handle(DocChannels.importDialog, async (event) => {
+    const smokeImport = process.env.TEXERIS_SMOKE === '1'
+      ? process.env.TEXERIS_PDF_SMOKE_IMPORT
+      : undefined;
+    if (smokeImport) {
+      return await importDocumentFile(deps.requireProject(), smokeImport);
+    }
     const win = BrowserWindow.fromWebContents(event.sender);
     const result = await dialog.showOpenDialog(win!, {
-      title: 'Import a Markdown file',
-      filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'txt'] }],
+      title: 'Import a document',
+      filters: [
+        { name: 'Supported documents', extensions: ['md', 'markdown', 'mdown', 'txt', 'docx', 'odt', 'rtf', 'pdf'] },
+        { name: 'PDF document', extensions: ['pdf'] },
+        { name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'txt'] },
+        { name: 'Word document', extensions: ['docx'] },
+        { name: 'OpenDocument text', extensions: ['odt'] },
+        { name: 'Rich Text Format', extensions: ['rtf'] },
+      ],
       properties: ['openFile'],
     });
     if (result.canceled || result.filePaths.length === 0) {
       return null;
     }
-    return importDocumentFile(deps.requireProject(), result.filePaths[0]);
+    return await importDocumentFile(deps.requireProject(), result.filePaths[0]);
+  });
+
+  ipcMain.handle(DocChannels.exportDialog, async (event, raw: unknown) => {
+    const req = Value.Decode(DocIdRequestSchema, raw);
+    const project = deps.requireProject();
+    const row = project.db.prepare('SELECT path, title FROM documents WHERE id = ?').get(req.documentId) as
+      | { path: string; title: string }
+      | undefined;
+    if (!row) throw new Error('unknown document');
+    const smokeOutput = process.env.TEXERIS_SMOKE === '1'
+      ? process.env.TEXERIS_PDF_SMOKE_OUTPUT
+      : undefined;
+    let outputPath = smokeOutput;
+    if (!outputPath) {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      const result = await dialog.showSaveDialog(win!, {
+        title: 'Export document',
+        defaultPath: path.join(project.root, `${row.title}.pdf`),
+        filters: [
+          { name: 'PDF document', extensions: ['pdf'] },
+          { name: 'Word document', extensions: ['docx'] },
+          { name: 'OpenDocument text', extensions: ['odt'] },
+          { name: 'Rich Text Format', extensions: ['rtf'] },
+          { name: 'Markdown', extensions: ['md'] },
+        ],
+      });
+      if (result.canceled || !result.filePath) return null;
+      outputPath = result.filePath;
+    }
+    return await exportDocumentFile(project, req.documentId, outputPath, printHtmlToPdf);
   });
 
   ipcMain.handle(DocChannels.setMain, (_event, raw: unknown) => {
@@ -386,9 +480,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
   // ------------------------------------------------------------------ patch
 
-  ipcMain.handle(PatchChannels.list, () => {
+  ipcMain.handle(PatchChannels.list, (_event, raw: unknown) => {
+    const req = Value.Decode(DocGetTextRequestSchema, raw ?? {});
     const project = deps.requireProject();
-    const docId = ensureDocument(project, project.project.mainDocument);
+    const docId = req.documentId ?? ensureDocument(project, project.project.mainDocument);
     return deps.requirePatches().list(docId);
   });
 
@@ -429,6 +524,8 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         availableLanguages: session.defaultSession.availableSpellCheckerLanguages,
       },
       appearance: deps.config.appearance,
+      patchStyleMode: deps.config.patchStyleMode,
+      writingProfile: deps.profiles.view(),
     };
   });
 
@@ -438,7 +535,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const req = Value.Decode(SetAppearanceRequestSchema, raw);
     const appearance: AppearanceConfig = { ...deps.config.appearance, ...req };
     deps.config.appearance = appearance;
-    saveWorkspaceConfig(deps.config);
+    if (!process.env.TEXERIS_FAUX_PROVIDER) saveWorkspaceConfig(deps.config);
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send(SettingsChannels.appearanceChanged, appearance);
     }
@@ -458,8 +555,20 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       session.defaultSession.setSpellCheckerLanguages([language]);
     }
     deps.config.spellcheck = { enabled: req.enabled, language };
-    saveWorkspaceConfig(deps.config);
+    if (!process.env.TEXERIS_FAUX_PROVIDER) saveWorkspaceConfig(deps.config);
     return { enabled: req.enabled, language };
+  });
+
+  ipcMain.handle(SettingsChannels.setPatchStyleMode, (_event, raw: unknown) => {
+    const req = Value.Decode(SetPatchStyleModeRequestSchema, raw);
+    deps.config.patchStyleMode = req.mode;
+    if (!process.env.TEXERIS_FAUX_PROVIDER) saveWorkspaceConfig(deps.config);
+    return { mode: req.mode };
+  });
+
+  ipcMain.handle(SettingsChannels.disableWritingProfile, () => {
+    deps.profiles.disable();
+    return { disabled: true };
   });
 
   ipcMain.handle(SettingsChannels.setApiKey, (_event, raw: unknown) => {

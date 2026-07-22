@@ -28,10 +28,43 @@ function countWords(text: string): number {
   return count;
 }
 
+function fileBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error('could not read image'));
+    reader.onload = () => {
+      const result = String(reader.result ?? '');
+      const comma = result.indexOf(',');
+      if (comma < 0) reject(new Error('could not encode image'));
+      else resolve(result.slice(comma + 1));
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function imageMediaType(file: File): string {
+  if (file.type) return file.type;
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  const types: Record<string, string> = {
+    avif: 'image/avif',
+    gif: 'image/gif',
+    jpeg: 'image/jpeg',
+    jpg: 'image/jpeg',
+    png: 'image/png',
+    webp: 'image/webp',
+  };
+  return types[extension ?? ''] ?? '';
+}
+
 interface EditorNotice {
   text: string;
   actionLabel?: string;
   onAction?: () => void;
+}
+
+export interface WorkspaceStatus {
+  message: string;
+  tone: 'progress' | 'success' | 'warning' | 'error';
 }
 
 interface EditorRegionProps {
@@ -46,6 +79,9 @@ interface EditorRegionProps {
   onModeChange(mode: EditorMode): void;
   /** Report the committed revision (drives the nav outline refresh). */
   onRevisionChange(revision: number): void;
+  /** Workspace-wide operation feedback temporarily replaces the word count. */
+  workspaceStatus?: WorkspaceStatus | null;
+  onDismissWorkspaceStatus?(): void;
 }
 
 /**
@@ -63,6 +99,8 @@ export default function EditorRegion({
   onDocState,
   onModeChange,
   onRevisionChange,
+  workspaceStatus,
+  onDismissWorkspaceStatus,
 }: EditorRegionProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sessionRef = useRef<EditorSession | null>(null);
@@ -155,6 +193,19 @@ export default function EditorRegion({
         onDirty: () => {
           dirtyRef.current = true;
           setSaveState('dirty');
+        },
+        uploadImage: async (file: File) => {
+          const mediaType = imageMediaType(file);
+          const sourceName = file.name || `pasted-image.${mediaType.split('/')[1] || 'png'}`;
+          return window.texeris.doc.addImage({
+            documentId,
+            sourceName,
+            mediaType,
+            dataBase64: await fileBase64(file),
+          });
+        },
+        onImageError: (error: unknown) => {
+          setNotice({ text: `image could not be added: ${error instanceof Error ? error.message : String(error)}` });
         },
       };
       const session = forMode === 'rendered' ? new RenderedSession(Options) : new RawSession(Options);
@@ -274,6 +325,12 @@ export default function EditorRegion({
       toggleHistory: () => setShowHistory((v) => !v),
       toggleMode: () =>
         switchModeRef.current(modeRef.current === 'rendered' ? 'raw' : 'rendered'),
+      flush: () => sessionRef.current?.flush(),
+      contextAt: (x, y) => ({
+        kind: 'editor',
+        ...(sessionRef.current?.prepareContextAt(x, y) ?? { image: false, canUndo: false, canRedo: false }),
+      }),
+      contextAction: (action) => sessionRef.current?.contextAction(action) ?? false,
     });
   }, []);
 
@@ -402,11 +459,30 @@ export default function EditorRegion({
             </button>
           ))}
         </div>
-        <span className="word-count">
-          {wordCount !== null && `${wordCount.toLocaleString('en-US')} words`}
-          {selStats &&
-            ` · ${selStats.words.toLocaleString('en-US')} words, ${selStats.chars.toLocaleString('en-US')} chars selected`}
-        </span>
+        {workspaceStatus ? (
+          <div
+            className={`workspace-status-message status-${workspaceStatus.tone}`}
+            role={workspaceStatus.tone === 'error' ? 'alert' : 'status'}
+            title={workspaceStatus.message}
+          >
+            <span>{workspaceStatus.message}</span>
+            {workspaceStatus.tone !== 'progress' && (
+              <button
+                type="button"
+                aria-label="Dismiss status message"
+                onClick={onDismissWorkspaceStatus}
+              >
+                ×
+              </button>
+            )}
+          </div>
+        ) : (
+          <span className="word-count">
+            {wordCount !== null && `${wordCount.toLocaleString('en-US')} words`}
+            {selStats &&
+              ` · ${selStats.words.toLocaleString('en-US')} words, ${selStats.chars.toLocaleString('en-US')} chars selected`}
+          </span>
+        )}
         <div className="status-right">
           <span className="status-chip">
             {revision !== null ? `rev ${revision}` : '…'} ·{' '}

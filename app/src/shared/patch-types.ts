@@ -75,7 +75,28 @@ export interface PatchRecord {
   status: PatchStatus;
   createdAt: string;
   resolvedAt: string | null;
+  styleReview: PatchStyleReview | null;
   groups: PatchGroupRecord[];
+}
+
+export interface PatchStyleIssue {
+  groupIndex: number;
+  changeIndex: number;
+  category: string;
+  span: string;
+  severity: 'medium' | 'high';
+  confidence: 'medium' | 'high';
+  reason: string;
+  direction: string;
+}
+
+export interface PatchStyleReview {
+  verdict: 'pass' | 'revise' | 'unavailable';
+  mode: 'audit' | 'revise-once';
+  issues: PatchStyleIssue[];
+  model?: string;
+  promptVersion: number;
+  warning?: string;
 }
 
 // ---------------------------------------------------------------------------

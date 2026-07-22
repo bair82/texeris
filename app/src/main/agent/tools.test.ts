@@ -115,7 +115,7 @@ describe('propose_patch tool', () => {
     const origin = ctx.db
       .prepare('SELECT origin_json FROM patches WHERE id = ?')
       .get(out.patchId) as { origin_json: string };
-    expect(JSON.parse(origin.origin_json)).toEqual(runContext);
+    expect(JSON.parse(origin.origin_json)).toEqual({ conversationId: runContext.conversationId, agentRunId: runContext.runId });
   });
 
   it('returns a structured conflict for a bad anchor (not an error)', async () => {

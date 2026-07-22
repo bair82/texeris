@@ -44,6 +44,8 @@ describe('ProjectManager', () => {
   it('rejects invalid project names', () => {
     expect(() => manager.create(dir, '../escape')).toThrow(/invalid project name/);
     expect(() => manager.create(dir, '/absolute')).toThrow(/invalid project name/);
+    expect(() => manager.create(dir, '.')).toThrow(/invalid project name/);
+    expect(() => manager.create(dir, 'nested/project')).toThrow(/invalid project name/);
   });
 
   it('skips recents whose project folder vanished', () => {

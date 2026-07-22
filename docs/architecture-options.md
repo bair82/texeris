@@ -1,15 +1,20 @@
 # Scholarly Writing Workspace — Architecture Options and Initial Recommendations
 
-**Status:** Provisional architecture note  
+**Status:** Living architecture record; initial alternatives are retained for
+decision history, while implemented outcomes and the current sequence are
+called out explicitly
 **Primary platforms:** macOS and Linux  
 **Assumed application type:** Local desktop application  
-**Purpose:** Identify sensible starting choices, expensive-to-change boundaries, and areas that should remain open until tested
+**Purpose:** Record structural boundaries, implemented decisions, remaining
+options, and expensive-to-change risks
 
 ---
 
 ## 1. How to use this document
 
-This is not a final technical design. It proposes a coherent starting architecture and explains alternatives.
+This is not a final technical design. It began as a starting architecture and
+now retains those alternatives alongside implemented outcomes. Current
+delivery priorities live in [`development-plan.md`](development-plan.md).
 
 The most important architectural objective is not to choose the perfect framework. It is to preserve the ability to change product decisions after real use. The architecture should therefore establish a few strong boundaries while avoiding elaborate abstractions for unproven features.
 
@@ -392,6 +397,18 @@ type AppRequest =
 ```
 
 Validate IPC payloads at runtime. TypeScript types alone do not protect a process boundary.
+
+## 7.5 Native context menus
+
+Electron's main process owns platform context-menu construction. On a native
+`webContents` context event it asks the sandboxed renderer for a narrow typed
+descriptor of the target (generic editor, image, document, conversation, or
+message), validates the reply, and combines it with Electron's trusted edit,
+selection, link, and spelling metadata. Privileged operations such as opening
+external links, replacing misspellings, and copying image pixels remain in the
+main process. Domain actions return as typed renderer events and reuse the
+same handlers as explicit ellipsis launchers. This keeps native behaviour
+without granting the renderer Node or arbitrary menu authority.
 
 ---
 
@@ -1066,9 +1083,12 @@ Do not claim support for every Pandoc extension immediately. Define and test a s
 - Block quotations.
 - Links and images.
 - Pipe tables or another chosen table syntax.
+- Controlled raw-HTML tables for imported structures that pipe tables cannot
+  represent (merged cells, alignment, and multi-paragraph cells).
 - Footnotes.
 - Citation syntax.
 - Inline and display math, possibly later.
+- Inline underline as controlled `<u>` markup for word-processor interchange.
 - YAML metadata, possibly later.
 
 The parser, editor decorations, preview, and export tests should agree on this profile.
@@ -1099,7 +1119,20 @@ A typical export job:
 - Version and availability vary.
 - GUI applications on macOS and Linux may not inherit the user's shell PATH as expected.
 
-A personal prototype can use a configured system Pandoc. A distributable application will probably benefit from bundling or explicit version detection.
+A personal prototype can use a configured system Pandoc. Texeris now uses that
+only as a development convenience; Linux distributions bundle the pinned
+converter so release behaviour is independent of the user's PATH.
+
+### Current PDF derivative path
+
+PDF export deliberately does not depend on a second typesetting engine. The
+main process asks the pinned Pandoc build for an HTML fragment, embeds only
+allowlisted project-owned images as data URLs, sanitizes the fragment, and
+loads the self-contained result in a hidden sandboxed Electron window with
+JavaScript disabled and a deny-by-default content security policy. Chromium's
+`printToPDF` produces a fixed A4 academic layout and page-number footer. The
+result is validated as PDF bytes and atomically renamed into place. This is a
+derived snapshot; it cannot mutate the canonical Markdown or revision history.
 
 ## 17.4 Golden export tests
 
@@ -1245,6 +1278,40 @@ src/infrastructure/
 ```
 
 This is an organisational suggestion, not a demand for strict domain-driven design.
+
+### Conversion components
+
+Texeris ships a pinned Pandoc executable with every Linux release and invokes
+it only from the main process for user-selected corpus files. Pandoc is the
+primary semantic converter for DOCX, ODT, RTF, and HTML: its Markdown output
+is the corpus derivative, never a replacement for the original file. The
+release build verifies the upstream asset checksum before placing the
+executable outside `app.asar`; conversion uses `--sandbox` and does not enable
+filters or custom writers.
+
+Word-processor imports extract embedded media into a document-specific
+`assets/<document-name>/media/` directory and keep project-relative references
+in canonical Markdown. The sandboxed renderer loads only allowlisted image
+extensions beneath the active project root through the `texeris-asset:`
+protocol; traversal and arbitrary filesystem URLs are rejected. Export gives
+Pandoc the project root as its resource path so those images are re-embedded.
+Paste and drag/drop use the same layout: the renderer sends validated image
+bytes over the narrow preload bridge, the main process writes a content-hashed
+asset, and the editor inserts only its project-relative reference. Alt text and
+captions are image-node attributes serialized into controlled HTML. Asset
+reconciliation runs after canonical revisions and at project open: current
+references stay public, files needed only by an older revision move to hidden
+`.texeris/asset-trash/`, and files referenced by no actual revision are
+removed. Restoring a revision moves its assets back before they are rendered.
+
+PDF is a distinct, lower-fidelity case. The main process uses pinned
+`unpdf` 1.6.2 (PDF.js server build) to extract selectable text without a native
+binary, rendering, or network access. Imports are capped at 100 MB and 1,000
+pages. Editable document imports receive conservative escaped plain Markdown;
+corpus derivatives additionally retain `texeris:pdf-page` markers. Texeris
+always reports the conversion as lossy and does not infer headings, columns,
+tables, or equations. Files with too little selectable text are rejected with
+an explicit scanned/image-only explanation; OCR remains deferred.
 
 ## 20.1 Document service
 
@@ -1481,58 +1548,35 @@ Build macOS artifacts on macOS runners and Linux artifacts on Linux runners. Do 
 
 ---
 
-## 26. Possible implementation milestones
+## 26. Current implementation sequence
 
-## Milestone 0 — Technical spikes
+The original M0–M4 forecast is now historical: the application already has a
+multi-file editor, revision-aware agent patches, a first skill and writing
+profile, bounded delegation, office/PDF interchange, and source conversion.
+The active sequence is therefore architectural consolidation followed by the
+remaining academic data domains:
 
-Answer narrow risks with disposable prototypes:
+1. **Integrated baseline:** land the current feature set on one authoritative
+   branch; add CI; make deterministic, desktop, compatibility, live-model, and
+   packaged checks distinct and truthful.
+2. **Integrity and jobs:** close relational deletion/run-context/corpus-
+   lifecycle gaps; move expensive conversion and extraction behind cancellable
+   job boundaries instead of blocking Electron main.
+3. **References and citations:** choose portable canonical CSL JSON, build a
+   rebuildable index and reference UI, then render citations/bibliographies in
+   deterministic export.
+4. **Writing archive:** immutable local source snapshots, provenance,
+   retention/deletion, FTS5 search, and explicit attachment to conversations.
+5. **Skills and research:** productise a small evaluated skill catalogue and
+   add network/source tools only behind application-enforced permission and
+   provenance.
+6. **Release readiness:** supported-platform CI/artifacts, migrations, identity,
+   accessibility, backup, and distribution metadata.
 
-- A rendered-editor spike comparing CodeMirror live rendering with ProseMirror/Tiptap, including raw-mode switching and revision capture. (Done — chose Tiptap; see §6.2.)
-- AI-generated patch application against a base revision.
-- Pi SDK streaming inside Electron.
-- Pandoc DOCX export with footnotes and citations.
-- SQLite FTS5 search over several previous works.
-
-Do not combine all spikes into production architecture until the basic assumptions hold.
-
-## Milestone 1 — Single-document editor
-
-- Electron shell.
-- The editor implementation selected by the rendered-editing spike, behind an editor adapter.
-- Local persistence.
-- Revisions and checkpoints.
-- Chat panel.
-- Fast/Deep models.
-- Selection/document context.
-- Patch proposal and review.
-
-## Milestone 2 — Skills and style
-
-- Skill registry.
-- Conservative rewrite.
-- LLM-tick audit and rewrite.
-- Style profile.
-- Accepted/rejected patch records.
-- Basic skill evaluation harness.
-
-## Milestone 3 — Projects, archive, and citations
-
-- Multi-file projects.
-- FTS5 writing archive.
-- Citation parser and visual markers.
-- Reference records.
-- Reference audit.
-- DOCX/PDF export.
-
-## Milestone 4 — Agent jobs and research
-
-- Multi-step job coordinator.
-- Source import.
-- Web and scholarly search tools.
-- More advanced archive retrieval.
-- Optional DOI/Zotero integrations.
-
-Milestones should be revised whenever a real workflow reveals a more important problem.
+The detailed gates and audited findings live in
+[`development-plan.md`](development-plan.md). Architecture work should keep
+the existing service boundaries so ordering can change without replacing the
+canonical document, revision, or agent-tool models.
 
 ---
 
@@ -1547,7 +1591,8 @@ Do not decide these before they are needed:
 - Vector database technology.
 - A publisher-grade or fully semantic document schema beyond what the selected editor requires.
 - JATS internal representation.
-- Multi-agent orchestration.
+- General-purpose multi-agent orchestration beyond the existing bounded,
+  application-owned delegation roles.
 - Kubernetes or remote job infrastructure.
 - Mobile architecture.
 - Fine-grained enterprise permissions.

@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { DocumentInfo } from '../../../shared/domain-types';
 import type { HeadingInfo } from '../../../shared/doc-types';
+import { registerContextActionHandler, showContextMenu } from '../contextMenuBridge';
 
 interface ProjectNavProps {
   width: number;
@@ -18,6 +19,7 @@ interface ProjectNavProps {
   onRenameDoc(documentId: string, name: string): Promise<void>;
   onTrashDoc(documentId: string): Promise<void>;
   onDuplicateDoc(documentId: string): Promise<void>;
+  onExportDoc(documentId: string): Promise<void>;
   onImportDoc(): Promise<void>;
   onSetMainDoc(documentId: string): Promise<void>;
   onRevealDoc(documentId: string): Promise<void>;
@@ -84,6 +86,7 @@ export default function ProjectNav({
   onRenameDoc,
   onTrashDoc,
   onDuplicateDoc,
+  onExportDoc,
   onImportDoc,
   onSetMainDoc,
   onRevealDoc,
@@ -93,10 +96,8 @@ export default function ProjectNav({
   const [creating, setCreating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [headings, setHeadings] = useState<HeadingInfo[]>([]);
-  const [menuDocId, setMenuDocId] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [confirmTrashId, setConfirmTrashId] = useState<string | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
 
   // The command registry opens the new-document form via a counter.
   useEffect(() => {
@@ -119,20 +120,6 @@ export default function ProjectNav({
     }, 350);
     return () => clearTimeout(timer);
   }, [openDocId, openDocRevision]);
-
-  // Close the row menu on any outside click.
-  useEffect(() => {
-    if (!menuDocId) {
-      return;
-    }
-    const close = (e: MouseEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) {
-        setMenuDocId(null);
-      }
-    };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [menuDocId]);
 
   const reportError = (err: unknown) => {
     setError(err instanceof Error ? err.message : String(err));
@@ -171,6 +158,24 @@ export default function ProjectNav({
     }
   };
 
+  useEffect(() => registerContextActionHandler((event) => {
+    if (event.context.kind !== 'document') return false;
+    const context = event.context;
+    const doc = docs.find((item) => item.id === context.documentId);
+    if (!doc) return false;
+    switch (event.action) {
+      case 'document:open': onOpenDoc(doc.id); break;
+      case 'document:rename': setRenaming({ id: doc.id, name: doc.path }); break;
+      case 'document:duplicate': void onDuplicateDoc(doc.id).catch(reportError); break;
+      case 'document:export': void onExportDoc(doc.id); break;
+      case 'document:reveal': void onRevealDoc(doc.id).catch(reportError); break;
+      case 'document:set-main': void onSetMainDoc(doc.id).catch(reportError); break;
+      case 'document:trash': setConfirmTrashId(doc.id); break;
+      default: return false;
+    }
+    return true;
+  }), [docs, onDuplicateDoc, onExportDoc, onOpenDoc, onRevealDoc, onSetMainDoc]);
+
   return (
     <nav className="project-nav" style={{ width }}>
       <header className="nav-header">
@@ -178,7 +183,7 @@ export default function ProjectNav({
         <span className="nav-header-actions">
           <button
             className="nav-action import-action"
-            title="Import a Markdown file…"
+            title="Import a document…"
             onClick={() => void onImportDoc().catch(reportError)}
           >
             ⇩
@@ -219,7 +224,13 @@ export default function ProjectNav({
       )}
       <ul className="nav-files">
         {docs.map((d) => (
-          <li key={d.id} className="nav-file-row">
+          <li
+            key={d.id}
+            className="nav-file-row"
+            data-context-document-id={d.id}
+            data-context-document-path={d.path}
+            data-context-document-main={d.path === mainPath}
+          >
             {renaming?.id === d.id ? (
               <span className="nav-rename-form">
                 <input
@@ -264,40 +275,16 @@ export default function ProjectNav({
                     <span className="nav-main-dot" title="Main document" />
                   )}
                 </button>
-                <div className="nav-menu-wrap" ref={menuDocId === d.id ? menuRef : undefined}>
+                <div className="nav-menu-wrap">
                   <button
                     className="nav-file-menu-btn"
                     title="Document actions"
-                    onClick={() => setMenuDocId(menuDocId === d.id ? null : d.id)}
+                    onClick={(event) => showContextMenu({
+                      kind: 'document', documentId: d.id, path: d.path, isMain: d.path === mainPath,
+                    }, event.currentTarget)}
                   >
                     ⋯
                   </button>
-                  {menuDocId === d.id && (
-                    <div className="nav-menu">
-                      <button onClick={() => { setMenuDocId(null); setRenaming({ id: d.id, name: d.path }); }}>
-                        Rename…
-                      </button>
-                      <button onClick={() => { setMenuDocId(null); void onDuplicateDoc(d.id).catch(reportError); }}>
-                        Duplicate
-                      </button>
-                      <button onClick={() => { setMenuDocId(null); void onRevealDoc(d.id).catch(reportError); }}>
-                        Reveal in Files
-                      </button>
-                      {d.path !== mainPath && (
-                        <button onClick={() => { setMenuDocId(null); void onSetMainDoc(d.id).catch(reportError); }}>
-                          Set as main document
-                        </button>
-                      )}
-                      {d.path !== mainPath && (
-                        <button
-                          className="nav-menu-danger"
-                          onClick={() => { setMenuDocId(null); setConfirmTrashId(d.id); }}
-                        >
-                          Move to trash…
-                        </button>
-                      )}
-                    </div>
-                  )}
                 </div>
               </>
             )}

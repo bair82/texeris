@@ -18,6 +18,12 @@ import type { ChangeSummary } from './changes';
 import { summarizeChangesSince } from './changes';
 import { assembleContext, buildSystemPrompt } from './context';
 import { createAgentTools } from './tools';
+import type { CorpusService } from '../services/corpus';
+import { CorpusService as DefaultCorpusService } from '../services/corpus';
+import { WritingProfileService } from '../services/profile';
+import { AgentCoordinator } from './coordinator';
+import { PatchStyleGate } from './styleCritic';
+import { skillById } from './skills';
 
 /**
  * The AgentRuntime adapter (plan §10.1): one Pi Agent per conversation,
@@ -87,7 +93,11 @@ export class PiAgentRuntime implements AgentRuntime {
   private readonly agents = new Map<string, Agent>();
   private readonly runs = new Map<string, ActiveRun>();
   /** Run context handed to tools (patch origin) while a run is active. */
-  private activeRunContext: { conversationId: string; runId: string } | null = null;
+  private activeRunContext: { conversationId: string; runId: string; documentId: string; task: string; skillId?: string } | null = null;
+  private coordinator: AgentCoordinator;
+  private styleGate: PatchStyleGate;
+  private corpus: CorpusService;
+  private profiles: WritingProfileService;
 
   constructor(
     private readonly options: {
@@ -96,10 +106,23 @@ export class PiAgentRuntime implements AgentRuntime {
       conversations: ConversationService;
       project: ProjectContext;
       patches: PatchService;
+      corpus?: CorpusService;
+      profiles?: WritingProfileService;
       /** Per-provider key lookup (stored keychain key wins over env). */
       credentials?: { getApiKey(provider: string): string | undefined };
     },
-  ) {}
+  ) {
+    this.corpus = options.corpus ?? new DefaultCorpusService();
+    this.profiles = options.profiles ?? new WritingProfileService(options.config);
+    this.coordinator = this.makeCoordinator(options.project);
+    this.styleGate = new PatchStyleGate({
+      models: options.models,
+      config: options.config,
+      patches: options.patches,
+      profiles: this.profiles,
+      credentials: options.credentials,
+    });
+  }
 
   async startTurn(input: StartTurnRequest): Promise<{ runId: string }> {
     const { project } = this.options;
@@ -112,7 +135,9 @@ export class PiAgentRuntime implements AgentRuntime {
       );
     }
 
-    const agent = this.agentFor(input.conversationId, model);
+    const conversationContext = this.options.conversations.context(input.conversationId);
+    const skill = skillById(conversationContext.skillId);
+    const agent = this.agentFor(input.conversationId, model, skill?.id);
     if (agent.state.isStreaming) {
       const stillActive = [...this.runs.values()].some(
         (r) => r.conversationId === input.conversationId,
@@ -141,7 +166,7 @@ export class PiAgentRuntime implements AgentRuntime {
           sinceChangeCount: lastRun.manifest.baseChangeCount ?? Number.MAX_SAFE_INTEGER,
         }) ?? 'unchanged';
     }
-    agent.state.systemPrompt = buildSystemPrompt(assembled, changeSummary);
+    agent.state.systemPrompt = this.systemPrompt(assembled, changeSummary, skill?.instructions);
     agent.state.model = model;
 
     const runId = this.options.conversations.startRun({
@@ -150,8 +175,16 @@ export class PiAgentRuntime implements AgentRuntime {
       provider: modeConfig.provider,
       model: modeConfig.model,
       manifest: assembled.manifest,
+      skillId: skill?.id,
+      skillVersion: skill?.version,
     });
-    this.activeRunContext = { conversationId: input.conversationId, runId };
+    this.activeRunContext = {
+      conversationId: input.conversationId,
+      runId,
+      documentId: assembled.manifest.documentId,
+      task: input.text,
+      skillId: skill?.id,
+    };
 
     const queue = new EventQueue<NormalizedAgentEvent>();
     const run: ActiveRun = {
@@ -212,6 +245,9 @@ export class PiAgentRuntime implements AgentRuntime {
     this.options.project = project;
     this.options.conversations = conversations;
     this.options.patches = patches;
+    this.coordinator.cancelAll();
+    this.coordinator = this.makeCoordinator(project);
+    this.styleGate.setPatchService(patches);
     for (const run of this.runs.values()) {
       run.agent.abort();
     }
@@ -220,7 +256,7 @@ export class PiAgentRuntime implements AgentRuntime {
   }
 
   /** One Agent per conversation; history replayed verbatim from SQLite. */
-  private agentFor(conversationId: string, model: Agent['state']['model']): Agent {
+  private agentFor(conversationId: string, model: Agent['state']['model'], skillId?: string): Agent {
     const existing = this.agents.get(conversationId);
     if (existing) {
       return existing;
@@ -234,11 +270,30 @@ export class PiAgentRuntime implements AgentRuntime {
           this.options.project,
           this.options.patches,
           () => this.activeRunContext,
+          {
+            conversationId,
+            skillId,
+            corpus: this.corpus,
+            profiles: this.profiles,
+            coordinator: this.coordinator,
+            propose: (runId, task, input, origin) => this.styleGate.propose(runId, task, input, origin),
+            verifyApproval: (id, quote) => this.options.conversations.latestUserText(id).includes(quote),
+            onProfileArtifacts: (artifacts) => {
+              const current = this.activeRunContext;
+              if (!current) return;
+              this.runs.get(current.runId)?.queue.push({
+                type: 'profile_artifacts_created',
+                runId: current.runId,
+                ...artifacts,
+              });
+            },
+          },
         ),
         messages,
       },
       streamFn: (m, c, o) => this.options.models.streamSimple(m, c, o),
       getApiKey: (provider) => this.options.credentials?.getApiKey(provider),
+      transformContext: async (messages) => compactToolContext(messages),
     });
     this.agents.set(conversationId, agent);
     return agent;
@@ -263,6 +318,7 @@ export class PiAgentRuntime implements AgentRuntime {
       usage,
       error: failed?.errorMessage,
     });
+    this.styleGate.finalize(run.runId);
 
     run.queue.push({
       type: 'run_end',
@@ -275,6 +331,48 @@ export class PiAgentRuntime implements AgentRuntime {
     this.teardown(run);
   }
 
+  private systemPrompt(
+    assembled: ReturnType<typeof assembleContext>,
+    changes: ChangeSummary | 'unchanged' | null,
+    skillInstructions?: string,
+  ): string {
+    const parts = [buildSystemPrompt(assembled, changes)];
+    const profile = this.profiles.read('writing-profile');
+    if (profile) {
+      parts.push(
+        '<writing-policy>',
+        'Apply the profile only when drafting or revising prose. Current user instructions and user-confirmed preferences override inferred habits. Genre and audience justify natural variation. Do not invent opinions, mechanically repeat conspicuous tics, or make ordinary connective prose artificially characteristic.',
+        '</writing-policy>',
+        `<writing-profile report-ref="texeris-profile:${this.options.config.activeProfileId}/writing-style-report.md">`,
+        profile,
+        '</writing-profile>',
+      );
+    }
+    if (skillInstructions) parts.push('<active-skill>', skillInstructions, '</active-skill>');
+    return parts.join('\n\n');
+  }
+
+  private makeCoordinator(project: ProjectContext): AgentCoordinator {
+    return new AgentCoordinator({
+      models: this.options.models,
+      config: this.options.config,
+      db: project.db,
+      credentials: this.options.credentials,
+      onEvent: (event) => {
+        const parent = this.activeRunContext;
+        if (!parent) return;
+        this.runs.get(parent.runId)?.queue.push({
+          type: event.type,
+          runId: parent.runId,
+          delegationId: event.result.id,
+          role: event.result.role,
+          status: event.type === 'delegation_start' ? 'running' : event.result.status,
+          summary: event.result.summary,
+        });
+      },
+    });
+  }
+
   private teardown(run: ActiveRun): void {
     run.unsubscribe();
     run.queue.close();
@@ -283,6 +381,24 @@ export class PiAgentRuntime implements AgentRuntime {
     }
     this.runs.delete(run.runId);
   }
+}
+
+function compactToolContext(messages: AgentMessage[]): AgentMessage[] {
+  let corpusReads = 0;
+  for (const message of messages) {
+    if (message.role === 'toolResult' && message.toolName === 'read_corpus_source') corpusReads += 1;
+  }
+  if (corpusReads <= 6) return messages;
+  let keep = 6;
+  return [...messages].reverse().map((message) => {
+    if (message.role !== 'toolResult' || message.toolName !== 'read_corpus_source') return message;
+    if (keep-- > 0) return message;
+    return {
+      ...message,
+      content: [{ type: 'text' as const, text: '[Earlier corpus passage elided from model context; its full tool result remains in conversation storage.]' }],
+      details: { compacted: true },
+    };
+  }).reverse();
 }
 
 function normalizeEvent(

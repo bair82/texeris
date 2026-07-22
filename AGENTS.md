@@ -10,7 +10,8 @@ when product or architecture decisions change, update them.
 ## Layout
 
 - `docs/` — living documents: product spec, architecture options,
-  implementation plan, Pi integration notes.
+  general development plan, historical implementation plan, Pi integration
+  notes.
 - `app/` — the real application (`@texeris/app`): Electron + electron-vite +
   React, TypeScript strict. Main process owns fs/db/credentials; the renderer
   is unprivileged (sandbox, contextIsolation); IPC contract in `src/shared/`.
@@ -34,7 +35,7 @@ when product or architecture decisions change, update them.
 - Rendered and raw editor modes are two views of one canonical document —
   never separate editable copies.
 - Keep changes minimal and scoped; don't build speculative features beyond the
-  current milestone (see architecture-options.md §26).
+  active queue and gates in `docs/development-plan.md`.
 - DB access uses Node's built-in `node:sqlite` (`DatabaseSync`) — no native
   modules. Main-process services are Electron-free and unit-tested with
   vitest against tmp directories; Electron wiring happens at the IPC layer.
@@ -42,7 +43,9 @@ when product or architecture decisions change, update them.
   canonical text (`app/src/renderer/src/editor/session.ts`) — never separate
   editable copies. Both commit grouped text splices over IPC; main validates
   and applies them. The Markdown⇄PM round trip (`editor/lib/markdown-in/out`)
-  is CI-guarded and must stay byte-exact on the golden samples.
+  is test-guarded and must stay byte-exact on the golden samples. CI is a G0
+  requirement in the active plan; do not claim remote enforcement until it
+  lands.
 - CM styling belongs in CM theme extensions, never stylesheet rules keyed on
   editor classes: CM rewrites the editor's `class` attribute on updates
   (`updateAttrs`), so imperatively-added classes get wiped. `cm-raw` itself
@@ -110,9 +113,12 @@ when product or architecture decisions change, update them.
 
 ## Agent coordination
 
-Two agents work in this repo: **kimi** (Kimi Code CLI) and **codex**. Both
-keep their own long-running sessions and context; coordination happens
-through shared surfaces, never by re-running each other headlessly.
+Two coding agents work in this repo: **kimi** (Kimi Code CLI) and **codex**.
+The owner acts as project manager and is not a routine code reviewer. Both
+agents keep their own long-running sessions and context; coordination happens
+through shared surfaces, never by re-running each other headlessly. Agent
+availability can differ, so peer review is useful when available but must not
+become a maintenance or integration dependency.
 
 - **Worktrees (hard isolation):** each agent works only in its own
   worktree on its own branch namespace —
@@ -122,8 +128,11 @@ through shared surfaces, never by re-running each other headlessly.
   checkout stays on `main` and is the integration point only.
 - **Tasks:** GitHub issues, labeled `agent:kimi` / `agent:codex` (the owner
   assigns; either agent may file and self-assign).
-- **Code:** hand off via PRs into `main`. The other agent reviews through
-  PR comments (`gh pr comment` / `gh pr review`).
+- **Code:** hand off via PRs into `main`. When both agents are available, the
+  other agent reviews through PR comments (`gh pr comment` / `gh pr review`).
+  When only one is available, that agent owns self-review, records verification
+  evidence, keeps PR metadata current, and may merge without waiting for the
+  unavailable agent.
 - **Quick notes:** `docs/agent-notes.md` — append-only, **newest at the
   bottom**, signed and dated (bottom-appending avoids merge conflicts on
   concurrent edits). Check it when starting coordinated work.

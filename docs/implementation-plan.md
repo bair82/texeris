@@ -1,8 +1,10 @@
-# Texeris — Implementation Plan: Milestone 1
+# Texeris — Historical Implementation Plan: Milestone 1
 
-**Status:** Draft. Decision D0 recorded 2026-07-19 (§5): **Tiptap / PM
-variant.** CM-variant notes remain for context only.
-**Feeds into:** Milestones 2–3 sketched in §16.
+**Status:** completed historical plan. It records how M1 and M1.5 were built;
+it is no longer the source of current priorities. See
+[`development-plan.md`](development-plan.md) for the audited baseline, active
+roadmap, gates, and next queue. Decision D0 remains **Tiptap / ProseMirror**;
+CM-variant notes remain here for context only.
 
 ---
 
@@ -54,7 +56,7 @@ them.
 | 4 | Agent tools (v1) | §10.2 — six read/propose tools; no fs, no shell, no web. |
 | 5 | Supported Markdown profile | Architecture §17.1 minus YAML metadata: ATX headings, emphasis/strong, lists, blockquotes, links, code spans/blocks, pipe tables, footnotes, Pandoc citations. Same profile as the spike. |
 | 6 | Model credentials | Development: `MOONSHOT_API_KEY` / `DEEPSEEK_API_KEY` env vars as fallback; **primary: settings UI storing keys via Electron `safeStorage`** (gnome-keyring on the dev box; landed 2026-07-19 with the settings panel). Linux needs `--password-store=gnome-libsecret` under Hyprland (auto-detect fails). Never in project files. |
-| 7 | Pandoc | Not needed in M1 (no export). When reached: configured system Pandoc in dev, bundle for distribution. |
+| 7 | Pandoc | **2026-07-21:** configured system Pandoc remains a development convenience; Linux release builds download, checksum-verify, and bundle pinned Pandoc 3.10 for corpus conversion. |
 | 8 | Project identity | `project.json` with `formatVersion`, `projectId` (uuid), `mainDocument`. Documents addressed by uuid in DB, looked up by relative path on open; renames reconcile path→uuid, never re-id. |
 | 9 | Workspace vs project data | Workspace: platform config dir (`~/.config/texeris`, `~/Library/Application Support/texeris`) — `config.json` (model modes), later style profile + archive index. Project: user folder with `.texeris/` (history DB, cache). |
 | 10 | Recoverable autosave | Every revision commit triggers atomic file write (tmp + rename). DB keeps change records + periodic snapshots. Startup reconciles hash mismatches; incomplete tmp writes are cleaned, never silently chosen. |
@@ -310,7 +312,10 @@ Three regions (spec §9), editor is the visual centre:
 
 - **ProjectNav:** file list, heading outline (click → scroll), checkpoints.
 - **EditorRegion:** rendered mode default; raw toggle; patch highlights;
-  status bar with revision seq, save state, actor of last change.
+  status bar with revision seq, save state, actor of last change, and typed
+  workspace-operation feedback. Progress is non-dismissible; success and
+  warnings auto-clear; errors persist until dismissed. Contextual recovery
+  actions remain adjacent to the editor/panel they affect.
 - **ConversationPanel:** messages with streaming; **context indicator chip**
   (scope selector: selection/section/document — visible at all times);
   Fast/Deep toggle; proposed patches appear as cards → open PatchReview.
@@ -532,7 +537,8 @@ Native Chromium underlines are unreliable in rendered mode and cannot remain
 stable in raw CodeMirror mode: CM redraws text nodes and destroys the native
 marker (confirmed by a brief underline flash during a real-key test).
 Raw mode therefore needs an application-level checker with CM decorations.
-Right-click suggestion menus are a later follow-up.
+Native right-click suggestions and Add to Dictionary are available whenever
+Chromium reports a misspelling, but do not solve the unreliable-underline gap.
 Word count + selection count (words/chars) in the editor status bar,
 polled at 500 ms; Markdown syntax tokens don't count as words.
 *DoD:* `smoke-eu4.mjs`: live count while typing, select-all selection
@@ -602,24 +608,61 @@ used to write the outgoing project's blob into the incoming project's db.
 *DoD:* `smoke-eu7.mjs`: trash → restore (reopens, trash empty) → trash →
 permanent delete; a freshly created project opens on welcome.md.
 
+**Image authoring.** ✅ done 2026-07-22 (codex). Paste and drag/drop work in
+both rendered and raw editor modes through a typed, main-process-owned asset
+ingest path (PNG/JPEG/GIF/WebP/AVIF, 20 MB limit, content-hash deduplication).
+Rendered image selection exposes alt-text and optional-caption fields; the
+existing Markdown/controlled-HTML bridge and `texeris-asset:` protocol keep
+the canonical reference portable and the preview sandboxed. Revision-time and
+startup reconciliation removes true orphans while hiding files used only by
+older revisions in `.texeris/asset-trash/`; revision/document restore brings
+them back, and permanent document deletion prunes them. Unit tests cover
+ingest, deduplication, validation, orphan cleanup, revision recovery, and
+document trash/restore.
+`smoke-editor.mjs` also pastes a real PNG, edits its alt text/caption, and
+verifies the canonical figure and rendered image survive restart.
+
+**Native context menus.** ✅ done 2026-07-22 (codex). A typed renderer/main
+handshake describes the element under a real right-click while Electron owns
+the platform menu and privileged edit, spelling, link, and image-copy actions.
+Renderer-routed actions cover editor history and image details/deletion,
+document open/rename/duplicate/reveal/set-main/trash, conversation
+open/rename/delete, and message copy. Document and conversation ellipsis
+buttons open the same native menu definitions. Main-process unit tests cover
+menu policy and action routing; `smoke-eu5.mjs` verifies both a real editor
+right-click and a document launcher produce the expected native labels.
+Document export was added to the shared row/ellipsis menu on 2026-07-22 and
+targets the selected document directly, including when another document is
+open.
+
+**PDF import/export.** ✅ done 2026-07-22 (codex). Text-bearing PDFs import as
+revisioned editable Markdown or page-marked corpus derivatives through the
+shared pinned `unpdf` extractor; scanned/image-only files explain that OCR is
+not available. PDF is now the default export, using sanitized Pandoc HTML and
+an isolated Electron `printToPDF` renderer for a fixed A4 academic layout.
+Size/page limits, atomic output, focused extraction/sanitization tests, and a
+real Electron export→import smoke cover the boundary. OCR, a PDF viewer,
+annotations, layout reconstruction, templates, and export options stay out of
+this increment.
+
 ### Post-M1.5 backlog (owner review 2026-07-21, ranked)
 
-1. **docx import/export** (owner ask, top priority): Pandoc both ways —
-   import .docx into a project document, export manuscript to .docx for
-   collaborators/supervisors. Decide bundled-vs-system Pandoc.
-2. **App-level spellchecker**: native is unreliable (PR #2); codex's
+1. **App-level spellchecker**: native is unreliable (PR #2); codex's
    nspell + dictionary-en design (~0.6 MB) is the seed; needs a
    dictionary-distribution decision for the language picker.
-3. **Citations UI** (M2 core): CSL JSON library per project, insert-
+2. **Citations UI** (M2 core): CSL JSON library per project, insert-
    citation picker with search, bibliography rendering.
-4. **Images/figures**: paste/drag image → copy to project assets + link;
-   render in rendered mode.
 5. **Math (KaTeX)**: inline/block render + Markdown round trip.
 6. **Section manipulation**: outline fold + move-section up/down.
 7. **Undo story beyond per-session**: designed answer (revision-based),
    mode/doc switches currently wipe editor undo history.
 8. **More UI themes** (owner: not important now).
 9. **Split view** (two documents side by side) — later.
+10. **Context-menu AI shortcuts** — intentionally deferred until real writing
+    sessions reveal a small set of repeated, context-sensitive actions that are
+    genuinely faster from a right-click menu. Avoid adding generic AI commands
+    merely to fill the surface; promote workflows here only after their utility
+    is clear.
 
 Execution order: EU1 → EU7, one commit per package. Coordination:
 `agent:kimi` / `agent:codex` issues per package (codex picks what it

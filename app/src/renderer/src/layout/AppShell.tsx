@@ -4,7 +4,7 @@ import type { DocumentInfo } from '../../../shared/domain-types';
 import type { UiState, UiStateDoc } from '../../../shared/ui-types';
 import ChatPanel from '../ChatPanel';
 import PatchReview from '../PatchReview';
-import EditorRegion from '../editor/EditorRegion';
+import EditorRegion, { type WorkspaceStatus } from '../editor/EditorRegion';
 import {
   getChatCommands,
   getEditorCommands,
@@ -16,6 +16,7 @@ import CommandPalette from './CommandPalette';
 import ProjectNav from './ProjectNav';
 import ShortcutsOverlay from './ShortcutsOverlay';
 import TrashDialog from './TrashDialog';
+import { describeContextAt, dispatchContextAction } from '../contextMenuBridge';
 
 const DEFAULT_NAV_WIDTH = 232;
 const DEFAULT_SIDE_WIDTH = 400;
@@ -43,9 +44,12 @@ export const PROJECT_SWITCH_FLAG = 'texeris:project-switch';
  */
 export default function AppShell({
   onOpenSettings,
+  onOpenProjectPicker,
   mainDocument,
 }: {
   onOpenSettings: () => void;
+  /** Return to the project picker to open or create a project. */
+  onOpenProjectPicker: () => void;
   mainDocument: string;
 }) {
   const [ui, setUi] = useState<UiState | null>(null);
@@ -57,8 +61,11 @@ export default function AppShell({
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
   const [newDocRequested, setNewDocRequested] = useState(0);
+  const [profileSourceOpen, setProfileSourceOpen] = useState(false);
+  const [operationNotice, setOperationNotice] = useState<WorkspaceStatus | null>(null);
   const uiRef = useRef<UiState>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const exportingRef = useRef(false);
 
   // Boot: load layout state + document list, then pick the document to open
   // (the one from last session when it still exists, else the first).
@@ -87,6 +94,19 @@ export default function AppShell({
       void window.texeris.doc.list().then(setDocs);
     });
   }, []);
+
+  // Completed operations should be visible but not permanent. Warnings stay
+  // longer; errors remain until the user dismisses them.
+  useEffect(() => {
+    if (!operationNotice || operationNotice.tone === 'progress' || operationNotice.tone === 'error') {
+      return;
+    }
+    const timer = window.setTimeout(
+      () => setOperationNotice(null),
+      operationNotice.tone === 'warning' ? 12_000 : 6_000,
+    );
+    return () => window.clearTimeout(timer);
+  }, [operationNotice]);
 
   const persist = useCallback((immediate: boolean) => {
     if (saveTimer.current) {
@@ -209,12 +229,56 @@ export default function AppShell({
   );
 
   const onImportDoc = useCallback(async () => {
-    const imported = await window.texeris.doc.importDialog();
-    if (imported) {
-      setDocs(await window.texeris.doc.list());
-      openDoc(imported.id);
+    try {
+      setOperationNotice({ message: 'Importing document…', tone: 'progress' });
+      const imported = await window.texeris.doc.importDialog();
+      if (imported) {
+        setDocs(await window.texeris.doc.list());
+        openDoc(imported.id);
+        setOperationNotice({
+          message: imported.warnings.length
+            ? `Imported ${imported.path}. ${imported.warnings.join(' ')}`
+            : `Imported ${imported.path}.`,
+          tone: imported.warnings.length ? 'warning' : 'success',
+        });
+      } else {
+        setOperationNotice(null);
+      }
+    } catch (error) {
+      setOperationNotice({
+        message: `Import failed: ${error instanceof Error ? error.message : String(error)}`,
+        tone: 'error',
+      });
     }
   }, [openDoc]);
+
+  const onExportDoc = useCallback(async (documentId?: string) => {
+    const targetId = documentId ?? openDocId;
+    if (!targetId || exportingRef.current) return;
+    exportingRef.current = true;
+    try {
+      if (targetId === openDocId) getEditorCommands()?.flush();
+      setOperationNotice({ message: 'Exporting document…', tone: 'progress' });
+      const exported = await window.texeris.doc.exportDialog(targetId);
+      if (exported) {
+        setOperationNotice({
+          message: exported.warnings.length
+            ? `Exported to ${exported.path}. ${exported.warnings.join(' ')}`
+            : `Exported to ${exported.path}.`,
+          tone: exported.warnings.length ? 'warning' : 'success',
+        });
+      } else {
+        setOperationNotice(null);
+      }
+    } catch (error) {
+      setOperationNotice({
+        message: `Export failed: ${error instanceof Error ? error.message : String(error)}`,
+        tone: 'error',
+      });
+    } finally {
+      exportingRef.current = false;
+    }
+  }, [openDocId]);
 
   const onSetMainDoc = useCallback(async (documentId: string) => {
     const info = await window.texeris.doc.setMain(documentId);
@@ -251,8 +315,14 @@ export default function AppShell({
           setNewDocRequested((n) => n + 1);
           break;
         }
+        case 'file:new-project':
+          onOpenProjectPicker();
+          break;
         case 'file:import-document':
           void onImportDoc();
+          break;
+        case 'file:export-document':
+          void onExportDoc();
           break;
         case 'file:switch-project':
           void window.texeris.project.openDialog().catch(() => {
@@ -289,16 +359,33 @@ export default function AppShell({
         case 'chat:new':
           getChatCommands()?.newConversation();
           break;
+        case 'chat:build-writing-profile':
+          setProfileSourceOpen(true);
+          break;
         case 'help:shortcuts':
           setShortcutsOpen((v) => !v);
           break;
       }
     },
-    [onImportDoc, patchUi, toggleNav, toggleSide, toggleFocus],
+    [onExportDoc, onImportDoc, onOpenProjectPicker, patchUi, toggleNav, toggleSide, toggleFocus],
   );
 
   // App-menu commands from main.
   useEffect(() => window.texeris.onMenuCommand(runCommand), [runCommand]);
+
+  useEffect(() => {
+    const offDescribe = window.texeris.contextMenu.onDescribe((request) => {
+      void window.texeris.contextMenu.reply(
+        request.requestId,
+        describeContextAt(request.x, request.y),
+      );
+    });
+    const offAction = window.texeris.contextMenu.onAction((event) => {
+      if (event.context.kind === 'editor' && getEditorCommands()?.contextAction(event.action)) return;
+      dispatchContextAction(event);
+    });
+    return () => { offDescribe(); offAction(); };
+  }, []);
 
   // Ctrl+K / Ctrl+P fallback for environments where menu accelerators don't
   // fire (menu accelerators win when both work — the key never reaches us).
@@ -386,6 +473,7 @@ export default function AppShell({
             onRenameDoc={onRenameDoc}
             onTrashDoc={onTrashDoc}
             onDuplicateDoc={onDuplicateDoc}
+            onExportDoc={onExportDoc}
             onImportDoc={onImportDoc}
             onSetMainDoc={onSetMainDoc}
             onRevealDoc={onRevealDoc}
@@ -407,6 +495,8 @@ export default function AppShell({
         onDocState={onDocState}
         onModeChange={onModeChange}
         onRevisionChange={onRevisionChange}
+        workspaceStatus={operationNotice}
+        onDismissWorkspaceStatus={() => setOperationNotice(null)}
       />
       {sideVisible && (
         <>
@@ -417,8 +507,12 @@ export default function AppShell({
             onMouseDown={startDrag('side')}
           />
           <div className="side-column" style={{ width: sideWidth }}>
-            <PatchReview />
+            <PatchReview documentId={openDocId} />
             <ChatPanel
+              documentId={openDocId}
+              onOpenDocument={(id) => {
+                void refreshDocs().then(() => openDoc(id));
+              }}
               initialConversationId={ui.openConversationId ?? null}
               onConversationChange={(id) => patchUi({ openConversationId: id })}
             />
@@ -432,6 +526,31 @@ export default function AppShell({
       {trashOpen && (
         <TrashDialog onClose={() => setTrashOpen(false)} onRestored={onRestoredDoc} />
       )}
+      {profileSourceOpen && (
+        <div className="settings-overlay" onClick={() => setProfileSourceOpen(false)}>
+          <div className="profile-source-dialog" onClick={(event) => event.stopPropagation()}>
+            <h2>Build writing profile</h2>
+            <p>Choose individual writing files or recursively analyze a folder.</p>
+            <div className="patch-actions">
+              <button onClick={() => void beginProfile('files')}>Choose files…</button>
+              <button onClick={() => void beginProfile('folder')}>Choose folder…</button>
+              <button onClick={() => setProfileSourceOpen(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+
+  async function beginProfile(source: 'files' | 'folder'): Promise<void> {
+    try {
+      const result = await window.texeris.profile.begin({ source });
+      if (!result) return;
+      setProfileSourceOpen(false);
+      patchUi({ focusMode: false, sideVisible: true, openConversationId: result.conversationId }, true);
+      getChatCommands()?.openConversation(result.conversationId);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : String(error));
+    }
+  }
 }
