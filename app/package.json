@@ -18,7 +18,8 @@
   },
   "dependencies": {
     "@sinclair/typebox": "^0.34.52",
-    "parse5": "8.0.0"
+    "parse5": "8.0.0",
+    "unpdf": "1.6.2"
   },
   "devDependencies": {
     "@codemirror/commands": "6.10.4",

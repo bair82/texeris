@@ -1118,6 +1118,17 @@ A personal prototype can use a configured system Pandoc. Texeris now uses that
 only as a development convenience; Linux distributions bundle the pinned
 converter so release behaviour is independent of the user's PATH.
 
+### Current PDF derivative path
+
+PDF export deliberately does not depend on a second typesetting engine. The
+main process asks the pinned Pandoc build for an HTML fragment, embeds only
+allowlisted project-owned images as data URLs, sanitizes the fragment, and
+loads the self-contained result in a hidden sandboxed Electron window with
+JavaScript disabled and a deny-by-default content security policy. Chromium's
+`printToPDF` produces a fixed A4 academic layout and page-number footer. The
+result is validated as PDF bytes and atomically renamed into place. This is a
+derived snapshot; it cannot mutate the canonical Markdown or revision history.
+
 ## 17.4 Golden export tests
 
 Maintain sample manuscripts covering:
@@ -1288,10 +1299,14 @@ references stay public, files needed only by an older revision move to hidden
 `.texeris/asset-trash/`, and files referenced by no actual revision are
 removed. Restoring a revision moves its assets back before they are rendered.
 
-PDF is a distinct, lower-fidelity case. It is ingested as extracted text via a
-dedicated PDF extractor and is labelled accordingly; Texeris does not present
-layout reconstruction as faithful Markdown conversion. Image-only PDFs need
-OCR and are outside the first implementation.
+PDF is a distinct, lower-fidelity case. The main process uses pinned
+`unpdf` 1.6.2 (PDF.js server build) to extract selectable text without a native
+binary, rendering, or network access. Imports are capped at 100 MB and 1,000
+pages. Editable document imports receive conservative escaped plain Markdown;
+corpus derivatives additionally retain `texeris:pdf-page` markers. Texeris
+always reports the conversion as lossy and does not infer headings, columns,
+tables, or equations. Files with too little selectable text are rejected with
+an explicit scanned/image-only explanation; OCR remains deferred.
 
 ## 20.1 Document service
 

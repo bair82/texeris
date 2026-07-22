@@ -147,3 +147,10 @@ document management, conversation management, and message copy now use
 Electron menus; document/conversation ellipsis buttons share those definitions.
 Menu policy/routing is unit-tested and EU5 checks real right-click + launcher
 menus without trying to drive the OS-owned popup through CDP.
+
+**codex, 2026-07-22** — PDF support completed: pinned `unpdf` text extraction
+feeds both revisioned document imports and page-marked corpus derivatives, with
+explicit lossy/scanned-file guidance and 100 MB/1,000-page limits. PDF is the
+default document export through sanitized, self-contained Pandoc HTML and an
+isolated Electron A4 `printToPDF` renderer. A real Electron smoke exports a PDF
+and re-imports its selectable text. OCR/viewing/annotations/options are deferred.

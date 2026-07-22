@@ -627,6 +627,16 @@ buttons open the same native menu definitions. Main-process unit tests cover
 menu policy and action routing; `smoke-eu5.mjs` verifies both a real editor
 right-click and a document launcher produce the expected native labels.
 
+**PDF import/export.** ✅ done 2026-07-22 (codex). Text-bearing PDFs import as
+revisioned editable Markdown or page-marked corpus derivatives through the
+shared pinned `unpdf` extractor; scanned/image-only files explain that OCR is
+not available. PDF is now the default export, using sanitized Pandoc HTML and
+an isolated Electron `printToPDF` renderer for a fixed A4 academic layout.
+Size/page limits, atomic output, focused extraction/sanitization tests, and a
+real Electron export→import smoke cover the boundary. OCR, a PDF viewer,
+annotations, layout reconstruction, templates, and export options stay out of
+this increment.
+
 ### Post-M1.5 backlog (owner review 2026-07-21, ranked)
 
 1. **App-level spellchecker**: native is unreliable (PR #2); codex's

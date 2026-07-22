@@ -87,7 +87,7 @@ export function addImageAsset(
   };
 }
 
-function referencedAssets(text: string): Set<string> {
+export function referencedAssets(text: string): Set<string> {
   const found = new Set<string>();
   // Canonical Markdown and controlled HTML both leave project asset paths
   // visible. Authored names contain no whitespace; imported Pandoc media use

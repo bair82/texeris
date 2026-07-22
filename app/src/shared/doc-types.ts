@@ -57,7 +57,7 @@ export interface DocumentImportResult {
 
 export interface DocumentExportResult {
   path: string;
-  format: 'markdown' | 'docx' | 'odt' | 'rtf';
+  format: 'markdown' | 'docx' | 'odt' | 'rtf' | 'pdf';
   warnings: string[];
 }
 

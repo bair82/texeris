@@ -79,6 +79,7 @@ import { createDocument, ensureDocument } from './services/project';
 import { ProfileBeginRequestSchema, ProfileChannels } from '../shared/profile-types';
 import type { CorpusService } from './services/corpus';
 import type { WritingProfileService } from './services/profile';
+import { printHtmlToPdf } from './pdfExport';
 
 export interface IpcDeps {
   requireProject(): ProjectContext;
@@ -248,7 +249,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     if (result.canceled || result.filePaths.length === 0) return null;
     const conversations = deps.requireConversations();
     const conversationId = conversations.startNewConversation({ id: 'writing-profile', version: 1 });
-    const grant = deps.corpus.createGrant(deps.requireProject(), conversationId, result.filePaths, req.source);
+    const grant = await deps.corpus.createGrant(deps.requireProject(), conversationId, result.filePaths, req.source);
     const { runId } = await deps.requireRuntime().startTurn({
       conversationId,
       text: 'Analyze the selected corpus and build my writing profile. Begin by reviewing the corpus inventory and conversion warnings. Delegate bounded corpus-analysis and metadata tasks where useful. Ask me before any lookup involving an ambiguous or apparently private work.',
@@ -362,11 +363,18 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   });
 
   ipcMain.handle(DocChannels.importDialog, async (event) => {
+    const smokeImport = process.env.TEXERIS_SMOKE === '1'
+      ? process.env.TEXERIS_PDF_SMOKE_IMPORT
+      : undefined;
+    if (smokeImport) {
+      return await importDocumentFile(deps.requireProject(), smokeImport);
+    }
     const win = BrowserWindow.fromWebContents(event.sender);
     const result = await dialog.showOpenDialog(win!, {
       title: 'Import a document',
       filters: [
-        { name: 'Supported documents', extensions: ['md', 'markdown', 'mdown', 'txt', 'docx', 'odt', 'rtf'] },
+        { name: 'Supported documents', extensions: ['md', 'markdown', 'mdown', 'txt', 'docx', 'odt', 'rtf', 'pdf'] },
+        { name: 'PDF document', extensions: ['pdf'] },
         { name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'txt'] },
         { name: 'Word document', extensions: ['docx'] },
         { name: 'OpenDocument text', extensions: ['odt'] },
@@ -377,7 +385,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     if (result.canceled || result.filePaths.length === 0) {
       return null;
     }
-    return importDocumentFile(deps.requireProject(), result.filePaths[0]);
+    return await importDocumentFile(deps.requireProject(), result.filePaths[0]);
   });
 
   ipcMain.handle(DocChannels.exportDialog, async (event, raw: unknown) => {
@@ -387,19 +395,27 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       | { path: string; title: string }
       | undefined;
     if (!row) throw new Error('unknown document');
-    const win = BrowserWindow.fromWebContents(event.sender);
-    const result = await dialog.showSaveDialog(win!, {
-      title: 'Export document',
-      defaultPath: path.join(project.root, `${row.title}.docx`),
-      filters: [
-        { name: 'Word document', extensions: ['docx'] },
-        { name: 'OpenDocument text', extensions: ['odt'] },
-        { name: 'Rich Text Format', extensions: ['rtf'] },
-        { name: 'Markdown', extensions: ['md'] },
-      ],
-    });
-    if (result.canceled || !result.filePath) return null;
-    return exportDocumentFile(project, req.documentId, result.filePath);
+    const smokeOutput = process.env.TEXERIS_SMOKE === '1'
+      ? process.env.TEXERIS_PDF_SMOKE_OUTPUT
+      : undefined;
+    let outputPath = smokeOutput;
+    if (!outputPath) {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      const result = await dialog.showSaveDialog(win!, {
+        title: 'Export document',
+        defaultPath: path.join(project.root, `${row.title}.pdf`),
+        filters: [
+          { name: 'PDF document', extensions: ['pdf'] },
+          { name: 'Word document', extensions: ['docx'] },
+          { name: 'OpenDocument text', extensions: ['odt'] },
+          { name: 'Rich Text Format', extensions: ['rtf'] },
+          { name: 'Markdown', extensions: ['md'] },
+        ],
+      });
+      if (result.canceled || !result.filePath) return null;
+      outputPath = result.filePath;
+    }
+    return await exportDocumentFile(project, req.documentId, outputPath, printHtmlToPdf);
   });
 
   ipcMain.handle(DocChannels.setMain, (_event, raw: unknown) => {

@@ -337,7 +337,8 @@ The user can:
 - Create an empty project.
 - Open an existing project.
 - Import a Markdown document.
-- Import Markdown, DOCX, ODT, or RTF as a new revisioned Markdown document.
+- Import Markdown, DOCX, ODT, RTF, or a text-bearing PDF as a new revisioned
+  Markdown document.
 - Add previous documents to the writing archive.
 
 A new project may begin with:
@@ -639,7 +640,8 @@ The actual content sent to the model may be reduced to fit model limits, but the
 
 ### Likely
 
-- Import DOCX and PDF text through conversion or extraction.
+- Import DOCX and PDF text through conversion or extraction. PDF corpus
+  derivatives retain page markers for later source attribution.
 - Filter by document type, project, date, or status.
 - Detect duplicate imports.
 - Re-index changed files.
@@ -775,10 +777,12 @@ The application should not require the user to choose among many provider-specif
 - Store export presets per project.
 - Produce an export report containing warnings.
 
-The first deterministic interchange workflow exports Markdown, DOCX, ODT, and
-RTF through a native save dialog. Exports are derived artifacts and never
-replace the canonical project Markdown; citation markers may be preserved, but
-a formatted bibliography awaits the reference-library workflow.
+The first deterministic interchange workflow exports PDF, Markdown, DOCX, ODT,
+and RTF through a native save dialog. PDF is the default: a fixed A4 academic
+layout is produced from sanitized Pandoc HTML by an isolated Electron print
+renderer. Exports are derived artifacts and never replace the canonical project
+Markdown; citation markers may be preserved, but a formatted bibliography
+awaits the reference-library workflow.
 
 ### Exploratory
 
@@ -1046,7 +1050,7 @@ The following ideas should remain available without being allowed to dominate in
 
 - Search scholarly databases and the open web.
 - Save search results into a project.
-- Import and extract PDFs.
+- OCR and layout-aware extraction for scanned or structurally complex PDFs.
 - Ask questions over attached papers.
 - Preserve page-level source locations.
 - Build literature matrices or evidence tables.

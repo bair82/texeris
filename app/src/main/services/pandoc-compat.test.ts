@@ -38,11 +38,11 @@ describe.skipIf(!fixture || !pandoc)('Pandoc compatibility fixture', () => {
     expect(fs.readFileSync(fixture!, 'utf8').length).toBeGreaterThan(0);
   });
 
-  it.skipIf(path.extname(fixture ?? '').toLowerCase() !== '.docx')('imports media and exports a schema-valid document', () => {
+  it.skipIf(path.extname(fixture ?? '').toLowerCase() !== '.docx')('imports media and exports a schema-valid document', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'texeris-pandoc-compat-'));
     const project = createProject(root);
     try {
-      const imported = importDocumentFile(project, fixture!);
+      const imported = await importDocumentFile(project, fixture!);
       const markdown = fs.readFileSync(path.join(root, imported.path), 'utf8');
       const doc = markdownIn(markdown);
       getSchema(buildExtensions()).nodeFromJSON(doc).check();
@@ -51,7 +51,7 @@ describe.skipIf(!fixture || !pandoc)('Pandoc compatibility fixture', () => {
       const assetFiles = fs.readdirSync(path.join(root, 'assets', path.basename(imported.path, '.md'), 'media'));
       expect(assetFiles.length).toBeGreaterThanOrEqual(1);
       const output = path.join(root, 'roundtrip.docx');
-      exportDocumentFile(project, imported.id, output);
+      await exportDocumentFile(project, imported.id, output);
       expect(fs.statSync(output).size).toBeGreaterThan(10_000);
     } finally {
       project.db.close();

@@ -5,7 +5,7 @@ import * as path from 'node:path';
 /** Kept in lockstep with scripts/prepare-pandoc.mjs and the packaged resource. */
 export const PANDOC_VERSION = '3.10';
 
-export type InterchangeFormat = 'markdown' | 'docx' | 'odt' | 'rtf';
+export type InterchangeFormat = 'markdown' | 'docx' | 'odt' | 'rtf' | 'pdf';
 
 export interface MarkdownConversion {
   markdown: string;
@@ -31,6 +31,8 @@ export function formatForPath(filePath: string): InterchangeFormat | null {
       return 'odt';
     case '.rtf':
       return 'rtf';
+    case '.pdf':
+      return 'pdf';
     default:
       return null;
   }
@@ -40,6 +42,7 @@ export function formatForPath(filePath: string): InterchangeFormat | null {
 export function convertToMarkdown(file: string, bytes: Buffer, options: ConversionOptions = {}): MarkdownConversion {
   const format = formatForPath(file);
   if (!format) throw new Error(`unsupported import format: ${path.extname(file) || 'no extension'}`);
+  if (format === 'pdf') throw new Error('PDF imports must use the PDF text extractor');
   if (format === 'markdown') {
     const markdown = bytes.toString('utf8');
     if (!looksLikePandocMarkdown(markdown)) {
@@ -89,7 +92,7 @@ function convertWithPandoc(file: string, initialWarnings: string[] = [], options
 export function writePandocExport(
   markdown: string,
   outputPath: string,
-  format: Exclude<InterchangeFormat, 'markdown'>,
+  format: Exclude<InterchangeFormat, 'markdown' | 'pdf'>,
   resourceRoot?: string,
 ): string[] {
   const pandoc = resolvePandoc();
@@ -112,6 +115,27 @@ export function writePandocExport(
   return pandoc.kind === 'development-path'
     ? ['Using a development Pandoc installation; packaged builds use the pinned Texeris converter.']
     : [];
+}
+
+/** Convert canonical Markdown to an HTML fragment without granting file access. */
+export function writePandocHtml(markdown: string): { html: string; warnings: string[] } {
+  const pandoc = resolvePandoc();
+  if (!pandoc) throw new Error('The packaged Pandoc converter is unavailable. Reinstall Texeris or repair the installation.');
+  try {
+    const html = execFileSync(
+      pandoc.path,
+      ['--from=markdown', '--to=html5', '--wrap=none', '--sandbox'],
+      { input: markdown, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
+    );
+    return {
+      html,
+      warnings: pandoc.kind === 'development-path'
+        ? ['Using a development Pandoc installation; packaged builds use the pinned Texeris converter.']
+        : [],
+    };
+  } catch (error) {
+    throw new Error(`Pandoc PDF preparation failed: ${errorMessage(error)}`);
+  }
 }
 
 function resolvePandoc(): { path: string; kind: 'bundled' | 'development-path' } | null {

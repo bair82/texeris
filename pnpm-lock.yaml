@@ -16,6 +16,9 @@ importers:
       parse5:
         specifier: 8.0.0
         version: 8.0.0
+      unpdf:
+        specifier: 1.6.2
+        version: 1.6.2
     devDependencies:
       '@codemirror/commands':
         specifier: 6.10.4
@@ -2662,6 +2665,14 @@ packages:
   universalify@2.0.1:
     resolution: {integrity: sha512-gptHNQghINnc/vTGIk0SOFGFNXw7JVrlRUtConJRlvaw6DuX0wO5Jeko9sWrMBhh+PsYAZ7oXAiOnf/UKogyiw==}
     engines: {node: '>= 10.0.0'}
+
+  unpdf@1.6.2:
+    resolution: {integrity: sha512-zQ80ySoPuPHOsvIoRp/nJyQt8TOUoTh1+WBCGcBvlddQNgKDLRwm0AY3x8Q35I7+kIiRSgqMx+Ma2pl9McIp7A==}
+    peerDependencies:
+      '@napi-rs/canvas': ^0.1.69
+    peerDependenciesMeta:
+      '@napi-rs/canvas':
+        optional: true
 
   unzipper@0.12.5:
     resolution: {integrity: sha512-tXYOi9R57Uj/2Z25SOs5RRSzq886MBQj2gY8dPL+xl/kv6s6SvByoKfAtvfVeEuhntWDgjd2o9p2lb4TVPAz0A==}
@@ -5820,6 +5831,8 @@ snapshots:
   universalify@0.1.2: {}
 
   universalify@2.0.1: {}
+
+  unpdf@1.6.2: {}
 
   unzipper@0.12.5:
     dependencies:

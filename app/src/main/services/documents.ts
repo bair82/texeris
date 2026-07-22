@@ -6,6 +6,8 @@ import { atomicWriteText, hashText } from './document';
 import type { ProjectContext } from './project';
 import { convertToMarkdown, formatForPath, writePandocExport, type InterchangeFormat } from './pandoc';
 import { reconcileImageAssetsBestEffort } from './assets';
+import { extractPdfText, MAX_PDF_BYTES, PdfExtractionError, pdfDocumentMarkdown } from './pdf';
+import { buildPdfPrintHtml } from './pdfExportHtml';
 
 /**
  * Document management (M1.5 EU3): rename (ids never change), trash (file
@@ -33,6 +35,8 @@ export interface DocumentExportResult {
   format: InterchangeFormat;
   warnings: string[];
 }
+
+export type PdfRenderer = (html: string) => Promise<Buffer>;
 
 interface DocumentRow {
   id: string;
@@ -160,22 +164,35 @@ export function duplicateDocument(ctx: ProjectContext, documentId: string): Docu
 }
 
 /** Copy a Markdown file from anywhere into the project root. */
-export function importDocumentFile(ctx: ProjectContext, sourcePath: string): DocumentImportResult {
+export async function importDocumentFile(ctx: ProjectContext, sourcePath: string): Promise<DocumentImportResult> {
   const original = path.basename(sourcePath);
-  const base = original.replace(/\.(?:md|markdown|mdown|txt|docx|odt|rtf)$/i, '');
+  const base = original.replace(/\.(?:md|markdown|mdown|txt|docx|odt|rtf|pdf)$/i, '');
   let target = `${base}.md`;
   for (let n = 2; pathTaken(ctx, target); n++) {
     target = `${base}-${n}.md`;
+  }
+  const isPdf = path.extname(sourcePath).toLowerCase() === '.pdf';
+  if (isPdf && fs.statSync(sourcePath).size > MAX_PDF_BYTES) {
+    throw new PdfExtractionError(`PDF exceeds the ${MAX_PDF_BYTES / (1024 * 1024)} MB import limit.`, 'too-large');
   }
   const bytes = fs.readFileSync(sourcePath);
   const assetRelativeDir = path.posix.join('assets', path.basename(target, '.md'));
   const assetDir = path.join(ctx.root, ...assetRelativeDir.split('/'));
   let converted;
   try {
-    converted = convertToMarkdown(sourcePath, bytes, {
-      mediaDir: assetDir,
-      mediaReferencePrefix: assetRelativeDir,
-    });
+    if (isPdf) {
+      const extracted = await extractPdfText(bytes);
+      converted = {
+        markdown: pdfDocumentMarkdown(extracted),
+        converter: extracted.converter,
+        warnings: extracted.warnings,
+      };
+    } else {
+      converted = convertToMarkdown(sourcePath, bytes, {
+        mediaDir: assetDir,
+        mediaReferencePrefix: assetRelativeDir,
+      });
+    }
   } catch (error) {
     fs.rmSync(assetDir, { recursive: true, force: true });
     throw error;
@@ -192,15 +209,16 @@ export function importDocumentFile(ctx: ProjectContext, sourcePath: string): Doc
 }
 
 /** Export a snapshot of a live document without changing its canonical Markdown or history. */
-export function exportDocumentFile(
+export async function exportDocumentFile(
   ctx: ProjectContext,
   documentId: string,
   outputPath: string,
-): DocumentExportResult {
+  renderPdf?: PdfRenderer,
+): Promise<DocumentExportResult> {
   const row = docRow(ctx, documentId);
   assertLive(row);
   const format = formatForPath(outputPath);
-  if (!format) throw new Error('choose a Markdown, DOCX, ODT, or RTF filename');
+  if (!format) throw new Error('choose a PDF, Markdown, DOCX, ODT, or RTF filename');
   const sourcePath = path.resolve(ctx.root, row.path);
   if (path.resolve(outputPath) === sourcePath) throw new Error('choose a different path from the canonical project document');
   const text = fs.readFileSync(sourcePath, 'utf8');
@@ -212,6 +230,15 @@ export function exportDocumentFile(
     let warnings: string[] = [];
     if (format === 'markdown') {
       atomicWriteText(tempPath, text);
+    } else if (format === 'pdf') {
+      if (!renderPdf) throw new Error('PDF rendering is unavailable');
+      const prepared = buildPdfPrintHtml(text, row.title, ctx.root);
+      const bytes = await renderPdf(prepared.html);
+      if (!bytes.subarray(0, 5).equals(Buffer.from('%PDF-'))) {
+        throw new Error('PDF rendering returned an invalid file');
+      }
+      fs.writeFileSync(tempPath, bytes, { flag: 'wx' });
+      warnings = prepared.warnings;
     } else {
       warnings = writePandocExport(text, tempPath, format, ctx.root);
     }

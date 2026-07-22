@@ -1,5 +1,4 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { CorpusSourceView } from '../../shared/profile-types';
@@ -7,6 +6,7 @@ import type { ProjectContext } from './project';
 import { atomicWriteText, hashText } from './document';
 import { workspaceDir } from './settings';
 import { convertToMarkdown, PANDOC_VERSION } from './pandoc';
+import { extractPdfText, pdfCorpusMarkdown, PDF_EXTRACTOR_VERSION } from './pdf';
 
 const SUPPORTED = new Set(['.md', '.markdown', '.mdown', '.txt', '.html', '.htm', '.docx', '.odt', '.rtf', '.pdf']);
 
@@ -19,12 +19,12 @@ interface Converted {
 export class CorpusService {
   constructor(private readonly cacheDir = path.join(workspaceDir(), 'corpus-cache')) {}
 
-  createGrant(
+  async createGrant(
     project: ProjectContext,
     conversationId: string,
     selectedPaths: readonly string[],
     sourceKind: 'files' | 'folder',
-  ): { grantId: string; sources: CorpusSourceView[] } {
+  ): Promise<{ grantId: string; sources: CorpusSourceView[] }> {
     const files = snapshotFiles(selectedPaths);
     if (files.length === 0) throw new Error('no supported writing files were selected');
     const grantId = randomUUID();
@@ -42,7 +42,7 @@ export class CorpusService {
     for (const file of files) {
       const bytes = fs.readFileSync(file);
       const sourceHash = createHash('sha256').update(bytes).digest('hex');
-      const converted = convert(file, bytes);
+      const converted = await convert(file, bytes);
       const derivativeDir = path.join(this.cacheDir, sourceHash);
       fs.mkdirSync(derivativeDir, { recursive: true });
       const markdownPath = path.join(derivativeDir, 'document.md');
@@ -150,23 +150,25 @@ function snapshotFiles(selected: readonly string[]): string[] {
   return [...files].sort();
 }
 
-function convert(file: string, bytes: Buffer): Converted {
+async function convert(file: string, bytes: Buffer): Promise<Converted> {
   const ext = path.extname(file).toLowerCase();
   if (ext === '.md' || ext === '.markdown' || ext === '.mdown' || ext === '.txt') {
     return { markdown: bytes.toString('utf8'), converter: 'direct-utf8-v1', warnings: [] };
   }
   if (ext === '.pdf') {
     try {
-      const markdown = execFileSync('pdftotext', ['-layout', file, '-'], {
-        encoding: 'utf8',
-        maxBuffer: 64 * 1024 * 1024,
-      });
-      const warnings = markdown.trim().length < 200
-        ? ['PDF yielded very little text; it may be scanned or image-based']
-        : [];
-      return { markdown, converter: 'pdftotext-layout-v1', warnings };
+      const extracted = await extractPdfText(bytes);
+      return {
+        markdown: pdfCorpusMarkdown(extracted),
+        converter: extracted.converter,
+        warnings: extracted.warnings,
+      };
     } catch (error) {
-      return { markdown: '', converter: 'pdftotext-unavailable', warnings: [`PDF conversion failed: ${String(error)}`] };
+      return {
+        markdown: '',
+        converter: `${PDF_EXTRACTOR_VERSION}-failed`,
+        warnings: [`PDF conversion failed: ${error instanceof Error ? error.message : String(error)}`],
+      };
     }
   }
   try {

@@ -65,6 +65,7 @@ export default function AppShell({
   const [operationNotice, setOperationNotice] = useState<string | null>(null);
   const uiRef = useRef<UiState>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const exportingRef = useRef(false);
 
   // Boot: load layout state + document list, then pick the document to open
   // (the one from last session when it still exists, else the first).
@@ -215,26 +216,42 @@ export default function AppShell({
   );
 
   const onImportDoc = useCallback(async () => {
-    const imported = await window.texeris.doc.importDialog();
-    if (imported) {
-      setDocs(await window.texeris.doc.list());
-      openDoc(imported.id);
-      if (imported.warnings.length) {
-        setOperationNotice(`Imported ${imported.path}. ${imported.warnings.join(' ')}`);
+    try {
+      const imported = await window.texeris.doc.importDialog();
+      if (imported) {
+        setDocs(await window.texeris.doc.list());
+        openDoc(imported.id);
+        setOperationNotice(
+          imported.warnings.length
+            ? `Imported ${imported.path}. ${imported.warnings.join(' ')}`
+            : `Imported ${imported.path}.`,
+        );
       }
+    } catch (error) {
+      setOperationNotice(`Import failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }, [openDoc]);
 
   const onExportDoc = useCallback(async () => {
-    if (!openDocId) return;
-    getEditorCommands()?.flush();
-    const exported = await window.texeris.doc.exportDialog(openDocId);
-    if (exported) {
-      setOperationNotice(
-        exported.warnings.length
-          ? `Exported to ${exported.path}. ${exported.warnings.join(' ')}`
-          : `Exported to ${exported.path}.`,
-      );
+    if (!openDocId || exportingRef.current) return;
+    exportingRef.current = true;
+    try {
+      getEditorCommands()?.flush();
+      setOperationNotice('Exporting document…');
+      const exported = await window.texeris.doc.exportDialog(openDocId);
+      if (exported) {
+        setOperationNotice(
+          exported.warnings.length
+            ? `Exported to ${exported.path}. ${exported.warnings.join(' ')}`
+            : `Exported to ${exported.path}.`,
+        );
+      } else {
+        setOperationNotice(null);
+      }
+    } catch (error) {
+      setOperationNotice(`Export failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      exportingRef.current = false;
     }
   }, [openDocId]);
 
