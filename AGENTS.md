@@ -113,9 +113,12 @@ when product or architecture decisions change, update them.
 
 ## Agent coordination
 
-Two agents work in this repo: **kimi** (Kimi Code CLI) and **codex**. Both
-keep their own long-running sessions and context; coordination happens
-through shared surfaces, never by re-running each other headlessly.
+Two coding agents work in this repo: **kimi** (Kimi Code CLI) and **codex**.
+The owner acts as project manager and is not a routine code reviewer. Both
+agents keep their own long-running sessions and context; coordination happens
+through shared surfaces, never by re-running each other headlessly. Agent
+availability can differ, so peer review is useful when available but must not
+become a maintenance or integration dependency.
 
 - **Worktrees (hard isolation):** each agent works only in its own
   worktree on its own branch namespace —
@@ -125,8 +128,11 @@ through shared surfaces, never by re-running each other headlessly.
   checkout stays on `main` and is the integration point only.
 - **Tasks:** GitHub issues, labeled `agent:kimi` / `agent:codex` (the owner
   assigns; either agent may file and self-assign).
-- **Code:** hand off via PRs into `main`. The other agent reviews through
-  PR comments (`gh pr comment` / `gh pr review`).
+- **Code:** hand off via PRs into `main`. When both agents are available, the
+  other agent reviews through PR comments (`gh pr comment` / `gh pr review`).
+  When only one is available, that agent owns self-review, records verification
+  evidence, keeps PR metadata current, and may merge without waiting for the
+  unavailable agent.
 - **Quick notes:** `docs/agent-notes.md` — append-only, **newest at the
   bottom**, signed and dated (bottom-appending avoids merge conflicts on
   concurrent edits). Check it when starting coordinated work.

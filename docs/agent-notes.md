@@ -178,3 +178,10 @@ agent tool/event context is global despite per-conversation runs; corpus grants
 have unresolved snapshot/retention semantics; expensive conversion remains in
 Electron main. The new order is integration/verification → integrity/jobs →
 references/citations → archive/FTS → evaluated skills/research → release.
+
+**owner/codex, 2026-07-22** — clarified the active maintenance model: the owner
+is project manager rather than a routine code reviewer, and Kimi is unavailable
+until at least next week. Codex owns repository maintenance and integration in
+the meantime. Peer review is welcome when both agents are available, but an
+unavailable agent is not a merge dependency; the active maintainer self-reviews,
+records verification evidence, and keeps PR metadata current.

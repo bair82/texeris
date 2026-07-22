@@ -62,10 +62,11 @@ rapidly turning a prototype into a real application.
    89 changed files ahead of `origin/main`. Open PR #3 is titled “Make
    onboarding reachable from an active project,” while it now contains writing
    profiles, import/export, images, context menus, PDF support, and later UI
-   changes. Its body reports the old 150-test baseline; it has no review and no
-   automated checks. The original integration checkout is also behind
-   `origin/main`. Until this is reconciled, “done” means branch-local, not
-   repository-integrated.
+   changes. Its body reports the old 150-test baseline and it has no automated
+   checks. Independent agent review is temporarily unavailable; this is not a
+   blocker, because the active maintainer owns self-review and integration.
+   The original integration checkout is also behind `origin/main`. Until this
+   is reconciled, “done” means branch-local, not repository-integrated.
 2. **There is no CI.** Round-trip safety is described as CI-guarded, but there
    is no `.github/workflows` directory. Tests rely on whoever last ran them.
 3. **The aggregate offline smoke is not truthful.** `smoke-all.mjs` includes
@@ -170,7 +171,7 @@ rapidly turning a prototype into a real application.
 ## 4. Development principles from this point
 
 1. **Trust before breadth.** No new major product subsystem starts while the
-   P0 baseline is red or exists only on an unreviewed omnibus branch.
+   P0 baseline is red or exists only on an unintegrated omnibus branch.
 2. **One canonical source per domain.** Markdown remains canonical for prose;
    reference and archive canonicality must be decided explicitly before their
    UIs are built.
@@ -200,9 +201,10 @@ meaning.
 
 Work:
 
-- Review and land the current `codex/main` work as a correctly titled and
-  described integration PR; reconcile the integration checkout; close or
-  replace the completed EU1–EU7 coordination issue.
+- Self-review and land the current `codex/main` work as a correctly titled and
+  described integration PR; do not wait for an unavailable peer reviewer.
+  Reconcile the integration checkout and close or replace the completed
+  EU1–EU7 coordination issue.
 - Add Linux CI for install-lockfile integrity, typecheck, Vitest, production
   build, Markdown round-trip fixtures, Pandoc preparation checksum, and package
   resource inspection. Run desktop smokes under an explicit supported display
