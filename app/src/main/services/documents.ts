@@ -166,9 +166,26 @@ export function importDocumentFile(ctx: ProjectContext, sourcePath: string): Doc
     target = `${base}-${n}.md`;
   }
   const bytes = fs.readFileSync(sourcePath);
-  const converted = convertToMarkdown(sourcePath, bytes);
+  const assetRelativeDir = path.posix.join('assets', path.basename(target, '.md'));
+  const assetDir = path.join(ctx.root, ...assetRelativeDir.split('/'));
+  let converted;
+  try {
+    converted = convertToMarkdown(sourcePath, bytes, {
+      mediaDir: assetDir,
+      mediaReferencePrefix: assetRelativeDir,
+    });
+  } catch (error) {
+    fs.rmSync(assetDir, { recursive: true, force: true });
+    throw error;
+  }
   const content = converted.markdown;
-  const id = registerImported(ctx, target, content, `imported from ${original}`);
+  let id: string;
+  try {
+    id = registerImported(ctx, target, content, `imported from ${original}`);
+  } catch (error) {
+    fs.rmSync(assetDir, { recursive: true, force: true });
+    throw error;
+  }
   return { id, path: target, title: titleFor(target), warnings: converted.warnings };
 }
 
@@ -194,7 +211,7 @@ export function exportDocumentFile(
     if (format === 'markdown') {
       atomicWriteText(tempPath, text);
     } else {
-      warnings = writePandocExport(text, tempPath, format);
+      warnings = writePandocExport(text, tempPath, format, ctx.root);
     }
     fs.renameSync(tempPath, outputPath);
     if (/\[@[-\w]+/.test(text)) {

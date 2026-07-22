@@ -143,6 +143,25 @@ button {
   line-height: 16px;
 }
 
+.imported-image {
+  display: inline-flex;
+  max-width: 100%;
+  flex-direction: column;
+  gap: 6px;
+  vertical-align: top;
+}
+
+.imported-image img {
+  max-width: 100%;
+  height: auto;
+}
+
+.imported-image-caption {
+  color: var(--muted-text);
+  font-size: 0.88em;
+  text-align: center;
+}
+
 .app-footer {
   display: flex;
   align-items: center;

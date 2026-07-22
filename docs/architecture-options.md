@@ -1261,6 +1261,13 @@ release build verifies the upstream asset checksum before placing the
 executable outside `app.asar`; conversion uses `--sandbox` and does not enable
 filters or custom writers.
 
+Word-processor imports extract embedded media into a document-specific
+`assets/<document-name>/media/` directory and keep project-relative references
+in canonical Markdown. The sandboxed renderer loads only allowlisted image
+extensions beneath the active project root through the `texeris-asset:`
+protocol; traversal and arbitrary filesystem URLs are rejected. Export gives
+Pandoc the project root as its resource path so those images are re-embedded.
+
 PDF is a distinct, lower-fidelity case. It is ingested as extracted text via a
 dedicated PDF extractor and is labelled accordingly; Texeris does not present
 layout reconstruction as faithful Markdown conversion. Image-only PDFs need

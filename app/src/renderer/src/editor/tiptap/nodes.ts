@@ -34,6 +34,46 @@ const AlignedTableHeader = TableHeader.extend({
   },
 });
 
+function displayImageSource(source: string): string {
+  if (/^(?:data:|https?:|texeris-asset:)/i.test(source)) return source;
+  if (source.startsWith('/') || source.includes('..')) return '';
+  return `texeris-asset://project/${source.split('/').map(encodeURIComponent).join('/')}`;
+}
+
+/** Portable project-relative image rendered through the constrained asset protocol. */
+export const Image = Node.create({
+  name: 'image',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  draggable: true,
+  addAttributes() {
+    return {
+      src: { default: '' },
+      alt: { default: '' },
+      title: { default: null },
+      width: { default: null },
+      height: { default: null },
+      caption: { default: null },
+    };
+  },
+  renderHTML({ node }) {
+    const imageAttrs: Record<string, string> = {
+      src: displayImageSource(String(node.attrs.src)),
+      alt: String(node.attrs.alt ?? ''),
+    };
+    if (node.attrs.title) imageAttrs.title = String(node.attrs.title);
+    const styles = [node.attrs.width ? `width:${String(node.attrs.width)}` : '', node.attrs.height ? `height:${String(node.attrs.height)}` : ''].filter(Boolean);
+    if (styles.length) imageAttrs.style = styles.join(';');
+    return [
+      'span',
+      { class: 'imported-image' },
+      ['img', imageAttrs],
+      ...(node.attrs.caption ? [['span', { class: 'imported-image-caption' }, String(node.attrs.caption)]] : []),
+    ];
+  },
+});
+
 /** Pandoc citation marker as an inline atom. `items` drives serialization. */
 export const Citation = Node.create({
   name: 'citation',
@@ -101,5 +141,6 @@ export function buildExtensions() {
     Citation,
     FootnoteRef,
     FootnoteDef,
+    Image,
   ];
 }

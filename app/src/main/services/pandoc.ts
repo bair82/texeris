@@ -13,6 +13,11 @@ export interface MarkdownConversion {
   warnings: string[];
 }
 
+export interface ConversionOptions {
+  mediaDir?: string;
+  mediaReferencePrefix?: string;
+}
+
 export function formatForPath(filePath: string): InterchangeFormat | null {
   switch (path.extname(filePath).toLowerCase()) {
     case '.md':
@@ -32,7 +37,7 @@ export function formatForPath(filePath: string): InterchangeFormat | null {
 }
 
 /** Convert a user-selected interchange file into Texeris's canonical Markdown. */
-export function convertToMarkdown(file: string, bytes: Buffer): MarkdownConversion {
+export function convertToMarkdown(file: string, bytes: Buffer, options: ConversionOptions = {}): MarkdownConversion {
   const format = formatForPath(file);
   if (!format) throw new Error(`unsupported import format: ${path.extname(file) || 'no extension'}`);
   if (format === 'markdown') {
@@ -42,24 +47,29 @@ export function convertToMarkdown(file: string, bytes: Buffer): MarkdownConversi
     }
     return convertWithPandoc(file, [
       'Pandoc-specific Markdown was normalized for the rendered editor; inspect complex formatting after import.',
-    ]);
+    ], options);
   }
-  return convertWithPandoc(file);
+  return convertWithPandoc(file, [], options);
 }
 
 function looksLikePandocMarkdown(markdown: string): boolean {
   return /^\+[:=+\-]{3,}\+|\[[^\]\n]+\]\{\.(?:underline|smallcaps)\}/m.test(markdown);
 }
 
-function convertWithPandoc(file: string, initialWarnings: string[] = []): MarkdownConversion {
+function convertWithPandoc(file: string, initialWarnings: string[] = [], options: ConversionOptions = {}): MarkdownConversion {
   const pandoc = resolvePandoc();
   if (!pandoc) throw new Error('The packaged Pandoc converter is unavailable. Reinstall Texeris or repair the installation.');
   try {
-    const markdown = execFileSync(
+    const args = [file, '--to=gfm', '--wrap=none', '--standalone=false', '--sandbox', '--track-changes=accept'];
+    if (options.mediaDir) args.push(`--extract-media=${options.mediaDir}`);
+    let markdown = execFileSync(
       pandoc.path,
-      [file, '--to=gfm', '--wrap=none', '--standalone=false', '--sandbox', '--track-changes=accept'],
+      args,
       { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
     );
+    if (options.mediaDir && options.mediaReferencePrefix) {
+      markdown = markdown.split(options.mediaDir).join(options.mediaReferencePrefix.replaceAll(path.sep, '/'));
+    }
     return {
       markdown,
       converter: `pandoc-${PANDOC_VERSION}-${pandoc.kind}`,
@@ -76,14 +86,25 @@ function convertWithPandoc(file: string, initialWarnings: string[] = []): Markdo
 }
 
 /** Write canonical Markdown as a DOCX, ODT, or RTF derivative. */
-export function writePandocExport(markdown: string, outputPath: string, format: Exclude<InterchangeFormat, 'markdown'>): string[] {
+export function writePandocExport(
+  markdown: string,
+  outputPath: string,
+  format: Exclude<InterchangeFormat, 'markdown'>,
+  resourceRoot?: string,
+): string[] {
   const pandoc = resolvePandoc();
   if (!pandoc) throw new Error('The packaged Pandoc converter is unavailable. Reinstall Texeris or repair the installation.');
   try {
     execFileSync(
       pandoc.path,
-      ['--from=markdown', `--to=${format}`, '--output', outputPath, '--sandbox'],
-      { input: markdown, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
+      [
+        '--from=markdown',
+        `--to=${format}`,
+        '--output', outputPath,
+        '--sandbox',
+        ...(resourceRoot ? [`--resource-path=${resourceRoot}`] : []),
+      ],
+      { input: markdown, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, cwd: resourceRoot },
     );
   } catch (error) {
     throw new Error(`Pandoc export failed: ${errorMessage(error)}`);

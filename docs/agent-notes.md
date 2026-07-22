@@ -128,3 +128,9 @@ tables preserve colspan/rowspan, alignment, and multi-paragraph cells; underline
 round-trips; Pandoc list separators and literal list-like paragraphs normalize
 without renumbering. Pandoc-specific `.md` is detected on import. The private
 fixture passes a manual schema/stability harness; 164 regular tests pass.
+
+**codex, 2026-07-22** — image interchange completed using the owner's real
+DOCX: Pandoc extracts embedded media to project-relative per-document assets;
+the rendered editor preserves/displays images and captions through a constrained
+`texeris-asset:` protocol; DOCX export re-embeds them. The real document passes
+import → schema/roundtrip → export with media intact.

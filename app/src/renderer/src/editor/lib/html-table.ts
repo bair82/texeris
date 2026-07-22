@@ -19,6 +19,39 @@ function textAlign(node: HtmlNode): 'left' | 'center' | 'right' | 'justify' | nu
   return value === 'left' || value === 'center' || value === 'right' || value === 'justify' ? value : null;
 }
 
+function imageSize(node: HtmlNode, dimension: 'width' | 'height'): string | null {
+  const value = attr(node, 'style')?.match(new RegExp(`(?:^|;)\\s*${dimension}\\s*:\\s*([0-9.]+(?:px|in|cm|mm|%))`, 'i'))?.[1];
+  return value ?? null;
+}
+
+function descendantText(node: HtmlNode): string {
+  if (node.nodeName === '#text') return node.value ?? '';
+  return (node.childNodes ?? []).map(descendantText).join('');
+}
+
+function findElement(node: HtmlNode, tag: string): HtmlNode | null {
+  if (node.tagName === tag) return node;
+  for (const child of node.childNodes ?? []) {
+    const found = findElement(child, tag);
+    if (found) return found;
+  }
+  return null;
+}
+
+function imageNode(node: HtmlNode, caption?: string): PMNodeJSON {
+  return {
+    type: 'image',
+    attrs: {
+      src: attr(node, 'src') ?? '',
+      alt: attr(node, 'alt') ?? '',
+      title: attr(node, 'title') ?? null,
+      width: imageSize(node, 'width'),
+      height: imageSize(node, 'height'),
+      caption: caption?.trim() || null,
+    },
+  };
+}
+
 function pushText(out: PMNodeJSON[], text: string, marks: PMMarkJSON[]): void {
   let pos = 0;
   for (const span of findCitations(text)) {
@@ -43,6 +76,10 @@ function htmlInlines(nodes: HtmlNode[], marks: PMMarkJSON[] = []): PMNodeJSON[] 
     const tag = node.tagName?.toLowerCase();
     if (tag === 'br') {
       out.push({ type: 'hardBreak' });
+      continue;
+    }
+    if (tag === 'img') {
+      out.push(imageNode(node));
       continue;
     }
     let next = marks;
@@ -132,12 +169,37 @@ export function parseHtmlTable(html: string): PMNodeJSON | null {
   };
 }
 
+/** Parse Pandoc's standalone img/figure HTML into a safe editor image node. */
+export function parseHtmlImage(html: string): PMNodeJSON | null {
+  const fragment = parseFragment(html) as unknown as HtmlNode;
+  const image = findElement(fragment, 'img');
+  if (!image) return null;
+  const figure = findElement(fragment, 'figure');
+  const captionNode = figure ? findElement(figure, 'figcaption') : null;
+  return { type: 'paragraph', content: [imageNode(image, captionNode ? descendantText(captionNode) : undefined)] };
+}
+
 function escapeHtml(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
 function escapeAttr(value: string): string {
   return escapeHtml(value).replaceAll('"', '&quot;');
+}
+
+export function serializeImage(node: PMNodeJSON): string {
+  const src = escapeAttr(String(node.attrs?.src ?? ''));
+  const alt = escapeAttr(String(node.attrs?.alt ?? ''));
+  const title = node.attrs?.title ? ` title="${escapeAttr(String(node.attrs.title))}"` : '';
+  const dimensions = [
+    node.attrs?.width ? `width:${escapeAttr(String(node.attrs.width))}` : '',
+    node.attrs?.height ? `height:${escapeAttr(String(node.attrs.height))}` : '',
+  ].filter(Boolean).join(';');
+  const style = dimensions ? ` style="${dimensions}"` : '';
+  const image = `<img src="${src}" alt="${alt}"${title}${style}>`;
+  return node.attrs?.caption
+    ? `<figure>\n${image}\n<figcaption>${escapeHtml(String(node.attrs.caption))}</figcaption>\n</figure>`
+    : image;
 }
 
 function htmlInlinesOut(nodes: PMNodeJSON[] | undefined): string {

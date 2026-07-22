@@ -16,3 +16,8 @@ A paragraph with <u>underlined text</u> preserved from a word processor.
 </tr>
 </tbody>
 </table>
+
+<figure>
+<img src="assets/sample/media/image.png" alt="Plan" style="width:2in">
+<figcaption>Floor plan</figcaption>
+</figure>

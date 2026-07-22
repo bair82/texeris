@@ -6,7 +6,7 @@
 
 import { serializeCitation, type CitationItem } from './citations';
 import type { PMMarkJSON, PMNodeJSON } from './markdown-in';
-import { isComplexTable, serializeHtmlTable } from './html-table';
+import { isComplexTable, serializeHtmlTable, serializeImage } from './html-table';
 
 function inlineMarks(text: string, marks: PMMarkJSON[] | undefined): string {
   if (!marks || marks.length === 0) return text;
@@ -46,6 +46,9 @@ export function serializeInlines(nodes: PMNodeJSON[] | undefined): string {
         break;
       case 'hardBreak':
         out += '\n';
+        break;
+      case 'image':
+        out += serializeImage(node);
         break;
       default:
         throw new Error(`markdownOut: unsupported inline node "${node.type}"`);

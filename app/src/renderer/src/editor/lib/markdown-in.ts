@@ -9,7 +9,7 @@ import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
 import { findCitations } from './citations';
-import { parseHtmlTable } from './html-table';
+import { parseHtmlImage, parseHtmlTable } from './html-table';
 
 export interface PMMarkJSON {
   type: string;
@@ -96,14 +96,19 @@ function inlines(nodes: MdNode[], marks: Mark[]): PMNodeJSON[] {
         out.push({ type: 'hardBreak' });
         break;
       case 'image':
-        // Outside the profile: degrade to the alt text (or URL) literally.
-        pushText(out, node.alt ?? node.url ?? '', activeMarks);
+        out.push({
+          type: 'image',
+          attrs: { src: node.url ?? '', alt: node.alt ?? '', title: node.title ?? null, width: null, height: null, caption: null },
+        });
         break;
       case 'html': {
         const html = (node.value ?? '').trim().toLowerCase();
         if (html === '<u>') activeMarks = [...activeMarks, { type: 'underline' }];
         else if (html === '</u>') activeMarks = activeMarks.filter((mark) => mark.type !== 'underline');
-        else if (!html.startsWith('<!--')) pushText(out, node.value ?? '', activeMarks);
+        else if (html.startsWith('<img')) {
+          const parsed = parseHtmlImage(node.value ?? '');
+          if (parsed?.content?.[0]) out.push(parsed.content[0]);
+        } else if (!html.startsWith('<!--')) pushText(out, node.value ?? '', activeMarks);
         break;
       }
       default:
@@ -186,7 +191,11 @@ function blocks(nodes: MdNode[]): PMNodeJSON[] {
         if (/^\s*<!--(?:[\s\S]*?)-->\s*$/.test(value)) break;
         const table = parseHtmlTable(value);
         if (table) out.push(table);
-        else out.push({ type: 'paragraph', content: [{ type: 'text', text: value }] });
+        else {
+          const image = parseHtmlImage(value);
+          if (image) out.push(image);
+          else out.push({ type: 'paragraph', content: [{ type: 'text', text: value }] });
+        }
         break;
       }
       default:

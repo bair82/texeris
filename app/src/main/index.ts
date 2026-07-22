@@ -1,7 +1,8 @@
-import { app, BrowserWindow, Menu, safeStorage, session } from 'electron';
+import { app, BrowserWindow, Menu, net, protocol, safeStorage, session } from 'electron';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { registerIpcHandlers, projectInfo } from './ipc';
 import { COMMANDS, MenuCommandChannel } from '../shared/commands';
 import { DocChannels } from '../shared/doc-types';
@@ -23,6 +24,10 @@ import { WritingProfileService } from './services/profile';
 
 /** Pi requires Node >= 22.19; assert the Electron-bundled Node at startup. */
 const MIN_NODE_VERSION = [22, 19, 0] as const;
+
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'texeris-asset', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+]);
 
 // Linux (e.g. Omarchy/Hyprland): Electron's safeStorage backend
 // auto-detection can fail without a GNOME/KDE desktop session even when
@@ -151,6 +156,26 @@ app.whenReady().then(() => {
   }
   const credentials = new CredentialsService(safeStorage);
   const manager = new ProjectManager();
+
+  protocol.handle('texeris-asset', (request) => {
+    const project = manager.current;
+    if (!project) return new Response('No project open', { status: 404 });
+    const url = new URL(request.url);
+    if (url.hostname !== 'project') return new Response('Unknown asset scope', { status: 404 });
+    let relative: string;
+    try {
+      relative = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
+    } catch {
+      return new Response('Invalid asset path', { status: 400 });
+    }
+    const target = path.resolve(project.root, relative);
+    const insideProject = target.startsWith(`${path.resolve(project.root)}${path.sep}`);
+    const allowed = /\.(?:avif|gif|jpe?g|png|svg|webp)$/i.test(target);
+    if (!insideProject || !allowed || !fs.existsSync(target) || !fs.statSync(target).isFile()) {
+      return new Response('Asset not found', { status: 404 });
+    }
+    return net.fetch(pathToFileURL(target).toString());
+  });
   const corpus = new CorpusService();
   const profiles = new WritingProfileService(config);
 
