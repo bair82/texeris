@@ -12,8 +12,9 @@ import { summarizeChangesSince } from './changes';
 import { extractHeadings, sliceSection } from './markdown';
 
 /**
- * Agent tools v1 (plan §10.2): five read-only tools plus propose_patch, the
- * ONLY write path. No fs, no shell, no web.
+ * Base agent tools: project/document reads plus propose_patch, the only prose
+ * mutation path. Skills may add narrowly scoped corpus, profile-artifact,
+ * delegation, and metadata tools. No raw fs or shell access is exposed.
  *
  * Schemas use pi-ai's re-exported TypeBox (`Type` from pi-ai), which is the
  * dialect the runtime validates against. Each tool is typed by its schema so

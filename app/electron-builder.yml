@@ -1,6 +1,7 @@
 # electron-builder config (WP5). No native modules anywhere (node:sqlite),
 # so no rebuild step. Everything the renderer/main needs is bundled by
-# electron-vite; only @sinclair/typebox ships as a runtime dependency.
+# electron-vite. Runtime dependencies needed by externalized chunks are
+# included from node_modules; Pandoc is the separate executable resource.
 appId: app.texeris.desktop
 productName: Texeris
 executableName: texeris

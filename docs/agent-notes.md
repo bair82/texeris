@@ -167,3 +167,14 @@ has durable background jobs or logs that justify history and filtering.
 right-click and ellipsis launchers. The action exports the selected row rather
 than implicitly exporting the open editor, while reusing the same save dialog,
 PDF default, status feedback, and single-export guard as the File command.
+
+**codex, 2026-07-22** — project-wide audit completed and a new active general
+plan added at `docs/development-plan.md`; the M1 implementation plan is now
+explicitly historical. Highest-priority findings: the 14-commit/89-file codex
+feature set remains in stale omnibus PR #3 with no checks/review; no CI exists;
+the offline aggregate smoke has a deterministic faux-settings contradiction;
+profile-conversation deletion does not account for migration-0003 foreign keys;
+agent tool/event context is global despite per-conversation runs; corpus grants
+have unresolved snapshot/retention semantics; expensive conversion remains in
+Electron main. The new order is integration/verification → integrity/jobs →
+references/citations → archive/FTS → evaluated skills/research → release.

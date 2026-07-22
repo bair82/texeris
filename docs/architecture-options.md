@@ -1,15 +1,20 @@
 # Scholarly Writing Workspace — Architecture Options and Initial Recommendations
 
-**Status:** Provisional architecture note  
+**Status:** Living architecture record; initial alternatives are retained for
+decision history, while implemented outcomes and the current sequence are
+called out explicitly
 **Primary platforms:** macOS and Linux  
 **Assumed application type:** Local desktop application  
-**Purpose:** Identify sensible starting choices, expensive-to-change boundaries, and areas that should remain open until tested
+**Purpose:** Record structural boundaries, implemented decisions, remaining
+options, and expensive-to-change risks
 
 ---
 
 ## 1. How to use this document
 
-This is not a final technical design. It proposes a coherent starting architecture and explains alternatives.
+This is not a final technical design. It began as a starting architecture and
+now retains those alternatives alongside implemented outcomes. Current
+delivery priorities live in [`development-plan.md`](development-plan.md).
 
 The most important architectural objective is not to choose the perfect framework. It is to preserve the ability to change product decisions after real use. The architecture should therefore establish a few strong boundaries while avoiding elaborate abstractions for unproven features.
 
@@ -1543,58 +1548,35 @@ Build macOS artifacts on macOS runners and Linux artifacts on Linux runners. Do 
 
 ---
 
-## 26. Possible implementation milestones
+## 26. Current implementation sequence
 
-## Milestone 0 — Technical spikes
+The original M0–M4 forecast is now historical: the application already has a
+multi-file editor, revision-aware agent patches, a first skill and writing
+profile, bounded delegation, office/PDF interchange, and source conversion.
+The active sequence is therefore architectural consolidation followed by the
+remaining academic data domains:
 
-Answer narrow risks with disposable prototypes:
+1. **Integrated baseline:** land the current feature set on one authoritative
+   branch; add CI; make deterministic, desktop, compatibility, live-model, and
+   packaged checks distinct and truthful.
+2. **Integrity and jobs:** close relational deletion/run-context/corpus-
+   lifecycle gaps; move expensive conversion and extraction behind cancellable
+   job boundaries instead of blocking Electron main.
+3. **References and citations:** choose portable canonical CSL JSON, build a
+   rebuildable index and reference UI, then render citations/bibliographies in
+   deterministic export.
+4. **Writing archive:** immutable local source snapshots, provenance,
+   retention/deletion, FTS5 search, and explicit attachment to conversations.
+5. **Skills and research:** productise a small evaluated skill catalogue and
+   add network/source tools only behind application-enforced permission and
+   provenance.
+6. **Release readiness:** supported-platform CI/artifacts, migrations, identity,
+   accessibility, backup, and distribution metadata.
 
-- A rendered-editor spike comparing CodeMirror live rendering with ProseMirror/Tiptap, including raw-mode switching and revision capture. (Done — chose Tiptap; see §6.2.)
-- AI-generated patch application against a base revision.
-- Pi SDK streaming inside Electron.
-- Pandoc DOCX export with footnotes and citations.
-- SQLite FTS5 search over several previous works.
-
-Do not combine all spikes into production architecture until the basic assumptions hold.
-
-## Milestone 1 — Single-document editor
-
-- Electron shell.
-- The editor implementation selected by the rendered-editing spike, behind an editor adapter.
-- Local persistence.
-- Revisions and checkpoints.
-- Chat panel.
-- Fast/Deep models.
-- Selection/document context.
-- Patch proposal and review.
-
-## Milestone 2 — Skills and style
-
-- Skill registry.
-- Conservative rewrite.
-- LLM-tick audit and rewrite.
-- Style profile.
-- Accepted/rejected patch records.
-- Basic skill evaluation harness.
-
-## Milestone 3 — Projects, archive, and citations
-
-- Multi-file projects.
-- FTS5 writing archive.
-- Citation parser and visual markers.
-- Reference records.
-- Reference audit.
-- DOCX/PDF export.
-
-## Milestone 4 — Agent jobs and research
-
-- Multi-step job coordinator.
-- Source import.
-- Web and scholarly search tools.
-- More advanced archive retrieval.
-- Optional DOI/Zotero integrations.
-
-Milestones should be revised whenever a real workflow reveals a more important problem.
+The detailed gates and audited findings live in
+[`development-plan.md`](development-plan.md). Architecture work should keep
+the existing service boundaries so ordering can change without replacing the
+canonical document, revision, or agent-tool models.
 
 ---
 
@@ -1609,7 +1591,8 @@ Do not decide these before they are needed:
 - Vector database technology.
 - A publisher-grade or fully semantic document schema beyond what the selected editor requires.
 - JATS internal representation.
-- Multi-agent orchestration.
+- General-purpose multi-agent orchestration beyond the existing bounded,
+  application-owned delegation roles.
 - Kubernetes or remote job infrastructure.
 - Mobile architecture.
 - Fine-grained enterprise permissions.

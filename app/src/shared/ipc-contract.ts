@@ -32,8 +32,10 @@ import type { ContextActionEvent, ContextDescribeRequest, ContextDescriptor } fr
 
 /**
  * IPC contract shared by main, preload, and renderer.
- * Every payload that crosses the contextBridge is validated against a
- * TypeBox schema on both sides; a malformed payload fails loudly.
+ * Renderer requests are validated by main against TypeBox schemas. Trusted
+ * main-originated events and most responses are currently typed but not
+ * decoded again in preload; see the contract-hardening item in the active
+ * development plan.
  */
 
 export const IpcChannels = {

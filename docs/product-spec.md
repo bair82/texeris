@@ -4,7 +4,7 @@
 **Audience:** Product owner, designer, developer, early testers  
 **Primary platforms:** macOS and Linux  
 **Initial deployment:** Personal, local desktop application  
-**Working title:** Scholarly Writing Workspace (placeholder)
+**Product name:** Texeris
 
 ---
 
@@ -961,6 +961,15 @@ The first usable release should prioritise the complete writing loop over featur
 13. Structured references with unresolved-key warnings.
 14. DOCX and Markdown export; PDF if practical in the first release.
 15. Named checkpoints.
+
+**Implementation audit, 2026-07-22:** the core editor/agent/revision loop,
+projects, checkpoints, and deterministic Markdown/office/PDF interchange work
+on the current development branch. macOS distribution, the reusable writing
+archive, the full editable profile lifecycle, packaged rewrite/tick skills,
+and structured references/bibliography export remain incomplete. The active
+ordering and exit gates are maintained in
+[`development-plan.md`](development-plan.md); phase labels below remain product
+hypotheses rather than implementation status.
 
 ### 13.2 Can wait until the core loop is proven
 

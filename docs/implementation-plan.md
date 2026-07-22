@@ -1,8 +1,10 @@
-# Texeris — Implementation Plan: Milestone 1
+# Texeris — Historical Implementation Plan: Milestone 1
 
-**Status:** Draft. Decision D0 recorded 2026-07-19 (§5): **Tiptap / PM
-variant.** CM-variant notes remain for context only.
-**Feeds into:** Milestones 2–3 sketched in §16.
+**Status:** completed historical plan. It records how M1 and M1.5 were built;
+it is no longer the source of current priorities. See
+[`development-plan.md`](development-plan.md) for the audited baseline, active
+roadmap, gates, and next queue. Decision D0 remains **Tiptap / ProseMirror**;
+CM-variant notes remain here for context only.
 
 ---
 
