@@ -27,7 +27,7 @@ export const ContextActionSchema = Type.Union([
   Type.Literal('editor:undo'), Type.Literal('editor:redo'),
   Type.Literal('editor:image-details'), Type.Literal('editor:image-delete'),
   Type.Literal('document:open'), Type.Literal('document:rename'),
-  Type.Literal('document:duplicate'), Type.Literal('document:reveal'),
+  Type.Literal('document:duplicate'), Type.Literal('document:export'), Type.Literal('document:reveal'),
   Type.Literal('document:set-main'), Type.Literal('document:trash'),
   Type.Literal('conversation:open'), Type.Literal('conversation:rename'),
   Type.Literal('conversation:delete'), Type.Literal('message:copy'),

@@ -252,13 +252,14 @@ export default function AppShell({
     }
   }, [openDoc]);
 
-  const onExportDoc = useCallback(async () => {
-    if (!openDocId || exportingRef.current) return;
+  const onExportDoc = useCallback(async (documentId?: string) => {
+    const targetId = documentId ?? openDocId;
+    if (!targetId || exportingRef.current) return;
     exportingRef.current = true;
     try {
-      getEditorCommands()?.flush();
+      if (targetId === openDocId) getEditorCommands()?.flush();
       setOperationNotice({ message: 'Exporting document…', tone: 'progress' });
-      const exported = await window.texeris.doc.exportDialog(openDocId);
+      const exported = await window.texeris.doc.exportDialog(targetId);
       if (exported) {
         setOperationNotice({
           message: exported.warnings.length
@@ -472,6 +473,7 @@ export default function AppShell({
             onRenameDoc={onRenameDoc}
             onTrashDoc={onTrashDoc}
             onDuplicateDoc={onDuplicateDoc}
+            onExportDoc={onExportDoc}
             onImportDoc={onImportDoc}
             onSetMainDoc={onSetMainDoc}
             onRevealDoc={onRevealDoc}

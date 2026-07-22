@@ -19,6 +19,7 @@ interface ProjectNavProps {
   onRenameDoc(documentId: string, name: string): Promise<void>;
   onTrashDoc(documentId: string): Promise<void>;
   onDuplicateDoc(documentId: string): Promise<void>;
+  onExportDoc(documentId: string): Promise<void>;
   onImportDoc(): Promise<void>;
   onSetMainDoc(documentId: string): Promise<void>;
   onRevealDoc(documentId: string): Promise<void>;
@@ -85,6 +86,7 @@ export default function ProjectNav({
   onRenameDoc,
   onTrashDoc,
   onDuplicateDoc,
+  onExportDoc,
   onImportDoc,
   onSetMainDoc,
   onRevealDoc,
@@ -165,13 +167,14 @@ export default function ProjectNav({
       case 'document:open': onOpenDoc(doc.id); break;
       case 'document:rename': setRenaming({ id: doc.id, name: doc.path }); break;
       case 'document:duplicate': void onDuplicateDoc(doc.id).catch(reportError); break;
+      case 'document:export': void onExportDoc(doc.id); break;
       case 'document:reveal': void onRevealDoc(doc.id).catch(reportError); break;
       case 'document:set-main': void onSetMainDoc(doc.id).catch(reportError); break;
       case 'document:trash': setConfirmTrashId(doc.id); break;
       default: return false;
     }
     return true;
-  }), [docs, onDuplicateDoc, onOpenDoc, onRevealDoc, onSetMainDoc]);
+  }), [docs, onDuplicateDoc, onExportDoc, onOpenDoc, onRevealDoc, onSetMainDoc]);
 
   return (
     <nav className="project-nav" style={{ width }}>

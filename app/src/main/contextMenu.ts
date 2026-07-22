@@ -96,6 +96,7 @@ export function contextMenuTemplate(
       actionItem(sender, context, 'Rename…', 'document:rename'),
       { type: 'separator' },
       actionItem(sender, context, 'Duplicate', 'document:duplicate'),
+      actionItem(sender, context, 'Export…', 'document:export'),
       actionItem(sender, context, 'Reveal in Files', 'document:reveal'),
     );
     if (!context.isMain) items.push(

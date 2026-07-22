@@ -162,3 +162,8 @@ auto-clear, errors persist, long details truncate with a full hover title, and
 all non-progress states are dismissible. Contextual/actionable errors remain
 with their owning editor or panel. A general console is deferred until the app
 has durable background jobs or logs that justify history and filtering.
+
+**codex, 2026-07-22** — document context menus now include Export… for both
+right-click and ellipsis launchers. The action exports the selected row rather
+than implicitly exporting the open editor, while reusing the same save dialog,
+PDF default, status feedback, and single-export guard as the File command.

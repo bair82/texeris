@@ -167,7 +167,7 @@ try {
   await sleep(300);
   check(
     'document ellipsis uses the native document menu',
-    stderr.includes('"kind":"document"') && stderr.includes('"Rename…"'),
+    stderr.includes('"kind":"document"') && stderr.includes('"Rename…"') && stderr.includes('"Export…"'),
   );
   await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
   await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' });

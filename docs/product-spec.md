@@ -500,7 +500,10 @@ Example names:
 - Support headings, lists, emphasis, links, quotations, code where useful, tables, footnotes, and citation markers.
 - Support pasting and dragging common raster images into project-owned assets, with editable alt text and optional captions; deleting an image must not strand public asset files or break revision restore.
 - Provide undo and redo.
-- Provide platform-native context menus for editing, links, images, documents, conversations, and messages; toolbar/ellipsis launchers should reuse the same actions rather than maintain parallel menus.
+- Provide platform-native context menus for editing, links, images, documents,
+  conversations, and messages; toolbar/ellipsis launchers should reuse the same
+  actions rather than maintain parallel menus. Document menus include export
+  for that document without requiring it to become the active editor first.
 - Show transient workspace operations in the editor status bar with consistent
   progress, success, warning, and error states. Keep actionable recovery
   notices and panel-specific errors beside the surface they affect; do not use

@@ -47,7 +47,7 @@ describe('native context menu model', () => {
     const menu = contextMenuTemplate(sender, {
       kind: 'document', documentId: 'd1', path: 'paper.md', isMain: true,
     });
-    expect(labels(menu)).toEqual(['Open', 'Rename…', 'Duplicate', 'Reveal in Files']);
+    expect(labels(menu)).toEqual(['Open', 'Rename…', 'Duplicate', 'Export…', 'Reveal in Files']);
   });
 
   it('includes document management for a secondary document', () => {
@@ -58,8 +58,13 @@ describe('native context menu model', () => {
       ...context,
     });
     expect(labels(menu)).toEqual(expect.arrayContaining([
-      'Set as Main Document', 'Move to Trash…',
+      'Export…', 'Set as Main Document', 'Move to Trash…',
     ]));
+    menu.find((item) => item.label === 'Export…')?.click?.(undefined as never, undefined as never, undefined as never);
+    expect(mockSender.send).toHaveBeenCalledWith(ContextMenuChannels.action, {
+      action: 'document:export', context,
+    });
+    mockSender.send.mockClear();
     menu.find((item) => item.label === 'Rename…')?.click?.(undefined as never, undefined as never, undefined as never);
     expect(mockSender.send).toHaveBeenCalledWith(ContextMenuChannels.action, {
       action: 'document:rename', context,

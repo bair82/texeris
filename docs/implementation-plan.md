@@ -629,6 +629,9 @@ open/rename/delete, and message copy. Document and conversation ellipsis
 buttons open the same native menu definitions. Main-process unit tests cover
 menu policy and action routing; `smoke-eu5.mjs` verifies both a real editor
 right-click and a document launcher produce the expected native labels.
+Document export was added to the shared row/ellipsis menu on 2026-07-22 and
+targets the selected document directly, including when another document is
+open.
 
 **PDF import/export.** ✅ done 2026-07-22 (codex). Text-bearing PDFs import as
 revisioned editable Markdown or page-marked corpus derivatives through the
