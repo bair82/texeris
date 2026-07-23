@@ -152,15 +152,24 @@ try {
     'duplicate never appeared',
   );
 
-  // trash the duplicate
-  await evaluate(withDocument('journal copy.md', 'trash'));
-  await reload();
+  // Give the non-main duplicate its own heading, open it, and send a turn.
+  // The scope picker must remain aligned with the active document rather than
+  // being reset to the main document's outline by ChatPanel.startTurn.
+  await evaluate(`(async () => {
+    const doc = (await window.texeris.doc.list()).find(d => d.path === 'journal copy.md');
+    const current = await window.texeris.doc.getText(doc.id);
+    await window.texeris.doc.commit({
+      documentId: doc.id,
+      kind: 'typing',
+      splices: [{ from: 0, to: current.text.length, deletedText: current.text, insertedText: '# Copy heading\\n' }],
+    });
+    [...document.querySelectorAll('.nav-file')].find(b => b.textContent.includes('journal copy.md')).click();
+    return true;
+  })()`);
   await waitFor(
-    `![...document.querySelectorAll('.nav-file')].some(b => b.textContent.includes('journal copy.md'))`,
-    'trashed document still in the nav',
+    `[...document.querySelector('.scope-select').options].some(o => o.value === 'section:Copy heading')`,
+    'scope picker did not follow the active non-main document',
   );
-  const trashFiles = fs.readdirSync(path.join(projectDir, '.texeris', 'trash'));
-  check('trashed file moved to .texeris/trash', trashFiles.length === 1 && trashFiles[0].endsWith('.md'), trashFiles.join(','));
 
   // send a chat turn so the conversation has content
   await evaluate(setInput('.chat-input textarea', 'smoke question'));
@@ -170,6 +179,20 @@ try {
     'assistant answer never arrived',
     80,
   );
+  check(
+    'sending preserves the active document outline',
+    await evaluate(`[...document.querySelector('.scope-select').options].some(o => o.value === 'section:Copy heading')`),
+  );
+
+  // trash the duplicate
+  await evaluate(withDocument('journal copy.md', 'trash'));
+  await reload();
+  await waitFor(
+    `![...document.querySelectorAll('.nav-file')].some(b => b.textContent.includes('journal copy.md'))`,
+    'trashed document still in the nav',
+  );
+  const trashFiles = fs.readdirSync(path.join(projectDir, '.texeris', 'trash'));
+  check('trashed file moved to .texeris/trash', trashFiles.length === 1 && trashFiles[0].endsWith('.md'), trashFiles.join(','));
 
   // rename the current conversation
   await evaluate(`(async () => {

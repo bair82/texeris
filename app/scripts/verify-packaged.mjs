@@ -1,18 +1,44 @@
 /**
- * Verify the packaged artifact boots and serves the app: launch the AppImage
- * (or another packaged binary) with a temp project dir, attach over CDP,
- * and check the preload API + document round trip.
+ * Verify the packaged artifact. By default this launches the AppImage (or
+ * another packaged binary) with a temp project dir, attaches over CDP, and
+ * checks the preload API + document round trip. `--resources-only` is the
+ * displayless CI variant: it verifies the unpacked application and bundled
+ * Pandoc executable without attempting to launch Electron.
  *
  * Usage: node scripts/verify-packaged.mjs [path-to-binary]
  */
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+const args = process.argv.slice(2);
+const resourcesOnly = args.includes('--resources-only');
 const BIN =
-  process.argv[2] ??
+  args.find((arg) => arg !== '--resources-only') ??
   new URL('../dist/texeris-0.1.0-x86_64.AppImage', import.meta.url).pathname;
+const UNPACKED = new URL('../dist/linux-unpacked/resources/', import.meta.url).pathname;
+
+if (resourcesOnly) {
+  let failures = 0;
+  const check = (label, ok, detail = '') => {
+    console.log(`${ok ? 'ok  ' : 'FAIL'} ${label}${detail ? ` — ${detail}` : ''}`);
+    if (!ok) failures += 1;
+  };
+  const appAsar = path.join(UNPACKED, 'app.asar');
+  const pandoc = path.join(UNPACKED, 'pandoc', 'linux-amd64', 'pandoc');
+  check('packaged app.asar exists', fs.existsSync(appAsar));
+  check('bundled Pandoc exists and is executable', fs.existsSync(pandoc) && (fs.statSync(pandoc).mode & 0o111) !== 0);
+  try {
+    const version = execFileSync(pandoc, ['--version'], { encoding: 'utf8' });
+    check('bundled Pandoc launches', version.startsWith('pandoc '), version.split('\n')[0]);
+  } catch (err) {
+    check('bundled Pandoc launches', false, err instanceof Error ? err.message : String(err));
+  }
+  console.log(failures ? 'packaged-resource verification FAILED' : 'packaged-resource verification passed');
+  process.exit(failures ? 1 : 0);
+}
+
 const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'texeris-pkg-'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

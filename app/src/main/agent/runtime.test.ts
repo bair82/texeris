@@ -287,7 +287,7 @@ describe('PiAgentRuntime', () => {
     expect(seenPrompts[1]).toContain('+"slow"');
   });
 
-  it('rejects a second turn while one is running', async () => {
+  it('rejects a second turn in any conversation while one is running', async () => {
     const slow = fauxProvider({ models: [{ id: 'faux-model' }], tokensPerSecond: 1 });
     const models = createModels();
     models.setProvider(slow.provider);
@@ -300,15 +300,63 @@ describe('PiAgentRuntime', () => {
       mode: 'fast',
       scope: { kind: 'document' },
     });
+    const otherConversationId = conversations.startNewConversation();
     await expect(
       runtime.startTurn({
-        conversationId,
+        conversationId: otherConversationId,
         text: 'two',
         mode: 'fast',
         scope: { kind: 'document' },
       }),
-    ).rejects.toThrow(/already in progress/);
+    ).rejects.toThrow(/another turn is already in progress/);
     await runtime.cancel(first.runId);
     await drain(first.runId);
+  });
+
+  it('aborts and detaches an active run before its conversation is deleted', async () => {
+    const slow = fauxProvider({ models: [{ id: 'faux-model' }], tokensPerSecond: 1 });
+    const models = createModels();
+    models.setProvider(slow.provider);
+    runtime = new PiAgentRuntime({ models, config: CONFIG, conversations, project: ctx, patches });
+    slow.setResponses([fauxAssistantMessage('slow answer that keeps streaming along')]);
+
+    const { runId } = await runtime.startTurn({
+      conversationId,
+      text: 'one',
+      mode: 'fast',
+      scope: { kind: 'document' },
+    });
+    const eventsPromise = drain(runId);
+    runtime.cancelConversation(conversationId);
+    const events = await eventsPromise;
+
+    expect(events.at(-1)).toMatchObject({ type: 'run_end', status: 'aborted', errorMessage: 'conversation deleted' });
+    expect(conversations.listRuns(conversationId)[0]).toMatchObject({ status: 'aborted', error: 'conversation deleted' });
+  });
+
+  it('detaches an active run before swapping projects', async () => {
+    const slow = fauxProvider({ models: [{ id: 'faux-model' }], tokensPerSecond: 1 });
+    const models = createModels();
+    models.setProvider(slow.provider);
+    runtime = new PiAgentRuntime({ models, config: CONFIG, conversations, project: ctx, patches });
+    slow.setResponses([fauxAssistantMessage('slow answer that keeps streaming along')]);
+
+    const { runId } = await runtime.startTurn({
+      conversationId,
+      text: 'one',
+      mode: 'fast',
+      scope: { kind: 'document' },
+    });
+    const eventsPromise = drain(runId);
+    const next = createProject(path.join(root, 'next-project'));
+    const nextConversations = new ConversationService(next.db);
+    const nextPatches = new PatchService(next.db, next.revisions);
+    runtime.setProject(next, nextConversations, nextPatches);
+    const events = await eventsPromise;
+
+    expect(events.at(-1)).toMatchObject({ type: 'run_end', status: 'aborted', errorMessage: 'project switched' });
+    expect(conversations.listRuns(conversationId)[0]).toMatchObject({ status: 'aborted', error: 'project switched' });
+    expect(nextConversations.listConversations()).toHaveLength(0);
+    next.db.close();
   });
 });

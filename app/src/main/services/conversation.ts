@@ -124,10 +124,17 @@ export class ConversationService {
       .run(trimmed, conversationId);
   }
 
-  /** Delete a conversation with its messages and run records. */
+  /** Delete a conversation and every conversation-owned profile/run record. */
   deleteConversation(conversationId: string): void {
     this.db.exec('BEGIN');
     try {
+      this.db
+        .prepare('DELETE FROM delegated_results WHERE conversation_id = ?')
+        .run(conversationId);
+      this.db
+        .prepare('DELETE FROM corpus_sources WHERE grant_id IN (SELECT id FROM corpus_grants WHERE conversation_id = ?)')
+        .run(conversationId);
+      this.db.prepare('DELETE FROM corpus_grants WHERE conversation_id = ?').run(conversationId);
       this.db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(conversationId);
       this.db.prepare('DELETE FROM agent_runs WHERE conversation_id = ?').run(conversationId);
       this.db.prepare('DELETE FROM conversations WHERE id = ?').run(conversationId);

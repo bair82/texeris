@@ -1,0 +1,39 @@
+name: Verify
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, 'codex/**', 'kimi/**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    name: App verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.1
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm --filter @texeris/app typecheck
+      - name: Unit and service tests
+        run: pnpm --filter @texeris/app test
+      - name: Build
+        run: pnpm --filter @texeris/app build
+      - name: Prepare pinned Pandoc resource
+        run: pnpm --filter @texeris/app prepare:pandoc
+      - name: Package Linux AppImage
+        run: pnpm --filter @texeris/app dist:linux
+      - name: Inspect packaged resources (headless)
+        run: node app/scripts/verify-packaged.mjs --resources-only

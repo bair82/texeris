@@ -152,4 +152,34 @@ describe('conversation management (EU3)', () => {
     expect(conversations.listUiMessages(id)).toHaveLength(0);
     expect(conversations.listRuns(id)).toHaveLength(0);
   });
+
+  it('deletes profile grants, sources, and delegated results with their conversation', () => {
+    const id = conversations.startNewConversation({ id: 'writing-profile', version: 1 });
+    const grantId = 'grant-1';
+    ctx.db.prepare(
+      'INSERT INTO corpus_grants (id, conversation_id, created_at, source_kind) VALUES (?, ?, ?, ?)',
+    ).run(grantId, id, '2026-07-22T00:00:00.000Z', 'files');
+    ctx.db.prepare(
+      `INSERT INTO corpus_sources
+       (id, grant_id, original_path, canonical_path, source_hash, source_size,
+        source_mtime, format, markdown_path, markdown_hash, converter,
+        conversion_warnings_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )`,
+    ).run(
+      'source-1', grantId, '/tmp/original.md', '/tmp/original.md', 'source-hash', 1,
+      '2026-07-22T00:00:00.000Z', 'md', '/tmp/derivative.md', 'markdown-hash', 'none', '[]',
+    );
+    ctx.db.prepare(
+      `INSERT INTO delegated_results
+       (id, parent_run_id, conversation_id, role_id, status, task, provider, model, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run('delegation-1', 'run-1', id, 'corpus-analyst', 'completed', 'summarize', 'faux', 'faux-model', '2026-07-22T00:00:00.000Z');
+
+    conversations.deleteConversation(id);
+
+    for (const table of ['conversations', 'corpus_grants', 'corpus_sources', 'delegated_results']) {
+      const count = (ctx.db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number }).count;
+      expect(count, table).toBe(0);
+    }
+  });
 });

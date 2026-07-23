@@ -185,3 +185,26 @@ until at least next week. Codex owns repository maintenance and integration in
 the meantime. Peer review is welcome when both agents are available, but an
 unavailable agent is not a merge dependency; the active maintainer self-reviews,
 records verification evidence, and keeps PR metadata current.
+
+**codex, 2026-07-22** — began G0 contradiction repair after PR #3 merged.
+Faux mode remains disposable by default, but isolated EU4/EU6 persistence
+smokes now explicitly opt into temporary-config writes; both pass. Vitest now
+uses the proven `forks` pool by default, and the documented test command exits
+cleanly (185 passed, 2 conditional skips). The aggregate run exposed a separate
+restart race in `smoke.mjs`: CDP connected before the preload bridge was ready.
+The smoke now waits for that bridge and its restart-survival path passes.
+
+**codex, 2026-07-22** — completed the next G0 reliability slice: smoke commands
+are named (`smoke:offline`, `smoke:main`, `smoke:platform`) and the aggregate
+runner emits per-attempt plus JSON summary records; Linux CI added for install,
+typecheck, tests, build, Pandoc preparation, Linux packaging, and packaged
+resource inspection. Conversation deletion now removes profile grants/sources
+and delegations transactionally; active runs are detached before deletion or a
+project swap. Only one foreground agent turn is permitted globally. Fixed the
+chat outline refresh to preserve the active non-main document; EU3 covers it.
+
+**owner/codex, 2026-07-23** — added conversation/document rewind to the G1
+queue: select a past completed turn or checkpoint, preview its message/document
+boundary, restore the document as a new revision, and fork/reopen the
+conversation from that point. The original history remains preserved and any
+pending patches must stay visibly attributable rather than being silently lost.

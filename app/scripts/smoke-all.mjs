@@ -23,30 +23,41 @@ const SMOKE = [
   'scripts/smoke-pdf.mjs',
 ];
 
-let failed = 0;
+const results = [];
 for (const script of SMOKE) {
   console.log(`\n=== ${script} ===`);
-  let result = spawnSync(process.execPath, [script], {
-    cwd: new URL('..', import.meta.url).pathname,
-    stdio: 'inherit',
-    env: process.env,
-  });
-  if (result.status !== 0) {
-    // Back-to-back Electron launches are racy (worse under load); retry once.
-    console.log(`=== ${script} failed (exit ${result.status}), retrying once ===`);
-    spawnSync('sleep', ['10']);
-    result = spawnSync(process.execPath, [script], {
+  const attempts = [];
+  const run = () => {
+    const startedAt = Date.now();
+    const result = spawnSync(process.execPath, [script], {
       cwd: new URL('..', import.meta.url).pathname,
-      stdio: 'inherit',
+      encoding: 'utf8',
       env: process.env,
     });
-  }
+    const attempt = {
+      status: result.status,
+      signal: result.signal,
+      durationMs: Date.now() - startedAt,
+      stdout: result.stdout ?? '',
+      stderr: result.stderr ?? '',
+    };
+    attempts.push(attempt);
+    process.stdout.write(attempt.stdout);
+    process.stderr.write(attempt.stderr);
+    return attempt;
+  };
+  let result = run();
   if (result.status !== 0) {
-    failed += 1;
-    console.log(`=== ${script} FAILED (exit ${result.status}) ===`);
+    console.log(`=== ${script} attempt 1 failed (exit ${result.status ?? result.signal}), retrying once after launch cooldown ===`);
+    spawnSync('sleep', ['10']);
+    result = run();
   }
+  const passed = result.status === 0;
+  results.push({ script, passed, attempts: attempts.map(({ stdout, stderr, ...summary }) => summary) });
+  console.log(`=== ${script} ${passed ? 'PASSED' : `FAILED (exit ${result.status ?? result.signal})`} after ${attempts.length} attempt(s) ===`);
   // Let Electron instances fully exit before the next smoke attaches.
   spawnSync('sleep', ['5']);
 }
-console.log(failed ? `\n${failed} smoke(s) FAILED` : '\nall smokes passed');
-process.exit(failed ? 1 : 0);
+const failed = results.filter((result) => !result.passed);
+console.log(`\nSMOKE_SUMMARY ${JSON.stringify({ total: results.length, passed: results.length - failed.length, failed: failed.length, results })}`);
+process.exit(failed.length ? 1 : 0);

@@ -116,6 +116,14 @@ async function evaluate(cdp, expression) {
   return result.result.value;
 }
 
+async function waitForPreload(cdp, tries = 80) {
+  for (let i = 0; i < tries; i++) {
+    if (await evaluate(cdp, "typeof window.texeris !== 'undefined'")) return;
+    await sleep(250);
+  }
+  throw new Error('renderer preload bridge never became available');
+}
+
 // Full chat turn driven from the page context; resolves with collected events.
 const RUN_TURN_JS = `
 (async () => {
@@ -147,6 +155,7 @@ try {
   app = await launchApp(projectDir);
   let ws = await connectPage(app.wsUrl);
   let cdp = new Cdp(ws);
+  await waitForPreload(cdp);
 
   const docList = await evaluate(cdp, 'window.texeris.doc.list()');
   check('dev project seeded with a manuscript', docList?.[0]?.currentRevision >= 1);
@@ -206,6 +215,7 @@ try {
   app = await launchApp(projectDir);
   ws = await connectPage(app.wsUrl);
   cdp = new Cdp(ws);
+  await waitForPreload(cdp);
   const after = await evaluate(
     cdp,
     `
