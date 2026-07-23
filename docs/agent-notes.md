@@ -202,3 +202,9 @@ resource inspection. Conversation deletion now removes profile grants/sources
 and delegations transactionally; active runs are detached before deletion or a
 project swap. Only one foreground agent turn is permitted globally. Fixed the
 chat outline refresh to preserve the active non-main document; EU3 covers it.
+
+**owner/codex, 2026-07-23** — added conversation/document rewind to the G1
+queue: select a past completed turn or checkpoint, preview its message/document
+boundary, restore the document as a new revision, and fork/reopen the
+conversation from that point. The original history remains preserved and any
+pending patches must stay visibly attributable rather than being silently lost.

@@ -160,13 +160,16 @@ rapidly turning a prototype into a real application.
    bibliography-aware export, an archive, and a small evaluated skill set.
 2. Persistent undo across document/mode switches is revision-based in theory
    but not presented as a normal undo experience.
-3. Section movement/folding and math remain meaningful document-authoring
+3. **Conversation/document rewind is absent.** A writer cannot select an
+   earlier chat turn and return both the active conversation and document to
+   that historical point as one deliberate operation.
+4. Section movement/folding and math remain meaningful document-authoring
    gaps. Split view and more themes are lower-value until real use says
    otherwise.
-4. Workspace status messages are now standardized. A general console is not
+5. Workspace status messages are now standardized. A general console is not
    justified yet; introduce one only when background jobs produce durable,
    inspectable logs that cannot fit the status/job UI.
-5. Context-menu AI shortcuts remain intentionally deferred until repeated
+6. Context-menu AI shortcuts remain intentionally deferred until repeated
    writing sessions identify specific useful actions.
 
 ### 3.5 P1 — documentation and release gaps
@@ -271,6 +274,12 @@ Work packages, in order:
 7. **Daily editor reliability:** fix active-document outline refresh; implement
    the app-level spellchecker after deciding initial languages and dictionary
    distribution; expose revision restore as the cross-session undo story.
+8. **Conversation/document rewind:** let the user choose an earlier completed
+   chat turn or checkpoint, preview the affected document revision and message
+   boundary, then restore the document as a new revision and fork/reopen the
+   conversation from that boundary. Preserve the abandoned conversation and
+   revision history; invalidate or clearly retain pending patches by origin,
+   never silently delete evidence.
 
 Exit gate:
 
@@ -400,13 +409,15 @@ Do not begin G2 until items 1–7 are closed:
 6. Decide corpus snapshot/retention semantics; add delete and transactional
    creation.
 7. Move expensive conversion/extraction work into cancellable jobs.
-8. Build references/citation library and bibliography-aware export (G2).
-9. Build archive + FTS5 retrieval (G3).
-10. Productise and evaluate the next two skills (G4).
-11. Resume app-level spellcheck as a bounded daily-use package; it may move
-    earlier if current writing sessions make it more costly than items 6–7.
-12. Only then consider math, section manipulation, PDF viewing/OCR, split view,
-    additional themes, a console, or generic AI shortcuts.
+8. Add safe conversation/document rewind with preview and non-destructive
+   conversation branching.
+9. Build references/citation library and bibliography-aware export (G2).
+10. Build archive + FTS5 retrieval (G3).
+11. Productise and evaluate the next two skills (G4).
+12. Resume app-level spellcheck as a bounded daily-use package; it may move
+   earlier if current writing sessions make it more costly than items 6–7.
+13. Only then consider math, section manipulation, PDF viewing/OCR, split view,
+   additional themes, a console, or generic AI shortcuts.
 
 ## 7. Definition of done for every work package
 
