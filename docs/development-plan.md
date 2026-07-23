@@ -71,7 +71,8 @@ rapidly turning a prototype into a real application.
    is no `.github/workflows` directory. Tests rely on whoever last ran them.
    **Resolved 2026-07-22:** Linux CI now installs from the lockfile, typechecks,
    tests, builds, prepares the pinned Pandoc resource, packages Linux, and
-   inspects the packaged result. The first remote run remains the evidence gate.
+   inspects the packaged result headlessly. Packaged launch remains a named
+   local desktop gate; the first remote run remains the evidence gate.
 3. **The aggregate offline smoke is not truthful.** `smoke-all.mjs` includes
    EU6, whose final assertion requires a persisted `config.json`; faux-provider
    mode explicitly skips settings persistence. The test therefore cannot pass

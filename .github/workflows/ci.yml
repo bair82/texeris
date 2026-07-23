@@ -34,5 +34,5 @@ jobs:
         run: pnpm --filter @texeris/app prepare:pandoc
       - name: Package Linux AppImage
         run: pnpm --filter @texeris/app dist:linux
-      - name: Inspect packaged resources
-        run: node app/scripts/verify-packaged.mjs
+      - name: Inspect packaged resources (headless)
+        run: node app/scripts/verify-packaged.mjs --resources-only
