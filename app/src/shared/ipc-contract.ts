@@ -27,6 +27,7 @@ import type { UiState } from './ui-types';
 import type { CheckpointInfo, DocumentInfo, RevisionInfo } from './domain-types';
 import type { ProjectInfo } from './project-types';
 import type { CorpusGrantView, ProfileBeginRequest } from './profile-types';
+import type { JobEvent } from './job-types';
 import type { PatchStyleMode } from './settings-types';
 import type { ContextActionEvent, ContextDescribeRequest, ContextDescriptor } from './context-menu-types';
 
@@ -81,6 +82,11 @@ export interface TexerisApi {
   };
   profile: {
     begin(request: ProfileBeginRequest): Promise<{ conversationId: string; runId: string; sourceCount: number; warnings: string[] } | null>;
+  };
+  jobs: {
+    cancel(jobId: string): Promise<{ cancelled: boolean }>;
+    /** Background job lifecycle events for this window; returns an unsubscribe fn. */
+    onEvent(callback: (event: JobEvent) => void): () => void;
   };
   corpus: {
     list(): Promise<CorpusGrantView[]>;

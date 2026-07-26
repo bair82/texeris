@@ -1,4 +1,5 @@
 import react from '@vitejs/plugin-react';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import type { Plugin } from 'vite';
 
@@ -29,6 +30,25 @@ export default defineConfig({
         exclude: ['@earendil-works/pi-agent-core', '@earendil-works/pi-ai', 'typebox'],
       }),
     ],
+    build: {
+      rollupOptions: {
+        // Multi-input builds lose the preset's external list in practice
+        // (the electron npm installer stub gets bundled and crashes at
+        // startup), so pin it explicitly.
+        external: ['electron', /^electron\/.+/],
+        input: {
+          index: fileURLToPath(new URL('./src/main/index.ts', import.meta.url)),
+          // Background-job worker entry → out/main/jobs/worker.js (CJS),
+          // loaded by node:worker_threads via jobs/runner.ts.
+          'jobs/worker': fileURLToPath(new URL('./src/main/jobs/worker.ts', import.meta.url)),
+        },
+        output: {
+          format: 'cjs',
+          entryFileNames: '[name].js',
+          chunkFileNames: 'chunks/[name]-[hash].js',
+        },
+      },
+    },
   },
   preload: {
     // Sandboxed preload scripts can only require Electron builtins, so

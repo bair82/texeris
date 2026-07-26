@@ -164,7 +164,11 @@ export function duplicateDocument(ctx: ProjectContext, documentId: string): Docu
 }
 
 /** Copy a Markdown file from anywhere into the project root. */
-export async function importDocumentFile(ctx: ProjectContext, sourcePath: string): Promise<DocumentImportResult> {
+export async function importDocumentFile(
+  ctx: ProjectContext,
+  sourcePath: string,
+  signal?: AbortSignal,
+): Promise<DocumentImportResult> {
   const original = path.basename(sourcePath);
   const base = original.replace(/\.(?:md|markdown|mdown|txt|docx|odt|rtf|pdf)$/i, '');
   let target = `${base}.md`;
@@ -181,16 +185,17 @@ export async function importDocumentFile(ctx: ProjectContext, sourcePath: string
   let converted;
   try {
     if (isPdf) {
-      const extracted = await extractPdfText(bytes);
+      const extracted = await extractPdfText(bytes, signal);
       converted = {
         markdown: pdfDocumentMarkdown(extracted),
         converter: extracted.converter,
         warnings: extracted.warnings,
       };
     } else {
-      converted = convertToMarkdown(sourcePath, bytes, {
+      converted = await convertToMarkdown(sourcePath, bytes, {
         mediaDir: assetDir,
         mediaReferencePrefix: assetRelativeDir,
+        signal,
       });
     }
   } catch (error) {
@@ -214,6 +219,7 @@ export async function exportDocumentFile(
   documentId: string,
   outputPath: string,
   renderPdf?: PdfRenderer,
+  signal?: AbortSignal,
 ): Promise<DocumentExportResult> {
   const row = docRow(ctx, documentId);
   assertLive(row);
@@ -232,7 +238,7 @@ export async function exportDocumentFile(
       atomicWriteText(tempPath, text);
     } else if (format === 'pdf') {
       if (!renderPdf) throw new Error('PDF rendering is unavailable');
-      const prepared = buildPdfPrintHtml(text, row.title, ctx.root);
+      const prepared = await buildPdfPrintHtml(text, row.title, ctx.root, { signal });
       const bytes = await renderPdf(prepared.html);
       if (!bytes.subarray(0, 5).equals(Buffer.from('%PDF-'))) {
         throw new Error('PDF rendering returned an invalid file');
@@ -240,7 +246,7 @@ export async function exportDocumentFile(
       fs.writeFileSync(tempPath, bytes, { flag: 'wx' });
       warnings = prepared.warnings;
     } else {
-      warnings = writePandocExport(text, tempPath, format, ctx.root);
+      warnings = await writePandocExport(text, tempPath, format, ctx.root, signal);
     }
     fs.renameSync(tempPath, outputPath);
     if (/\[@[-\w]+/.test(text)) {

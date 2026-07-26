@@ -127,12 +127,26 @@ rapidly turning a prototype into a real application.
    immutable snapshot. Grants and cached plaintext derivatives have no delete,
    retention, or garbage-collection workflow; partial grant creation is not
    transactional; recursive imports have no general byte/file-count cap.
+   **Resolved 2026-07-26 (owner decision: immutable snapshots):** source bytes
+   are copied into `<projectRoot>/.texeris/corpus` at grant time; reads never
+   touch the original path and rebuild missing derivatives from the snapshot.
+   Grant creation converts first and commits one DB transaction; limits are
+   200 files / 500 MB total / 100 MB per file / depth 8. Grants can be
+   inspected and deleted in Settings (with the plaintext-retention
+   disclosure); deletion and conversation removal GC unreferenced blobs.
+   Legacy workspace-cache rows keep the old behavior. (PR #5)
 5. **Heavy deterministic work still blocks the Electron main process.** Pandoc
    uses synchronous subprocess calls; recursive corpus conversion and hashing
    are sequential; large-file reads are synchronous. PDF extraction is async
    at its API boundary but CPU work still shares the application process. Large
    imports and exports need cancellable jobs behind the existing service
-   boundary.
+   boundary. **Resolved 2026-07-26:** all Pandoc conversion/export, unpdf
+   extraction, and PDF print-HTML preparation run on `node:worker_threads`
+   (`main/jobs/`: pure `tasks.ts`, thin `worker.ts` entry, `JobRunner` with
+   AbortSignal cancellation); `printToPDF` stays in main fed the prepared
+   artifact. Import/export/corpus-grant IPC report progress over
+   `texeris:job-event` and cancel via `texeris:job-cancel`; the status bar
+   shows live progress with a Cancel button. (kimi/background-jobs)
 6. **File and DB durability has a known split point.** A canonical file is
    atomically renamed before its revision transaction commits. Startup
    reconciliation can recover after a crash, but an injected DB failure can
@@ -402,14 +416,15 @@ Work:
 
 Do not begin G2 until items 1–7 are closed:
 
-1. Integrate the current branch and replace the stale omnibus PR description.
-2. Add CI and repair/classify the aggregate smoke suite.
-3. Fix profile-conversation deletion and add relational lifecycle tests.
-4. Enforce the agent-run invariant and safe project/conversation transitions.
-5. Fix active-document outline refresh.
-6. Decide corpus snapshot/retention semantics; add delete and transactional
-   creation.
-7. Move expensive conversion/extraction work into cancellable jobs.
+1. ~~Integrate the current branch and replace the stale omnibus PR description.~~
+2. ~~Add CI and repair/classify the aggregate smoke suite.~~
+3. ~~Fix profile-conversation deletion and add relational lifecycle tests.~~
+4. ~~Enforce the agent-run invariant and safe project/conversation transitions.~~
+5. ~~Fix active-document outline refresh.~~
+6. ~~Decide corpus snapshot/retention semantics; add delete and transactional
+   creation.~~ Done 2026-07-26 (immutable snapshots, PR #5).
+7. ~~Move expensive conversion/extraction work into cancellable jobs.~~ Done
+   2026-07-26 (worker-thread jobs with progress/cancel).
 8. Add safe conversation/document rewind with preview and non-destructive
    conversation branching.
 9. Build references/citation library and bibliography-aware export (G2).
@@ -442,8 +457,11 @@ These are real product decisions; do not bury them in implementation:
    downloading dictionaries acceptable?
 2. Should the reference library’s canonical CSL JSON be a visible project file
    or application-managed data with explicit export?
-3. Are writing-archive imports immutable snapshots (recommended) or live links
-   to originals?
+3. ~~Are writing-archive imports immutable snapshots (recommended) or live links
+   to originals?~~ **Decided 2026-07-26 (owner): immutable snapshots**, applied
+   to profile corpus grants in PR #5; the same semantics carry into the G3
+   archive. Retention follows the conservative default: derivatives persist
+   locally until explicit user deletion (inspect/delete in Settings).
 4. Should Texeris enforce one foreground agent run, or is simultaneous work in
    multiple conversations a near-term requirement?
 5. How long should corpus/profile/archive derivatives be retained by default?

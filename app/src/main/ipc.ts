@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { Value } from '@sinclair/typebox/value';
 import {
@@ -77,9 +78,11 @@ import {
 import { addImageAsset } from './services/assets';
 import { createDocument, ensureDocument } from './services/project';
 import { CorpusChannels, CorpusDeleteRequestSchema, ProfileBeginRequestSchema, ProfileChannels } from '../shared/profile-types';
+import { JobCancelRequestSchema, JobChannels, type JobEvent } from '../shared/job-types';
 import type { CorpusService } from './services/corpus';
 import type { WritingProfileService } from './services/profile';
 import { printHtmlToPdf } from './pdfExport';
+import { isCancellation } from './jobs/runner';
 
 export interface IpcDeps {
   requireProject(): ProjectContext;
@@ -104,6 +107,46 @@ export function projectInfo(ctx: ProjectContext): ProjectInfo {
 
 function mainDocId(project: ProjectContext): string {
   return ensureDocument(project, project.project.mainDocument);
+}
+
+/** In-flight background jobs (import/export/corpus grant) by jobId. */
+const jobControllers = new Map<string, AbortController>();
+
+/**
+ * Run a cancellable background operation, pushing lifecycle events to the
+ * invoking window only. The invoke return shape is unchanged; cancellation
+ * rejects the invoke with a 'cancelled' error.
+ */
+async function runJob<T>(
+  sender: Electron.WebContents,
+  op: JobEvent['op'],
+  work: (
+    signal: AbortSignal,
+    reportProgress: (progress: { done: number; total: number }, detail?: string) => void,
+  ) => Promise<T>,
+): Promise<T> {
+  const jobId = randomUUID();
+  const controller = new AbortController();
+  jobControllers.set(jobId, controller);
+  const send = (status: JobEvent['status'], extra: Partial<JobEvent> = {}) => {
+    if (!sender.isDestroyed()) {
+      sender.send(JobChannels.event, { jobId, op, status, ...extra });
+    }
+  };
+  send('started');
+  try {
+    const result = await work(controller.signal, (progress, detail) =>
+      send('progress', { progress, ...(detail ? { detail } : {}) }),
+    );
+    send('finished');
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    send(isCancellation(error) ? 'cancelled' : 'failed', { detail: message });
+    throw error;
+  } finally {
+    jobControllers.delete(jobId);
+  }
 }
 
 function docPath(project: ProjectContext, documentId: string): string {
@@ -251,7 +294,12 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     if (result.canceled || result.filePaths.length === 0) return null;
     const conversations = deps.requireConversations();
     const conversationId = conversations.startNewConversation({ id: 'writing-profile', version: 1 });
-    const grant = await deps.corpus.createGrant(deps.requireProject(), conversationId, result.filePaths, req.source);
+    const grant = await runJob(event.sender, 'corpus-grant', (signal, reportProgress) =>
+      deps.corpus.createGrant(deps.requireProject(), conversationId, result.filePaths, req.source, {
+        signal,
+        onProgress: (progress) => reportProgress({ done: progress.done, total: progress.total }, progress.file),
+      }),
+    );
     const { runId } = await deps.requireRuntime().startTurn({
       conversationId,
       text: 'Analyze the selected corpus and build my writing profile. Begin by reviewing the corpus inventory and conversion warnings. Delegate bounded corpus-analysis and metadata tasks where useful. Ask me before any lookup involving an ambiguous or apparently private work.',
@@ -274,6 +322,14 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const req = Value.Decode(CorpusDeleteRequestSchema, raw);
     deps.corpus.deleteGrant(deps.requireProject(), req.grantId);
     return { deleted: true };
+  });
+
+  // -------------------------------------------------------------------- jobs
+
+  ipcMain.handle(JobChannels.cancel, (_event, raw: unknown) => {
+    const req = Value.Decode(JobCancelRequestSchema, raw);
+    jobControllers.get(req.jobId)?.abort();
+    return { cancelled: true };
   });
 
   // -------------------------------------------------------------------- doc
@@ -379,7 +435,9 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       ? process.env.TEXERIS_PDF_SMOKE_IMPORT
       : undefined;
     if (smokeImport) {
-      return await importDocumentFile(deps.requireProject(), smokeImport);
+      return await runJob(event.sender, 'import', (signal) =>
+        importDocumentFile(deps.requireProject(), smokeImport, signal),
+      );
     }
     const win = BrowserWindow.fromWebContents(event.sender);
     const result = await dialog.showOpenDialog(win!, {
@@ -397,7 +455,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     if (result.canceled || result.filePaths.length === 0) {
       return null;
     }
-    return await importDocumentFile(deps.requireProject(), result.filePaths[0]);
+    const sourcePath = result.filePaths[0];
+    return await runJob(event.sender, 'import', (signal) =>
+      importDocumentFile(deps.requireProject(), sourcePath, signal),
+    );
   });
 
   ipcMain.handle(DocChannels.exportDialog, async (event, raw: unknown) => {
@@ -427,7 +488,9 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       if (result.canceled || !result.filePath) return null;
       outputPath = result.filePath;
     }
-    return await exportDocumentFile(project, req.documentId, outputPath, printHtmlToPdf);
+    return await runJob(event.sender, 'export', (signal) =>
+      exportDocumentFile(project, req.documentId, outputPath!, printHtmlToPdf, signal),
+    );
   });
 
   ipcMain.handle(DocChannels.setMain, (_event, raw: unknown) => {

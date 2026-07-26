@@ -181,6 +181,27 @@ describe('CorpusService', () => {
     expect(grant.warnings.join(' ')).toMatch(/skipped .*large\.md/);
   });
 
+  it('reports per-file progress and stops between files when cancelled', async () => {
+    const dir = path.join(root, 'progress');
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, 'a.md'), 'alpha');
+    fs.writeFileSync(path.join(dir, 'b.md'), 'bravo');
+    const controller = new AbortController();
+    const seen: Array<{ done: number; total: number; file: string }> = [];
+    await expect(
+      service.createGrant(project, conversationId, [dir], 'folder', {
+        signal: controller.signal,
+        onProgress: (progress) => {
+          seen.push(progress);
+          controller.abort();
+        },
+      }),
+    ).rejects.toThrow('cancelled');
+    expect(seen).toEqual([{ done: 1, total: 2, file: 'a.md' }]);
+    expect(rowCount('corpus_grants')).toBe(0);
+    expect(rowCount('corpus_sources')).toBe(0);
+  });
+
   it('deleteGrant removes rows, releases the conversation, and GCs unshared blobs', async () => {
     const shared = path.join(root, 'shared.md');
     const onlyB = path.join(root, 'only-b.md');

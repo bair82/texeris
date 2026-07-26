@@ -626,6 +626,14 @@ body.col-resizing {
 .workspace-status-message.status-warning { color: var(--amber); }
 .workspace-status-message.status-error { color: var(--red); }
 
+.workspace-status-message .status-cancel {
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 0 6px;
+  margin-left: 6px;
+  font-size: 11px;
+}
+
 .status-chip {
   font-size: 12px;
   color: var(--text-muted);

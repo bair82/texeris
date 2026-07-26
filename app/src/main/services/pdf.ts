@@ -1,4 +1,5 @@
 import { extractText, getDocumentProxy } from 'unpdf';
+import { jobRunner } from '../jobs/current';
 
 export const PDF_EXTRACTOR_VERSION = 'unpdf-1.6.2';
 export const MAX_PDF_BYTES = 100 * 1024 * 1024;
@@ -60,8 +61,30 @@ function friendlyPdfError(error: unknown): PdfExtractionError {
   return new PdfExtractionError(`The PDF could not be read: ${message}`, 'invalid');
 }
 
-/** Extract selectable text without native tools, rendering, OCR, or network access. */
-export async function extractPdfText(bytes: Uint8Array): Promise<PdfTextExtraction> {
+const PDF_ERROR_CODES = new Set(['invalid', 'password', 'too-large', 'too-many-pages', 'no-text']);
+
+/**
+ * Extract selectable text without native tools, rendering, OCR, or network
+ * access. Runs on a job worker (unpdf is CPU-bound); typed error codes
+ * survive the serialization boundary.
+ */
+export async function extractPdfText(bytes: Uint8Array, signal?: AbortSignal): Promise<PdfTextExtraction> {
+  if (bytes.byteLength > MAX_PDF_BYTES) {
+    throw new PdfExtractionError('PDF files must be 100 MB or smaller.', 'too-large');
+  }
+  try {
+    return await jobRunner().run<PdfTextExtraction>('pdf-extract', { bytes: Buffer.from(bytes) }, { signal });
+  } catch (error) {
+    const code = (error as { code?: unknown })?.code;
+    if (error instanceof Error && typeof code === 'string' && PDF_ERROR_CODES.has(code)) {
+      throw new PdfExtractionError(error.message, code as PdfExtractionError['code']);
+    }
+    throw error;
+  }
+}
+
+/** The in-process extractor, executed inside the job worker (jobs/tasks.ts). */
+export async function extractPdfTextInProcess(bytes: Uint8Array): Promise<PdfTextExtraction> {
   if (bytes.byteLength > MAX_PDF_BYTES) {
     throw new PdfExtractionError('PDF files must be 100 MB or smaller.', 'too-large');
   }
