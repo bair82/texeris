@@ -63,6 +63,12 @@ function execFileAsync(
       },
     );
     if (options.input !== undefined) {
+      // If the child exits without reading stdin (e.g. an immediate argument
+      // error), the write raises EPIPE on the stream — swallow it; the real
+      // failure surfaces through the exit callback.
+      child.stdin!.on('error', (error: NodeJS.ErrnoException) => {
+        if (error.code !== 'EPIPE') throw error;
+      });
       child.stdin!.end(options.input);
     }
   });
