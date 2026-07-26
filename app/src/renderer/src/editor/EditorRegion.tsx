@@ -65,6 +65,8 @@ interface EditorNotice {
 export interface WorkspaceStatus {
   message: string;
   tone: 'progress' | 'success' | 'warning' | 'error';
+  /** Offered on progress notices for cancellable background jobs. */
+  onCancel?: () => void;
 }
 
 interface EditorRegionProps {
@@ -466,6 +468,15 @@ export default function EditorRegion({
             title={workspaceStatus.message}
           >
             <span>{workspaceStatus.message}</span>
+            {workspaceStatus.tone === 'progress' && workspaceStatus.onCancel && (
+              <button
+                type="button"
+                className="status-cancel"
+                onClick={workspaceStatus.onCancel}
+              >
+                Cancel
+              </button>
+            )}
             {workspaceStatus.tone !== 'progress' && (
               <button
                 type="button"

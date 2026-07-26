@@ -22,6 +22,8 @@ import type { Models } from '@earendil-works/pi-ai';
 import { CorpusService } from './services/corpus';
 import { WritingProfileService } from './services/profile';
 import { attachContextMenu, registerContextMenuHandlers } from './contextMenu';
+import { bindJobRunner } from './jobs/current';
+import { JobRunner } from './jobs/runner';
 
 /** Pi requires Node >= 22.19; assert the Electron-bundled Node at startup. */
 const MIN_NODE_VERSION = [22, 19, 0] as const;
@@ -159,6 +161,8 @@ app.whenReady().then(() => {
   }
   const credentials = new CredentialsService(safeStorage);
   const manager = new ProjectManager();
+  // Heavy conversions/extractions run on worker threads (jobs/runner.ts).
+  bindJobRunner(new JobRunner());
 
   protocol.handle('texeris-asset', (request) => {
     const project = manager.current;

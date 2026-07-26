@@ -18,6 +18,7 @@ import { UiChannels } from '../shared/ui-types';
 import { ProjectChannels, type ProjectInfo } from '../shared/project-types';
 import { HistoryChannels } from '../shared/doc-types';
 import { CorpusChannels, ProfileChannels } from '../shared/profile-types';
+import { JobChannels, type JobEvent } from '../shared/job-types';
 import { ContextMenuChannels, type ContextActionEvent, type ContextDescribeRequest } from '../shared/context-menu-types';
 
 const api: TexerisApi = {
@@ -78,6 +79,18 @@ const api: TexerisApi = {
   },
   profile: {
     begin: (request) => ipcRenderer.invoke(ProfileChannels.begin, request),
+  },
+  jobs: {
+    cancel: (jobId) => ipcRenderer.invoke(JobChannels.cancel, { jobId }),
+    onEvent: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
+        callback(payload as JobEvent);
+      };
+      ipcRenderer.on(JobChannels.event, listener);
+      return () => {
+        ipcRenderer.removeListener(JobChannels.event, listener);
+      };
+    },
   },
   corpus: {
     list: () => ipcRenderer.invoke(CorpusChannels.list),

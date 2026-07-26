@@ -39,13 +39,20 @@ when product or architecture decisions change, update them.
 - DB access uses Node's built-in `node:sqlite` (`DatabaseSync`) — no native
   modules. Main-process services are Electron-free and unit-tested with
   vitest against tmp directories; Electron wiring happens at the IPC layer.
+- Heavy work (Pandoc, unpdf extraction, PDF print-HTML prep) runs on
+  `node:worker_threads` via `app/src/main/jobs/` — pure `tasks.ts`
+  (vitest-tested in-process), a thin `worker.ts` entry, and `JobRunner`
+  (AbortSignal cancellation). Progress/cancel ride `texeris:job-event` /
+  `texeris:job-cancel`; `printToPDF` stays in main. Never reintroduce
+  `execFileSync` on a user-triggerable path. Build gotchas: the main build
+  is multi-input (index + jobs/worker) with CJS output pinned explicitly,
+  and the `external: ['electron']` list must stay — without it the electron
+  npm installer stub gets bundled and the app crashes at startup.
 - Editor: Tiptap (rendered) and CodeMirror 6 (raw) are two sessions over ONE
   canonical text (`app/src/renderer/src/editor/session.ts`) — never separate
   editable copies. Both commit grouped text splices over IPC; main validates
   and applies them. The Markdown⇄PM round trip (`editor/lib/markdown-in/out`)
-  is test-guarded and must stay byte-exact on the golden samples. CI is a G0
-  requirement in the active plan; do not claim remote enforcement until it
-  lands.
+  is test-guarded and must stay byte-exact on the golden samples.
 - CM styling belongs in CM theme extensions, never stylesheet rules keyed on
   editor classes: CM rewrites the editor's `class` attribute on updates
   (`updateAttrs`), so imperatively-added classes get wiped. `cm-raw` itself

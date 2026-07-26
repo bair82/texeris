@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { DocumentInfo } from '../../../shared/domain-types';
+import type { JobEvent } from '../../../shared/job-types';
 import type { UiState, UiStateDoc } from '../../../shared/ui-types';
 import ChatPanel from '../ChatPanel';
 import PatchReview from '../PatchReview';
@@ -27,6 +28,10 @@ const SIDE_MAX = 660;
 const SAVE_DEBOUNCE_MS = 400;
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+
+/** Cancelled job invokes reject with a 'cancelled' error (Electron prefixes it). */
+const isJobCancellation = (error: unknown): boolean =>
+  /\bcancelled\b/.test(error instanceof Error ? error.message : String(error));
 
 /**
  * Set before a project-switch reload (App.tsx): the beforeunload flush must
@@ -66,6 +71,8 @@ export default function AppShell({
   const uiRef = useRef<UiState>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exportingRef = useRef(false);
+  /** The import/export/corpus job currently backing the progress notice. */
+  const activeJobRef = useRef<{ op: JobEvent['op']; jobId: string | null } | null>(null);
 
   // Boot: load layout state + document list, then pick the document to open
   // (the one from last session when it still exists, else the first).
@@ -107,6 +114,40 @@ export default function AppShell({
     );
     return () => window.clearTimeout(timer);
   }, [operationNotice]);
+
+  const cancelActiveJob = useCallback(() => {
+    const jobId = activeJobRef.current?.jobId;
+    if (jobId) void window.texeris.jobs.cancel(jobId);
+  }, []);
+
+  const jobProgressNotice = useCallback(
+    (op: JobEvent['op'], progress?: { done: number; total: number }): WorkspaceStatus => {
+      const base = op === 'import'
+        ? 'Importing document…'
+        : op === 'export'
+          ? 'Exporting document…'
+          : 'Analyzing writing corpus…';
+      return {
+        message: progress ? `${base} (${progress.done}/${progress.total} files)` : base,
+        tone: 'progress',
+        onCancel: cancelActiveJob,
+      };
+    },
+    [cancelActiveJob],
+  );
+
+  // While a job invoke is in flight, mirror its progress into the notice and
+  // remember the jobId so the Cancel button can abort it.
+  useEffect(() => {
+    return window.texeris.jobs.onEvent((event) => {
+      const active = activeJobRef.current;
+      if (!active || event.op !== active.op) return;
+      if (event.status === 'started') active.jobId = event.jobId;
+      if (event.status === 'progress') {
+        setOperationNotice(jobProgressNotice(active.op, event.progress));
+      }
+    });
+  }, [jobProgressNotice]);
 
   const persist = useCallback((immediate: boolean) => {
     if (saveTimer.current) {
@@ -229,8 +270,9 @@ export default function AppShell({
   );
 
   const onImportDoc = useCallback(async () => {
+    activeJobRef.current = { op: 'import', jobId: null };
     try {
-      setOperationNotice({ message: 'Importing document…', tone: 'progress' });
+      setOperationNotice(jobProgressNotice('import'));
       const imported = await window.texeris.doc.importDialog();
       if (imported) {
         setDocs(await window.texeris.doc.list());
@@ -246,19 +288,24 @@ export default function AppShell({
       }
     } catch (error) {
       setOperationNotice({
-        message: `Import failed: ${error instanceof Error ? error.message : String(error)}`,
-        tone: 'error',
+        message: isJobCancellation(error)
+          ? 'Import cancelled.'
+          : `Import failed: ${error instanceof Error ? error.message : String(error)}`,
+        tone: isJobCancellation(error) ? 'warning' : 'error',
       });
+    } finally {
+      activeJobRef.current = null;
     }
-  }, [openDoc]);
+  }, [openDoc, jobProgressNotice]);
 
   const onExportDoc = useCallback(async (documentId?: string) => {
     const targetId = documentId ?? openDocId;
     if (!targetId || exportingRef.current) return;
     exportingRef.current = true;
+    activeJobRef.current = { op: 'export', jobId: null };
     try {
       if (targetId === openDocId) getEditorCommands()?.flush();
-      setOperationNotice({ message: 'Exporting document…', tone: 'progress' });
+      setOperationNotice(jobProgressNotice('export'));
       const exported = await window.texeris.doc.exportDialog(targetId);
       if (exported) {
         setOperationNotice({
@@ -272,13 +319,16 @@ export default function AppShell({
       }
     } catch (error) {
       setOperationNotice({
-        message: `Export failed: ${error instanceof Error ? error.message : String(error)}`,
-        tone: 'error',
+        message: isJobCancellation(error)
+          ? 'Export cancelled.'
+          : `Export failed: ${error instanceof Error ? error.message : String(error)}`,
+        tone: isJobCancellation(error) ? 'warning' : 'error',
       });
     } finally {
       exportingRef.current = false;
+      activeJobRef.current = null;
     }
-  }, [openDocId]);
+  }, [openDocId, jobProgressNotice]);
 
   const onSetMainDoc = useCallback(async (documentId: string) => {
     const info = await window.texeris.doc.setMain(documentId);
@@ -543,9 +593,14 @@ export default function AppShell({
   );
 
   async function beginProfile(source: 'files' | 'folder'): Promise<void> {
+    activeJobRef.current = { op: 'corpus-grant', jobId: null };
     try {
+      setOperationNotice(jobProgressNotice('corpus-grant'));
       const result = await window.texeris.profile.begin({ source });
-      if (!result) return;
+      if (!result) {
+        setOperationNotice(null);
+        return;
+      }
       setProfileSourceOpen(false);
       patchUi({ focusMode: false, sideVisible: true, openConversationId: result.conversationId }, true);
       getChatCommands()?.openConversation(result.conversationId);
@@ -554,9 +609,18 @@ export default function AppShell({
           message: `Corpus grant created with warnings. ${result.warnings.join(' ')}`,
           tone: 'warning',
         });
+      } else {
+        setOperationNotice(null);
       }
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : String(error));
+      if (isJobCancellation(error)) {
+        setOperationNotice({ message: 'Corpus grant cancelled.', tone: 'warning' });
+      } else {
+        setOperationNotice(null);
+        window.alert(error instanceof Error ? error.message : String(error));
+      }
+    } finally {
+      activeJobRef.current = null;
     }
   }
 }

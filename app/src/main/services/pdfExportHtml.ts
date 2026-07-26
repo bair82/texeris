@@ -1,13 +1,7 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { parseFragment } from 'parse5';
-import { referencedAssets } from './assets';
-import { writePandocHtml } from './pandoc';
+import { jobRunner } from '../jobs/current';
+import { requirePandoc } from './pandoc';
 
-const IMAGE_MIME: Record<string, string> = {
-  '.avif': 'image/avif', '.gif': 'image/gif', '.jpeg': 'image/jpeg',
-  '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp',
-};
 const ALLOWED_TAGS = new Set([
   'a', 'blockquote', 'br', 'code', 'dd', 'div', 'dl', 'dt', 'em', 'figcaption',
   'figure', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'img', 'li', 'ol', 'p',
@@ -88,26 +82,6 @@ export function sanitizePrintHtml(fragment: string): string {
   return (parsed.childNodes ?? []).map(renderSanitized).join('');
 }
 
-export function inlineProjectImages(markdown: string, root: string): { markdown: string; warnings: string[] } {
-  let output = markdown;
-  const warnings: string[] = [];
-  for (const relative of referencedAssets(markdown)) {
-    const target = path.resolve(root, ...relative.split('/'));
-    const rootPrefix = `${path.resolve(root)}${path.sep}`;
-    const mime = IMAGE_MIME[path.extname(relative).toLowerCase()];
-    if (!target.startsWith(rootPrefix) || !mime || !fs.existsSync(target) || !fs.statSync(target).isFile()) {
-      warnings.push(`Image ${relative} was omitted because its project asset is unavailable.`);
-      continue;
-    }
-    const dataUri = `data:${mime};base64,${fs.readFileSync(target).toString('base64')}`;
-    output = output.replaceAll(relative, dataUri);
-  }
-  if (/!\[[^\]]*\]\(https?:\/\/|<img\b[^>]*\bsrc=["']https?:\/\//i.test(output)) {
-    warnings.push('Remote images were omitted from the PDF; only project-owned image assets are embedded.');
-  }
-  return { markdown: output, warnings };
-}
-
 const PRINT_CSS = `
 @page { size: A4 portrait; margin: 25mm 22mm; }
 html { color: #111; background: #fff; }
@@ -127,20 +101,34 @@ a { color: inherit; text-decoration: underline; text-decoration-color: #777; }
 .footnotes { font-size: 9pt; } .omitted-image { color: #555; font-style: italic; }
 `;
 
-export function buildPdfPrintHtml(
+export function renderPrintDocument(title: string, body: string): string {
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><title>${escapeHtml(title)}</title><style>${PRINT_CSS}</style></head><body>${body}</body></html>`;
+}
+
+/**
+ * Self-contained print HTML for the PDF export pipeline: image inlining,
+ * Pandoc conversion, and sanitizing run on a job worker (jobs/tasks.ts);
+ * only the resulting artifact is handed to printToPDF in the main process.
+ */
+export async function buildPdfPrintHtml(
   markdown: string,
   title: string,
   resourceRoot: string,
-): { html: string; warnings: string[] } {
-  const inlined = inlineProjectImages(markdown, resourceRoot);
-  const converted = writePandocHtml(inlined.markdown);
-  if (/<img\b[^>]*\bsrc=["']https?:\/\//i.test(converted.html)
-    && !inlined.warnings.some((warning) => warning.startsWith('Remote images'))) {
-    inlined.warnings.push('Remote images were omitted from the PDF; only project-owned image assets are embedded.');
-  }
-  const body = sanitizePrintHtml(converted.html);
+  options: { signal?: AbortSignal } = {},
+): Promise<{ html: string; warnings: string[] }> {
+  const pandoc = requirePandoc();
+  const result = await jobRunner().run<{ html: string; warnings: string[] }>(
+    'pdf-prepare-html',
+    { pandocPath: pandoc.path, markdown, title, resourceRoot },
+    { signal: options.signal },
+  );
   return {
-    html: `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><title>${escapeHtml(title)}</title><style>${PRINT_CSS}</style></head><body>${body}</body></html>`,
-    warnings: [...inlined.warnings, ...converted.warnings],
+    html: result.html,
+    warnings: [
+      ...result.warnings,
+      ...(pandoc.kind === 'development-path'
+        ? ['Using a development Pandoc installation; packaged builds use the pinned Texeris converter.']
+        : []),
+    ],
   };
 }

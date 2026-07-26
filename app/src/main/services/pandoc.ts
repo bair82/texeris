@@ -1,6 +1,6 @@
-import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { jobRunner } from '../jobs/current';
 
 /** Kept in lockstep with scripts/prepare-pandoc.mjs and the packaged resource. */
 export const PANDOC_VERSION = '3.10';
@@ -16,6 +16,7 @@ export interface MarkdownConversion {
 export interface ConversionOptions {
   mediaDir?: string;
   mediaReferencePrefix?: string;
+  signal?: AbortSignal;
 }
 
 export function formatForPath(filePath: string): InterchangeFormat | null {
@@ -39,7 +40,11 @@ export function formatForPath(filePath: string): InterchangeFormat | null {
 }
 
 /** Convert a user-selected interchange file into Texeris's canonical Markdown. */
-export function convertToMarkdown(file: string, bytes: Buffer, options: ConversionOptions = {}): MarkdownConversion {
+export async function convertToMarkdown(
+  file: string,
+  bytes: Buffer,
+  options: ConversionOptions = {},
+): Promise<MarkdownConversion> {
   const format = formatForPath(file);
   if (!format) throw new Error(`unsupported import format: ${path.extname(file) || 'no extension'}`);
   if (format === 'pdf') throw new Error('PDF imports must use the PDF text extractor');
@@ -48,97 +53,102 @@ export function convertToMarkdown(file: string, bytes: Buffer, options: Conversi
     if (!looksLikePandocMarkdown(markdown)) {
       return { markdown, converter: 'direct-utf8-v1', warnings: [] };
     }
-    return convertWithPandoc(file, [
+    return convertWithPandoc(file, bytes, [
       'Pandoc-specific Markdown was normalized for the rendered editor; inspect complex formatting after import.',
     ], options);
   }
-  return convertWithPandoc(file, [], options);
+  return convertWithPandoc(file, bytes, [], options);
 }
 
 function looksLikePandocMarkdown(markdown: string): boolean {
   return /^\+[:=+\-]{3,}\+|\[[^\]\n]+\]\{\.(?:underline|smallcaps)\}/m.test(markdown);
 }
 
-function convertWithPandoc(file: string, initialWarnings: string[] = [], options: ConversionOptions = {}): MarkdownConversion {
-  const pandoc = resolvePandoc();
-  if (!pandoc) throw new Error('The packaged Pandoc converter is unavailable. Reinstall Texeris or repair the installation.');
-  try {
-    const args = [file, '--to=gfm', '--wrap=none', '--standalone=false', '--sandbox', '--track-changes=accept'];
-    if (options.mediaDir) args.push(`--extract-media=${options.mediaDir}`);
-    let markdown = execFileSync(
-      pandoc.path,
-      args,
-      { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
-    );
-    if (options.mediaDir && options.mediaReferencePrefix) {
-      markdown = markdown.split(options.mediaDir).join(options.mediaReferencePrefix.replaceAll(path.sep, '/'));
-    }
-    return {
-      markdown,
-      converter: `pandoc-${PANDOC_VERSION}-${pandoc.kind}`,
-      warnings: [
-        ...initialWarnings,
-        ...(pandoc.kind === 'development-path'
-          ? ['Using a development Pandoc installation; packaged builds use the pinned Texeris converter.']
-          : []),
-      ],
-    };
-  } catch (error) {
-    throw new Error(`Pandoc import failed: ${errorMessage(error)}`);
+async function convertWithPandoc(
+  file: string,
+  bytes: Buffer,
+  initialWarnings: string[] = [],
+  options: ConversionOptions = {},
+): Promise<MarkdownConversion> {
+  const pandoc = requirePandoc();
+  const result = await jobRunner().run<{ markdown: string }>(
+    'pandoc-convert',
+    {
+      pandocPath: pandoc.path,
+      fileName: file,
+      bytes,
+      options: { mediaDir: options.mediaDir },
+    },
+    { signal: options.signal },
+  );
+  let markdown = result.markdown;
+  if (options.mediaDir && options.mediaReferencePrefix) {
+    markdown = markdown.split(options.mediaDir).join(options.mediaReferencePrefix.replaceAll(path.sep, '/'));
   }
+  return {
+    markdown,
+    converter: `pandoc-${PANDOC_VERSION}-${pandoc.kind}`,
+    warnings: [
+      ...initialWarnings,
+      ...(pandoc.kind === 'development-path'
+        ? ['Using a development Pandoc installation; packaged builds use the pinned Texeris converter.']
+        : []),
+    ],
+  };
 }
 
 /** Write canonical Markdown as a DOCX, ODT, or RTF derivative. */
-export function writePandocExport(
+export async function writePandocExport(
   markdown: string,
   outputPath: string,
   format: Exclude<InterchangeFormat, 'markdown' | 'pdf'>,
   resourceRoot?: string,
-): string[] {
-  const pandoc = resolvePandoc();
-  if (!pandoc) throw new Error('The packaged Pandoc converter is unavailable. Reinstall Texeris or repair the installation.');
-  try {
-    execFileSync(
-      pandoc.path,
-      [
-        '--from=markdown',
-        `--to=${format}`,
-        '--output', outputPath,
-        '--sandbox',
-        ...(resourceRoot ? [`--resource-path=${resourceRoot}`] : []),
-      ],
-      { input: markdown, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, cwd: resourceRoot },
-    );
-  } catch (error) {
-    throw new Error(`Pandoc export failed: ${errorMessage(error)}`);
-  }
+  signal?: AbortSignal,
+): Promise<string[]> {
+  const pandoc = requirePandoc();
+  await jobRunner().run(
+    'pandoc-export',
+    { pandocPath: pandoc.path, markdown, outputPath, format, resourceRoot },
+    { signal },
+  );
   return pandoc.kind === 'development-path'
     ? ['Using a development Pandoc installation; packaged builds use the pinned Texeris converter.']
     : [];
 }
 
 /** Convert canonical Markdown to an HTML fragment without granting file access. */
-export function writePandocHtml(markdown: string): { html: string; warnings: string[] } {
-  const pandoc = resolvePandoc();
-  if (!pandoc) throw new Error('The packaged Pandoc converter is unavailable. Reinstall Texeris or repair the installation.');
-  try {
-    const html = execFileSync(
-      pandoc.path,
-      ['--from=markdown', '--to=html5', '--wrap=none', '--sandbox'],
-      { input: markdown, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
-    );
-    return {
-      html,
-      warnings: pandoc.kind === 'development-path'
-        ? ['Using a development Pandoc installation; packaged builds use the pinned Texeris converter.']
-        : [],
-    };
-  } catch (error) {
-    throw new Error(`Pandoc PDF preparation failed: ${errorMessage(error)}`);
-  }
+export async function writePandocHtml(
+  markdown: string,
+  signal?: AbortSignal,
+): Promise<{ html: string; warnings: string[] }> {
+  const pandoc = requirePandoc();
+  const { html } = await jobRunner().run<{ html: string }>(
+    'pandoc-html',
+    { pandocPath: pandoc.path, markdown },
+    { signal },
+  );
+  return {
+    html,
+    warnings: pandoc.kind === 'development-path'
+      ? ['Using a development Pandoc installation; packaged builds use the pinned Texeris converter.']
+      : [],
+  };
 }
 
-function resolvePandoc(): { path: string; kind: 'bundled' | 'development-path' } | null {
+export interface PandocResolution {
+  path: string;
+  kind: 'bundled' | 'development-path';
+}
+
+export function requirePandoc(): PandocResolution {
+  const pandoc = resolvePandoc();
+  if (!pandoc) {
+    throw new Error('The packaged Pandoc converter is unavailable. Reinstall Texeris or repair the installation.');
+  }
+  return pandoc;
+}
+
+export function resolvePandoc(): PandocResolution | null {
   const override = process.env.TEXERIS_PANDOC_PATH;
   if (override) return { path: override, kind: 'development-path' };
   const resourceRoot = process.resourcesPath;
@@ -156,8 +166,4 @@ function pandocPlatformDirectory(): string {
 
 function isPackagedRuntime(): boolean {
   return Boolean(process.resourcesPath && fs.existsSync(path.join(process.resourcesPath, 'app.asar')));
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

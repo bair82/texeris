@@ -6,6 +6,7 @@ import type { ProjectContext } from './project';
 import { atomicWriteBytes, atomicWriteText, hashText } from './document';
 import { convertToMarkdown, PANDOC_VERSION } from './pandoc';
 import { extractPdfText, pdfCorpusMarkdown, PDF_EXTRACTOR_VERSION } from './pdf';
+import { isCancellation, throwIfCancelled } from '../jobs/runner';
 
 const SUPPORTED = new Set(['.md', '.markdown', '.mdown', '.txt', '.html', '.htm', '.docx', '.odt', '.rtf', '.pdf']);
 
@@ -31,6 +32,18 @@ export interface CorpusOptions {
   storeDir?: (project: ProjectContext) => string;
   /** Test override for the selection limits. */
   limits?: Partial<CorpusLimits>;
+}
+
+/** Per-file grant progress, reported after each source finishes converting. */
+export interface CorpusGrantProgress {
+  done: number;
+  total: number;
+  file: string;
+}
+
+export interface CorpusGrantJobOptions {
+  onProgress?: (progress: CorpusGrantProgress) => void;
+  signal?: AbortSignal;
 }
 
 interface Converted {
@@ -65,6 +78,7 @@ export class CorpusService {
     conversationId: string,
     selectedPaths: readonly string[],
     sourceKind: 'files' | 'folder',
+    jobOptions: CorpusGrantJobOptions = {},
   ): Promise<{ grantId: string; sources: CorpusSourceView[]; warnings: string[] }> {
     const { files, warnings } = this.walk(selectedPaths);
     if (files.length === 0) throw new Error('no supported writing files were selected');
@@ -88,6 +102,7 @@ export class CorpusService {
     }
     const pending: PendingRow[] = [];
     for (const file of files) {
+      throwIfCancelled(jobOptions.signal);
       const bytes = fs.readFileSync(file.path);
       const sourceHash = createHash('sha256').update(bytes).digest('hex');
       const snapshotPath = path.join(snapshotsDir, `${sourceHash}${path.extname(file.path).toLowerCase()}`);
@@ -95,7 +110,8 @@ export class CorpusService {
       if (!fs.existsSync(snapshotPath)) {
         atomicWriteBytes(snapshotPath, bytes);
       }
-      const converted = await convert(file.path, bytes);
+      const converted = await convert(file.path, bytes, jobOptions.signal);
+      throwIfCancelled(jobOptions.signal);
       const derivativeDir = path.join(derivativesDir, sourceHash);
       fs.mkdirSync(derivativeDir, { recursive: true });
       const markdownPath = path.join(derivativeDir, 'document.md');
@@ -111,6 +127,7 @@ export class CorpusService {
         detected: detectDate(converted.markdown, path.basename(file.path)),
         conversionWarnings: converted.warnings,
       });
+      jobOptions.onProgress?.({ done: pending.length, total: files.length, file: path.basename(file.path) });
     }
 
     const grantId = randomUUID();
@@ -386,20 +403,21 @@ export class CorpusService {
   }
 }
 
-async function convert(file: string, bytes: Buffer): Promise<Converted> {
+async function convert(file: string, bytes: Buffer, signal?: AbortSignal): Promise<Converted> {
   const ext = path.extname(file).toLowerCase();
   if (ext === '.md' || ext === '.markdown' || ext === '.mdown' || ext === '.txt') {
     return { markdown: bytes.toString('utf8'), converter: 'direct-utf8-v1', warnings: [] };
   }
   if (ext === '.pdf') {
     try {
-      const extracted = await extractPdfText(bytes);
+      const extracted = await extractPdfText(bytes, signal);
       return {
         markdown: pdfCorpusMarkdown(extracted),
         converter: extracted.converter,
         warnings: extracted.warnings,
       };
     } catch (error) {
+      if (isCancellation(error)) throw error;
       return {
         markdown: '',
         converter: `${PDF_EXTRACTOR_VERSION}-failed`,
@@ -408,8 +426,9 @@ async function convert(file: string, bytes: Buffer): Promise<Converted> {
     }
   }
   try {
-    return convertToMarkdown(file, bytes);
+    return await convertToMarkdown(file, bytes, { signal });
   } catch (error) {
+    if (isCancellation(error)) throw error;
     return {
       markdown: '',
       converter: `pandoc-${PANDOC_VERSION}-failed`,
