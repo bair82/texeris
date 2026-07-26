@@ -219,7 +219,7 @@ app.whenReady().then(() => {
 
   /** Bind a project context: (re)build per-project services and watchers. */
   const adoptProject = (ctx: ProjectContext): void => {
-    conversations = new ConversationService(ctx.db);
+    conversations = new ConversationService(ctx.db, () => corpus.gc(ctx));
     patches = new PatchService(ctx.db, ctx.revisions, (patchId, title) => {
       broadcast(PatchChannels.event, { type: 'patch-proposed', patchId, title });
     });

@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { SettingsView } from '../../shared/settings-types';
+import type { CorpusGrantView } from '../../shared/profile-types';
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 /**
  * Settings panel: model modes (from config.json) and per-provider API keys.
@@ -8,11 +15,15 @@ import type { SettingsView } from '../../shared/settings-types';
  */
 export default function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [settings, setSettings] = useState<SettingsView | null>(null);
+  const [grants, setGrants] = useState<CorpusGrantView[]>([]);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [draftKeys, setDraftKeys] = useState<Record<string, string>>({});
   const [savedNote, setSavedNote] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setSettings(await window.texeris.settings.get());
+    // No project open (picker) → no corpus to list.
+    setGrants(await window.texeris.corpus.list().catch(() => []));
   }, []);
 
   useEffect(() => {
@@ -196,6 +207,49 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
               <option value="revise-once">Ask agent to revise once</option>
             </select>
           </label>
+        </div>
+
+        <h3>Corpus</h3>
+        <div className="settings-corpus">
+          <p className="settings-hint">
+            Corpus sources you grant are copied and stored as plaintext on this
+            machine inside each project's .texeris folder until you delete them.
+          </p>
+          {grants.length === 0 ? (
+            <p className="settings-hint">No corpus grants in this project.</p>
+          ) : (
+            <ul className="settings-corpus-list">
+              {grants.map((grant) => (
+                <li key={grant.grantId} className="settings-corpus-item">
+                  <span className="settings-corpus-summary">
+                    {grant.conversationTitle} — {grant.sourceCount}{' '}
+                    {grant.sourceCount === 1 ? 'source' : 'sources'},{' '}
+                    {formatBytes(grant.totalBytes)},{' '}
+                    {new Date(grant.createdAt).toLocaleDateString()}
+                  </span>
+                  {confirmDeleteId === grant.grantId ? (
+                    <span className="conv-confirm">
+                      <span className="conv-confirm-text">Delete?</span>
+                      <button
+                        className="conv-confirm-yes"
+                        onClick={() => {
+                          setConfirmDeleteId(null);
+                          void window.texeris.corpus.deleteGrant(grant.grantId).then(refresh);
+                        }}
+                      >
+                        Delete
+                      </button>
+                      <button className="conv-confirm-no" onClick={() => setConfirmDeleteId(null)}>
+                        Cancel
+                      </button>
+                    </span>
+                  ) : (
+                    <button onClick={() => setConfirmDeleteId(grant.grantId)}>Delete</button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <h3>API keys</h3>

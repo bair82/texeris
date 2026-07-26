@@ -17,7 +17,7 @@ import type { AppearanceConfig } from '../shared/settings-types';
 import { UiChannels } from '../shared/ui-types';
 import { ProjectChannels, type ProjectInfo } from '../shared/project-types';
 import { HistoryChannels } from '../shared/doc-types';
-import { ProfileChannels } from '../shared/profile-types';
+import { CorpusChannels, ProfileChannels } from '../shared/profile-types';
 import { ContextMenuChannels, type ContextActionEvent, type ContextDescribeRequest } from '../shared/context-menu-types';
 
 const api: TexerisApi = {
@@ -78,6 +78,10 @@ const api: TexerisApi = {
   },
   profile: {
     begin: (request) => ipcRenderer.invoke(ProfileChannels.begin, request),
+  },
+  corpus: {
+    list: () => ipcRenderer.invoke(CorpusChannels.list),
+    deleteGrant: (grantId) => ipcRenderer.invoke(CorpusChannels.delete, { grantId }),
   },
   doc: {
     list: () => ipcRenderer.invoke(DocChannels.list),

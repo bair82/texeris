@@ -312,7 +312,7 @@ export function createAgentTools(
     const readCorpus: AgentTool<typeof ReadCorpusParams> = {
       name: 'read_corpus_source', label: 'Read corpus source',
       description: 'Read a bounded range from one converted Markdown corpus source.', parameters: ReadCorpusParams,
-      async execute(_id, params) { return jsonResult(corpus.read(project, grantId, params.sourceId, params.offset ?? 0, params.limit ?? 20000)); },
+      async execute(_id, params) { return jsonResult(await corpus.read(project, grantId, params.sourceId, params.offset ?? 0, params.limit ?? 20000)); },
     };
     const MetadataParams = Type.Object({ title: Type.String(), author: Type.Optional(Type.String()), publicEvidence: Type.String() });
     const metadata: AgentTool<typeof MetadataParams> = {

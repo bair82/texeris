@@ -15,10 +15,15 @@ const TMP_MARK = '.texeris-tmp-';
 let tmpCounter = 0;
 
 export function atomicWriteText(filePath: string, text: string): void {
+  atomicWriteBytes(filePath, Buffer.from(text, 'utf8'));
+}
+
+/** Binary counterpart of atomicWriteText (e.g. corpus source snapshots). */
+export function atomicWriteBytes(filePath: string, bytes: Buffer): void {
   const tmpPath = `${filePath}${TMP_MARK}${process.pid}-${tmpCounter++}`;
   const fd = fs.openSync(tmpPath, 'w');
   try {
-    fs.writeFileSync(fd, text, 'utf8');
+    fs.writeFileSync(fd, bytes);
     fs.fsyncSync(fd);
   } finally {
     fs.closeSync(fd);
