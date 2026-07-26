@@ -60,7 +60,14 @@ function mapRun(row: RunRow): AgentRunRecord {
  * manifest per run (spec §13.2 signal collection).
  */
 export class ConversationService {
-  constructor(private readonly db: DatabaseSync) {}
+  /**
+   * afterDelete runs after a conversation delete commits — used to GC
+   * unreferenced corpus blobs so conversation deletion doesn't orphan them.
+   */
+  constructor(
+    private readonly db: DatabaseSync,
+    private readonly afterDelete?: () => void,
+  ) {}
 
   /** The active conversation = the most recent one (one per project at a time). */
   getOrCreateConversation(): string {
@@ -143,6 +150,7 @@ export class ConversationService {
       this.db.exec('ROLLBACK');
       throw err;
     }
+    this.afterDelete?.();
   }
 
   /** Append messages verbatim; returns the first assigned seq. */

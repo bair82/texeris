@@ -76,7 +76,7 @@ import {
 } from './services/documents';
 import { addImageAsset } from './services/assets';
 import { createDocument, ensureDocument } from './services/project';
-import { ProfileBeginRequestSchema, ProfileChannels } from '../shared/profile-types';
+import { CorpusChannels, CorpusDeleteRequestSchema, ProfileBeginRequestSchema, ProfileChannels } from '../shared/profile-types';
 import type { CorpusService } from './services/corpus';
 import type { WritingProfileService } from './services/profile';
 import { printHtmlToPdf } from './pdfExport';
@@ -263,7 +263,17 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         if (!event.sender.isDestroyed()) event.sender.send(ChatChannels.event, agentEvent);
       }
     })();
-    return { conversationId, runId, sourceCount: grant.sources.length };
+    return { conversationId, runId, sourceCount: grant.sources.length, warnings: grant.warnings };
+  });
+
+  // ------------------------------------------------------------------ corpus
+
+  ipcMain.handle(CorpusChannels.list, () => deps.corpus.listGrants(deps.requireProject()));
+
+  ipcMain.handle(CorpusChannels.delete, (_event, raw: unknown) => {
+    const req = Value.Decode(CorpusDeleteRequestSchema, raw);
+    deps.corpus.deleteGrant(deps.requireProject(), req.grantId);
+    return { deleted: true };
   });
 
   // -------------------------------------------------------------------- doc

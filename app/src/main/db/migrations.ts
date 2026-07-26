@@ -189,4 +189,14 @@ export const migrations: ReadonlyArray<(db: DatabaseSync) => void> = [
       );
     `);
   },
+  // 0004: corpus ownership — grants snapshot source bytes into per-project
+  // storage at grant time (snapshot_path; NULL = legacy row that still reads
+  // the original file), plus indexes for grant/conversation lookups.
+  (db) => {
+    db.exec(`
+      ALTER TABLE corpus_sources ADD COLUMN snapshot_path TEXT;
+      CREATE INDEX IF NOT EXISTS idx_corpus_sources_grant ON corpus_sources(grant_id);
+      CREATE INDEX IF NOT EXISTS idx_corpus_grants_conversation ON corpus_grants(conversation_id);
+    `);
+  },
 ];

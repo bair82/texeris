@@ -26,7 +26,7 @@ import type { AppearanceConfig, SettingsView } from './settings-types';
 import type { UiState } from './ui-types';
 import type { CheckpointInfo, DocumentInfo, RevisionInfo } from './domain-types';
 import type { ProjectInfo } from './project-types';
-import type { ProfileBeginRequest } from './profile-types';
+import type { CorpusGrantView, ProfileBeginRequest } from './profile-types';
 import type { PatchStyleMode } from './settings-types';
 import type { ContextActionEvent, ContextDescribeRequest, ContextDescriptor } from './context-menu-types';
 
@@ -80,7 +80,11 @@ export interface TexerisApi {
     onEvent(callback: (event: NormalizedAgentEvent) => void): () => void;
   };
   profile: {
-    begin(request: ProfileBeginRequest): Promise<{ conversationId: string; runId: string; sourceCount: number } | null>;
+    begin(request: ProfileBeginRequest): Promise<{ conversationId: string; runId: string; sourceCount: number; warnings: string[] } | null>;
+  };
+  corpus: {
+    list(): Promise<CorpusGrantView[]>;
+    deleteGrant(grantId: string): Promise<{ deleted: boolean }>;
   };
   doc: {
     list(): Promise<DocumentInfo[]>;

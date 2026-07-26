@@ -549,6 +549,12 @@ export default function AppShell({
       setProfileSourceOpen(false);
       patchUi({ focusMode: false, sideVisible: true, openConversationId: result.conversationId }, true);
       getChatCommands()?.openConversation(result.conversationId);
+      if (result.warnings.length) {
+        setOperationNotice({
+          message: `Corpus grant created with warnings. ${result.warnings.join(' ')}`,
+          tone: 'warning',
+        });
+      }
     } catch (error) {
       window.alert(error instanceof Error ? error.message : String(error));
     }

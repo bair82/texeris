@@ -46,3 +46,23 @@ export const ProfileChannels = {
   begin: 'texeris:profile-begin',
   active: 'texeris:profile-active',
 } as const;
+
+/** Per-grant summary for the settings corpus section. */
+export interface CorpusGrantView {
+  grantId: string;
+  conversationId: string;
+  conversationTitle: string;
+  createdAt: string;
+  sourceCount: number;
+  totalBytes: number;
+}
+
+export const CorpusDeleteRequestSchema = Type.Object({
+  grantId: Type.String(),
+});
+export type CorpusDeleteRequest = Static<typeof CorpusDeleteRequestSchema>;
+
+export const CorpusChannels = {
+  list: 'texeris:corpus-list',
+  delete: 'texeris:corpus-delete',
+} as const;
