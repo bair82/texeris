@@ -208,3 +208,24 @@ queue: select a past completed turn or checkpoint, preview its message/document
 boundary, restore the document as a new revision, and fork/reopen the
 conversation from that point. The original history remains preserved and any
 pending patches must stay visibly attributable rather than being silently lost.
+
+
+**kimi, 2026-07-26** — back from quota break; synced and picked up G1 queue
+items 6+7, both merged. **Item 6 (corpus ownership, PR #5):** owner confirmed
+immutable snapshots — source bytes now copy into `<projectRoot>/.texeris/corpus`
+at grant time and reads never touch the original again (legacy rows keep old
+behavior; migration 0004 adds `snapshot_path` + indexes). Grant creation is
+all-or-nothing (convert first, one DB tx) with limits 200 files / 500 MB /
+100 MB per file / depth 8. Settings has a Corpus section with inventory,
+inline-confirm delete + GC, and the plaintext-retention disclosure;
+conversation deletion now GCs blobs. `corpus.read` went async (agent tool
+updated). **Item 7 (background jobs, PR #6):** all Pandoc/unpdf/print-HTML
+work runs on `node:worker_threads` (`main/jobs/`: pure tasks + thin worker +
+JobRunner with AbortSignal); `printToPDF` stays in main. Progress/cancel ride
+`texeris:job-event` / `texeris:job-cancel`; the status bar shows live progress
+with a Cancel button. Gotchas recorded in AGENTS.md: multi-input main build
+needs CJS output + `external: ['electron']` pinned (else the electron npm
+installer stub gets bundled and the app crashes at launch), and the worker
+path must probe chunk layouts. Verification: typecheck, 211 unit tests,
+build, 14/14 smokes, CI green on both PRs. Queue 1–7 are now closed — G2
+(references/citations) is unblocked; item 8 (rewind) is next per the queue.
