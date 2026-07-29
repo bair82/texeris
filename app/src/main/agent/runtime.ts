@@ -87,6 +87,7 @@ class EventQueue<T> implements AsyncIterable<T> {
 interface ActiveRun {
   runId: string;
   conversationId: string;
+  mode: ModelMode;
   agent: Agent;
   queue: EventQueue<NormalizedAgentEvent>;
   unsubscribe: () => void;
@@ -189,6 +190,7 @@ export class PiAgentRuntime implements AgentRuntime {
     const run: ActiveRun = {
       runId,
       conversationId: input.conversationId,
+      mode: input.mode,
       agent,
       queue,
       unsubscribe: () => undefined,
@@ -318,7 +320,11 @@ export class PiAgentRuntime implements AgentRuntime {
 
   private finishRun(run: ActiveRun, newMessages: AgentMessage[]): void {
     const { conversations } = this.options;
-    conversations.appendMessages(run.conversationId, newMessages);
+    conversations.appendMessages(run.conversationId, newMessages, {
+      runId: run.runId,
+      mode: run.mode,
+      manifest: run.manifest,
+    });
 
     const assistant = newMessages.filter((m) => m.role === 'assistant');
     const usage = sumUsage(assistant);

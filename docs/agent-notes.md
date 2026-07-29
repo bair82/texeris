@@ -218,3 +218,13 @@ runtime-decodes the bounded set of main push events that trigger renderer
 actions or state changes, while the architecture documents trusted invoke
 responses and display-only chat streams accurately. Typecheck, 217 tests, and
 the production build pass.
+
+**codex, 2026-07-29** — conversation rewind now enters through Edit message on
+persisted user turns (hover action or native context menu). The inline editor
+previews the document rollback, then creates an independent conversation branch,
+restores the exact revision/change boundary as a new revision, and resends with
+the original mode and scope. The original transcript, runs, and pending patches
+remain intact; skill conversations and unsafe legacy boundaries are rejected.
+Pending editor typing is committed before preview or rewind. Typecheck, 222
+tests, production build, EU3 rewind/management, EU5 native menus, and editor
+persistence smokes pass. Checkpoint-linked conversation rewind remains deferred.

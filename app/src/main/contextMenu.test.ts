@@ -91,7 +91,18 @@ describe('native context menu model', () => {
   });
 
   it('validates every renderer context discriminator', () => {
-    expect(Value.Check(ContextDescriptorSchema, { kind: 'message', seq: 4 })).toBe(true);
+    expect(Value.Check(ContextDescriptorSchema, {
+      kind: 'message', seq: 4, role: 'user', editable: true,
+    })).toBe(true);
     expect(Value.Check(ContextDescriptorSchema, { kind: 'document', documentId: 'd' })).toBe(false);
+  });
+
+  it('offers Edit Message only for user messages', () => {
+    expect(labels(contextMenuTemplate(sender, {
+      kind: 'message', seq: 1, role: 'user', editable: true,
+    }))).toEqual(['Edit Message…', 'Copy Message']);
+    expect(labels(contextMenuTemplate(sender, {
+      kind: 'message', seq: 2, role: 'assistant', editable: false,
+    }))).toEqual(['Copy Message']);
   });
 });

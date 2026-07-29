@@ -19,7 +19,16 @@ export const ContextDescriptorSchema = Type.Union([
     conversationId: Type.String(),
     active: Type.Boolean(),
   }),
-  Type.Object({ kind: Type.Literal('message'), seq: Type.Integer() }),
+  Type.Object({
+    kind: Type.Literal('message'),
+    seq: Type.Integer(),
+    role: Type.Union([
+      Type.Literal('user'),
+      Type.Literal('assistant'),
+      Type.Literal('tool'),
+    ]),
+    editable: Type.Boolean(),
+  }),
 ]);
 export type ContextDescriptor = Static<typeof ContextDescriptorSchema>;
 
@@ -31,6 +40,7 @@ export const ContextActionSchema = Type.Union([
   Type.Literal('document:set-main'), Type.Literal('document:trash'),
   Type.Literal('conversation:open'), Type.Literal('conversation:rename'),
   Type.Literal('conversation:delete'), Type.Literal('message:copy'),
+  Type.Literal('message:edit'),
 ]);
 export type ContextAction = Static<typeof ContextActionSchema>;
 

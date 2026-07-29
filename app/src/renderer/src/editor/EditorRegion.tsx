@@ -121,6 +121,8 @@ export default function EditorRegion({
   const openSeqRef = useRef(0);
   const scrollCleanupRef = useRef<(() => void) | null>(null);
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingCommitsRef = useRef(new Set<Promise<void>>());
+  const commitErrorsRef = useRef<unknown[]>([]);
   const modeRef = useRef(mode);
   modeRef.current = mode;
   const docStatesRef = useRef(docStates);
@@ -176,7 +178,7 @@ export default function EditorRegion({
         text,
         onFlush: (splices: Parameters<typeof window.texeris.doc.commit>[0]['splices']) => {
           setSaveState('saving');
-          window.texeris.doc
+          const commit = window.texeris.doc
             .commit({ documentId, splices, kind: 'typing' })
             .then(({ seq }) => {
               dirtyRef.current = false;
@@ -185,12 +187,15 @@ export default function EditorRegion({
               setSaveState('saved');
             })
             .catch((err: unknown) => {
+              commitErrorsRef.current.push(err);
               setSaveState('error');
               setNotice({
                 text: `commit failed: ${err instanceof Error ? err.message : String(err)} — reloading`,
               });
               void reload();
             });
+          pendingCommitsRef.current.add(commit);
+          void commit.finally(() => pendingCommitsRef.current.delete(commit));
         },
         onDirty: () => {
           dirtyRef.current = true;
@@ -327,7 +332,16 @@ export default function EditorRegion({
       toggleHistory: () => setShowHistory((v) => !v),
       toggleMode: () =>
         switchModeRef.current(modeRef.current === 'rendered' ? 'raw' : 'rendered'),
-      flush: () => sessionRef.current?.flush(),
+      flush: async () => {
+        sessionRef.current?.flush();
+        while (pendingCommitsRef.current.size > 0) {
+          await Promise.all([...pendingCommitsRef.current]);
+        }
+        const errors = commitErrorsRef.current.splice(0);
+        if (errors.length > 0) {
+          throw errors.at(-1);
+        }
+      },
       contextAt: (x, y) => ({
         kind: 'editor',
         ...(sessionRef.current?.prepareContextAt(x, y) ?? { image: false, canUndo: false, canRedo: false }),

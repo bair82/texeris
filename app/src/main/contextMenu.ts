@@ -114,6 +114,9 @@ export function contextMenuTemplate(
     );
   } else if (context.kind === 'message') {
     separator();
+    if (context.role === 'user' && context.editable) {
+      items.push(actionItem(sender, context, 'Edit Message…', 'message:edit'));
+    }
     items.push(actionItem(sender, context, 'Copy Message', 'message:copy'));
   }
   if (items.at(-1)?.type === 'separator') items.pop();

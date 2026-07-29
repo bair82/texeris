@@ -11,6 +11,7 @@ import {
   CancelRequestSchema,
   ChatChannels,
   ConversationRequestSchema,
+  EditMessageRequestSchema,
   RenameConversationRequestSchema,
   StartTurnRequestSchema,
 } from '../shared/chat-types';
@@ -56,6 +57,10 @@ import { UiChannels, UiStateSchema } from '../shared/ui-types';
 import type { AgentRuntime } from './agent/runtime';
 import { UiStateService } from './services/uiState';
 import type { ConversationService } from './services/conversation';
+import {
+  forkMessage,
+  previewMessageEdit,
+} from './services/conversationRewind';
 import { CredentialsService } from './services/credentials';
 import { CheckpointService } from './services/checkpoint';
 import type { PatchService } from './services/patch';
@@ -255,6 +260,27 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   ipcMain.handle(ChatChannels.listDelegations, (_event, raw: unknown) => {
     const req = Value.Decode(ConversationRequestSchema, raw);
     return deps.requireConversations().listDelegations(req.conversationId);
+  });
+
+  ipcMain.handle(ChatChannels.previewMessageEdit, (_event, raw: unknown) => {
+    const req = Value.Decode(EditMessageRequestSchema, raw);
+    return previewMessageEdit(
+      deps.requireProject(),
+      deps.requireConversations(),
+      req.conversationId,
+      req.messageSeq,
+    );
+  });
+
+  ipcMain.handle(ChatChannels.forkMessage, (_event, raw: unknown) => {
+    const req = Value.Decode(EditMessageRequestSchema, raw);
+    deps.requireRuntime().assertIdle();
+    return forkMessage(
+      deps.requireProject(),
+      deps.requireConversations(),
+      req.conversationId,
+      req.messageSeq,
+    );
   });
 
   ipcMain.handle(ChatChannels.startTurn, async (event, raw: unknown) => {

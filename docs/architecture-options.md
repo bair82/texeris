@@ -794,6 +794,18 @@ Normalising events prevents UI code from becoming tightly coupled to one provide
 
 Persist application-level conversations independently of Pi's native session format. Pi-specific session data may be retained for continuity or debugging, but the product should be able to reconstruct a conversation and relevant context from its own records.
 
+User-message editing is the first conversation/document rewind surface. Each
+persisted user message stores a compact, application-owned turn context: model
+mode, scope, document id, base revision, and the change count within that
+revision. The change count matters because recent typing can amend the tip
+revision after a turn starts. Saving an edited message copies only earlier
+transcript messages into a new conversation, records the fork origin, restores
+the scoped document as a new append-only revision, and resends with the
+original mode and scope. Runs, delegations, corpus grants, and patches are not
+copied; pending patches remain visibly attributable to the preserved original
+conversation. Checkpoints remain document-only until a demonstrated workflow
+requires linking them to conversation boundaries.
+
 ## 12.5 Context assembly
 
 Create a context-building layer that takes:

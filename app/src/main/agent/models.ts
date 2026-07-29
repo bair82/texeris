@@ -52,7 +52,13 @@ export function createFauxModels(scripted: string): { models: Models; config: Wo
       fauxAssistantMessage('I proposed a patch replacing one term; please review it.'),
     ]);
   } else {
-    faux.setResponses([fauxAssistantMessage(scripted)]);
+    const repeat = Math.min(
+      20,
+      Math.max(1, Number.parseInt(process.env.TEXERIS_FAUX_REPEAT ?? '1', 10) || 1),
+    );
+    faux.setResponses(
+      Array.from({ length: repeat }, () => fauxAssistantMessage(scripted)),
+    );
   }
   return {
     models,

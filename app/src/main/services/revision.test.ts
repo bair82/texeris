@@ -169,6 +169,41 @@ describe('RevisionService.commit', () => {
   });
 });
 
+describe('exact coalesced-revision boundaries', () => {
+  it('reconstructs and restores the change count captured by an earlier turn', () => {
+    ctx.revisions.commit(docId, [typing('hello', 0)], {
+      actor: 'user',
+      source: { kind: 'typing' },
+    });
+    const boundaryCount = (
+      ctx.db
+        .prepare(
+          'SELECT COUNT(*) AS n FROM revision_changes WHERE document_id = ? AND seq = 1',
+        )
+        .get(docId) as { n: number }
+    ).n;
+    ctx.revisions.commit(docId, [typing(' world', 5)], {
+      actor: 'user',
+      source: { kind: 'typing' },
+    });
+
+    expect(ctx.revisions.getTextAt(docId, 1)).toBe('hello world');
+    expect(ctx.revisions.getTextAtBoundary(docId, 1, boundaryCount)).toBe('hello');
+
+    const restored = ctx.revisions.restoreBoundary(docId, 1, boundaryCount, {
+      conversationId: 'fork',
+    });
+    expect(restored).toBe(2);
+    expect(readFile()).toBe('hello');
+    expect(ctx.revisions.listRevisions(docId)[0].source).toMatchObject({
+      kind: 'restore',
+      conversationId: 'fork',
+      fromRevision: 1,
+      fromChangeCount: boundaryCount,
+    });
+  });
+});
+
 describe('snapshots and replay', () => {
   it(`stores a snapshot every ${SNAPSHOT_EVERY} revisions and replays exactly`, () => {
     // paste commits never coalesce (only typing amends the tip), so each

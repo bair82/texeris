@@ -175,9 +175,11 @@ rapidly turning a prototype into a real application.
    bibliography-aware export, an archive, and a small evaluated skill set.
 2. Persistent undo across document/mode switches is revision-based in theory
    but not presented as a normal undo experience.
-3. **Conversation/document rewind is absent.** A writer cannot select an
-   earlier chat turn and return both the active conversation and document to
-   that historical point as one deliberate operation.
+3. **Conversation/document rewind is available through user-message editing.**
+   **Resolved 2026-07-29:** Edit message previews the rollback, creates a
+   non-destructive conversation branch, restores the scoped document at its
+   exact revision/change boundary, and resends with the original mode and
+   scope. Checkpoints retain their existing document-only restore semantics.
 4. Section movement/folding and math remain meaningful document-authoring
    gaps. Split view and more themes are lower-value until real use says
    otherwise.
@@ -303,6 +305,12 @@ Work packages, in order:
    conversation from that boundary. Preserve the abandoned conversation and
    revision history; invalidate or clearly retain pending patches by origin,
    never silently delete evidence.
+   **Resolved 2026-07-29:** the chosen UI is Edit message on persisted user
+   messages. Hover and native context-menu actions open an inline editor with a
+   rollback warning and optional compact diff. Save creates a transcript fork,
+   restores the one scoped document as a new revision, and resends; original
+   messages, revisions, and patches remain intact. General checkpoint-linked
+   conversation rewind is deferred rather than inferred from legacy data.
 
 Exit gate:
 
@@ -433,8 +441,9 @@ Do not begin G2 until items 1–7 are closed:
    creation.~~ Done 2026-07-26 (immutable snapshots, PR #5).
 7. ~~Move expensive conversion/extraction work into cancellable jobs.~~ Done
    2026-07-26 (worker-thread jobs with progress/cancel).
-8. Add safe conversation/document rewind with preview and non-destructive
-   conversation branching.
+8. ~~Add safe conversation/document rewind with preview and non-destructive
+   conversation branching.~~ Done 2026-07-29 through Edit message; checkpoints
+   remain document-only.
 9. Build references/citation library and bibliography-aware export (G2).
 10. Build archive + FTS5 retrieval (G3).
 11. Productise and evaluate the next two skills (G4).
