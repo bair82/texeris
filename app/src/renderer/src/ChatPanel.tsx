@@ -114,6 +114,34 @@ function MessageActionIcon({
   );
 }
 
+function ChatHeaderIcon({ kind }: { kind: 'new' | 'usage' }) {
+  if (kind === 'new') {
+    return (
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        <path d="M10 4v12M4 10h12" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      <path d="M4 15.5V11M8 15.5V7M12 15.5V9M16 15.5V4.5" />
+    </svg>
+  );
+}
+
+function conversationTitleParts(title: string): {
+  title: string;
+  branch: 'edited' | 'regenerated' | null;
+} {
+  const match = title.match(/^(.*) \((edited|regenerated)\)$/);
+  return match
+    ? {
+        title: match[1],
+        branch: match[2] as 'edited' | 'regenerated',
+      }
+    : { title, branch: null };
+}
+
 interface ChatPanelProps {
   /** Conversation to reopen at mount (persisted workspace state, EU1/EU3). */
   initialConversationId?: string | null;
@@ -571,44 +599,149 @@ export default function ChatPanel({
   }, [streaming]);
 
   const regeneratableTurn = latestRegeneratableTurn(messages);
+  const activeConversation = conversations.find((c) => c.id === conversationId);
+  const activeTitle = conversationTitleParts(activeConversation?.title ?? 'Chats');
 
   return (
     <section className="chat">
-      <header className="chat-controls">
-        <div className="toggle-group" title="Model mode">
-          {(['fast', 'deep'] as const).map((m) => (
+      <header className="chat-header">
+        <div className="chat-header-primary">
+          <div className="conv-picker-wrap" ref={pickerRef}>
             <button
-              key={m}
-              className={mode === m ? 'active' : ''}
-              onClick={() => setMode(m)}
+              className="conv-toggle"
+              title="Conversations"
+              onClick={() => {
+                setPickerOpen((v) => !v);
+                if (!pickerOpen) {
+                  void refreshConversations();
+                }
+              }}
             >
-              {m === 'fast' ? 'Fast' : 'Deep'}
+              <span className="conv-toggle-title">{activeTitle.title}</span>
+              {activeTitle.branch && (
+                <span className="conv-branch">{activeTitle.branch}</span>
+              )}
+              <span className="conv-chevron" aria-hidden="true">⌄</span>
             </button>
-          ))}
+            {pickerOpen && (
+              <div className="conv-picker">
+                <ul className="conv-list">
+                  {conversations.map((c) => (
+                    <li
+                      key={c.id}
+                      className={c.id === conversationId ? 'active' : ''}
+                      data-context-conversation-id={c.id}
+                      data-context-conversation-active={c.id === conversationId}
+                    >
+                      {renamingId === c.id ? (
+                        <input
+                          autoFocus
+                          className="conv-rename-input"
+                          value={renameText}
+                          onChange={(e) => setRenameText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              void submitRename();
+                            } else if (e.key === 'Escape') {
+                              setRenamingId(null);
+                            }
+                          }}
+                        />
+                      ) : confirmDeleteId === c.id ? (
+                        <span className="conv-confirm">
+                          <span className="conv-confirm-text">Delete?</span>
+                          <button className="conv-confirm-yes" onClick={() => void confirmDelete(c.id)}>
+                            Delete
+                          </button>
+                          <button className="conv-confirm-no" onClick={() => setConfirmDeleteId(null)}>
+                            Keep
+                          </button>
+                        </span>
+                      ) : (
+                        <>
+                          <button
+                            className="conv-open"
+                            title={`${c.messageCount} message(s)`}
+                            onClick={() => {
+                              void switchConversation(c.id);
+                              setPickerOpen(false);
+                            }}
+                          >
+                            <span className="conv-title">{c.title}</span>
+                            <span className="conv-meta">{c.messageCount} ✉</span>
+                          </button>
+                          <button
+                            className="conv-row-action"
+                            title="Conversation actions"
+                            onClick={(event) => showContextMenu({
+                              kind: 'conversation', conversationId: c.id, active: c.id === conversationId,
+                            }, event.currentTarget)}
+                          >
+                            ⋯
+                          </button>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                  {conversations.length === 0 && <li className="conv-empty">no conversations</li>}
+                </ul>
+              </div>
+            )}
+          </div>
+          <button
+            className="chat-header-icon"
+            aria-label="New conversation"
+            title="Start a new conversation"
+            onClick={() => void newConversation()}
+          >
+            <ChatHeaderIcon kind="new" />
+          </button>
+          <button
+            className={`chat-header-icon${showUsage ? ' active' : ''}`}
+            aria-label="Usage records"
+            aria-pressed={showUsage}
+            title="Usage records"
+            onClick={() => setShowUsage((v) => !v)}
+          >
+            <ChatHeaderIcon kind="usage" />
+          </button>
         </div>
-        <select
-          className="scope-select"
-          title="Context scope"
-          value={scope.kind === 'section' ? `section:${scope.heading}` : scope.kind}
-          onChange={(e) => {
-            const value = e.target.value;
-            setScope(
-              value === 'document'
-                ? { kind: 'document' }
-                : value === 'selection'
-                  ? { kind: 'selection', from: 0, to: 0 }
-                  : { kind: 'section', heading: value.slice('section:'.length) },
-            );
-          }}
-        >
-          <option value="document">Document</option>
-          <option value="selection">Selection</option>
-          {headings.map((h) => (
-            <option key={`${h.line}:${h.text}`} value={`section:${h.text}`}>
-              {' '.repeat(h.level)}§ {h.text}
-            </option>
-          ))}
-        </select>
+        <div className="chat-header-context">
+          <div className="toggle-group" title="Model mode">
+            {(['fast', 'deep'] as const).map((m) => (
+              <button
+                key={m}
+                className={mode === m ? 'active' : ''}
+                onClick={() => setMode(m)}
+              >
+                {m === 'fast' ? 'Fast' : 'Deep'}
+              </button>
+            ))}
+          </div>
+          <select
+            className="scope-select"
+            title="Context scope"
+            value={scope.kind === 'section' ? `section:${scope.heading}` : scope.kind}
+            onChange={(e) => {
+              const value = e.target.value;
+              setScope(
+                value === 'document'
+                  ? { kind: 'document' }
+                  : value === 'selection'
+                    ? { kind: 'selection', from: 0, to: 0 }
+                    : { kind: 'section', heading: value.slice('section:'.length) },
+              );
+            }}
+          >
+            <option value="document">Document</option>
+            <option value="selection">Selection</option>
+            {headings.map((h) => (
+              <option key={`${h.line}:${h.text}`} value={`section:${h.text}`}>
+                {' '.repeat(h.level)}§ {h.text}
+              </option>
+            ))}
+          </select>
+        </div>
         {manifest && (
           <span className="manifest-chip" title={manifest.notices.join('\n')}>
             {manifest.scope.kind} · rev {manifest.baseRevision} ·{' '}
@@ -616,100 +749,6 @@ export default function ChatPanel({
             {manifest.truncated ? ' · truncated' : ''}
           </span>
         )}
-        <div className="conv-picker-wrap" ref={pickerRef}>
-          <button
-            className="usage-toggle conv-toggle"
-            title="Conversations"
-            onClick={() => {
-              setPickerOpen((v) => !v);
-              if (!pickerOpen) {
-                void refreshConversations();
-              }
-            }}
-          >
-            {conversations.find((c) => c.id === conversationId)?.title ?? 'Chats'} ▾
-          </button>
-          {pickerOpen && (
-            <div className="conv-picker">
-              <ul className="conv-list">
-                {conversations.map((c) => (
-                  <li
-                    key={c.id}
-                    className={c.id === conversationId ? 'active' : ''}
-                    data-context-conversation-id={c.id}
-                    data-context-conversation-active={c.id === conversationId}
-                  >
-                    {renamingId === c.id ? (
-                      <input
-                        autoFocus
-                        className="conv-rename-input"
-                        value={renameText}
-                        onChange={(e) => setRenameText(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            void submitRename();
-                          } else if (e.key === 'Escape') {
-                            setRenamingId(null);
-                          }
-                        }}
-                      />
-                    ) : confirmDeleteId === c.id ? (
-                      <span className="conv-confirm">
-                        <span className="conv-confirm-text">Delete?</span>
-                        <button className="conv-confirm-yes" onClick={() => void confirmDelete(c.id)}>
-                          Delete
-                        </button>
-                        <button className="conv-confirm-no" onClick={() => setConfirmDeleteId(null)}>
-                          Keep
-                        </button>
-                      </span>
-                    ) : (
-                      <>
-                        <button
-                          className="conv-open"
-                          title={`${c.messageCount} message(s)`}
-                          onClick={() => {
-                            void switchConversation(c.id);
-                            setPickerOpen(false);
-                          }}
-                        >
-                          <span className="conv-title">{c.title}</span>
-                          <span className="conv-meta">{c.messageCount} ✉</span>
-                        </button>
-                        <button
-                          className="conv-row-action"
-                          title="Conversation actions"
-                          onClick={(event) => showContextMenu({
-                            kind: 'conversation', conversationId: c.id, active: c.id === conversationId,
-                          }, event.currentTarget)}
-                        >
-                          ⋯
-                        </button>
-                      </>
-                    )}
-                  </li>
-                ))}
-                {conversations.length === 0 && <li className="conv-empty">no conversations</li>}
-              </ul>
-            </div>
-          )}
-        </div>
-        <button
-          className="usage-toggle"
-          title="Start a fresh conversation (the old one stays in history storage)"
-          onClick={() => {
-            void newConversation();
-          }}
-        >
-          new chat
-        </button>
-        <button
-          className="usage-toggle"
-          title="Usage records"
-          onClick={() => setShowUsage((v) => !v)}
-        >
-          usage
-        </button>
       </header>
 
       {showUsage && (

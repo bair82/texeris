@@ -991,12 +991,28 @@ body.col-resizing {
   padding: 0 14px;
 }
 
-.chat-controls {
+.chat-header {
   display: flex;
-  gap: 10px;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 0 9px;
+  border-bottom: 1px solid var(--border);
+}
+
+.chat-header-primary,
+.chat-header-context {
+  display: flex;
   align-items: center;
-  padding: 10px 0;
-  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chat-header-context .scope-select {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  height: 30px;
 }
 
 .toggle-group button {
@@ -1007,6 +1023,16 @@ body.col-resizing {
   font-size: 12.5px;
   cursor: pointer;
   transition: color 0.12s ease, background 0.12s ease;
+}
+
+.chat-header .toggle-group {
+  display: flex;
+  flex: none;
+}
+
+.chat-header .toggle-group button {
+  height: 30px;
+  padding: 4px 13px;
 }
 
 .toggle-group button:first-child {
@@ -1048,6 +1074,15 @@ body.col-resizing {
   background: var(--bg-elevated);
   border-radius: 10px;
   padding: 2px 8px;
+}
+
+.chat-header .manifest-chip {
+  align-self: flex-start;
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-messages {
@@ -1264,44 +1299,96 @@ body.col-resizing {
   cursor: pointer;
 }
 
-.usage-toggle {
-  margin-left: auto;
-  background: none;
-  color: var(--text-faint);
-  border: none;
-  font-size: 12px;
-  cursor: pointer;
-  text-decoration: underline;
-}
-
-.usage-toggle:hover {
-  color: var(--text-muted);
-}
-
 /* ------------------------- conversation picker (EU3) ---------------------- */
 
 .conv-picker-wrap {
   position: relative;
+  flex: 1;
+  min-width: 0;
 }
 
 .conv-toggle {
-  margin-left: 0;
-  max-width: 180px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0 9px 0 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.conv-toggle:hover {
+  border-color: var(--border-strong);
+}
+
+.conv-toggle-title {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-decoration: none;
-  border: 1px solid var(--border);
+}
+
+.conv-branch {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 10.5px;
+}
+
+.conv-chevron {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 14px;
+  transform: translateY(-1px);
+}
+
+.chat-header-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
   border-radius: 6px;
-  padding: 3px 9px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.chat-header-icon:hover,
+.chat-header-icon.active {
+  border-color: var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.chat-header-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.5;
 }
 
 .conv-picker {
   position: absolute;
-  top: 26px;
+  top: calc(100% + 5px);
   right: 0;
+  left: 0;
   z-index: 20;
-  width: 260px;
+  min-width: 260px;
   max-height: 320px;
   overflow-y: auto;
   background: var(--bg-elevated);
