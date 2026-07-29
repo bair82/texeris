@@ -3,6 +3,8 @@ import type {
   AgentRunRecord,
   ConversationListItem,
   DelegationRecord,
+  EditMessagePreview,
+  ForkMessageResult,
   NormalizedAgentEvent,
   StartTurnRequest,
   UiMessage,
@@ -76,6 +78,14 @@ export interface TexerisApi {
     listMessages(conversationId: string): Promise<UiMessage[]>;
     listRuns(conversationId: string): Promise<AgentRunRecord[]>;
     listDelegations(conversationId: string): Promise<DelegationRecord[]>;
+    previewMessageEdit(
+      conversationId: string,
+      messageSeq: number,
+    ): Promise<EditMessagePreview>;
+    forkMessage(
+      conversationId: string,
+      messageSeq: number,
+    ): Promise<ForkMessageResult>;
     startTurn(request: StartTurnRequest): Promise<{ runId: string }>;
     cancel(runId: string): Promise<{ cancelled: boolean }>;
     /** Subscribe to normalized agent events; returns an unsubscribe fn. */

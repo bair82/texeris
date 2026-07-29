@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
+import { Value } from '@sinclair/typebox/value';
 import type {
   AgentRunRecord,
   ContextManifest,
@@ -9,6 +10,10 @@ import type {
   UiMessage,
   UsageSummary,
   DelegationRecord,
+} from '../../shared/chat-types';
+import {
+  TurnContextSchema,
+  type TurnContext,
 } from '../../shared/chat-types';
 
 interface RunRow {
@@ -27,6 +32,16 @@ interface RunRow {
   role_id?: string | null;
   skill_id?: string | null;
   skill_version?: number | null;
+}
+
+export interface MessageEditBoundary {
+  conversationId: string;
+  messageSeq: number;
+  text: string;
+  title: string;
+  context: TurnContext;
+  boundaryExact: boolean;
+  laterMessageCount: number;
 }
 
 function mapRun(row: RunRow): AgentRunRecord {
@@ -154,17 +169,28 @@ export class ConversationService {
   }
 
   /** Append messages verbatim; returns the first assigned seq. */
-  appendMessages(conversationId: string, messages: readonly AgentMessage[]): number {
+  appendMessages(
+    conversationId: string,
+    messages: readonly AgentMessage[],
+    turnContext?: TurnContext,
+  ): number {
     const maxSeq = (
       this.db
         .prepare('SELECT COALESCE(MAX(seq), 0) AS max_seq FROM messages WHERE conversation_id = ?')
         .get(conversationId) as { max_seq: number }
     ).max_seq;
     const insert = this.db.prepare(
-      `INSERT INTO messages (id, conversation_id, seq, role, payload_json, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO messages
+         (id, conversation_id, seq, role, payload_json, created_at, turn_context_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     );
+    let storedTurnContext = false;
     messages.forEach((message, i) => {
+      const contextJson =
+        !storedTurnContext && message.role === 'user' && turnContext
+          ? JSON.stringify(turnContext)
+          : null;
+      if (contextJson) storedTurnContext = true;
       insert.run(
         randomUUID(),
         conversationId,
@@ -172,6 +198,7 @@ export class ConversationService {
         message.role,
         JSON.stringify(message),
         new Date().toISOString(),
+        contextJson,
       );
     });
     // Auto-title from the first user message while the default title stands.
@@ -188,6 +215,109 @@ export class ConversationService {
       }
     }
     return maxSeq + 1;
+  }
+
+  /** Resolve the immutable context boundary associated with a user message. */
+  messageEditBoundary(conversationId: string, messageSeq: number): MessageEditBoundary {
+    const row = this.db
+      .prepare(
+        `SELECT m.role, m.payload_json, m.turn_context_json, c.title, c.skill_id,
+                (SELECT COUNT(*) FROM messages later
+                 WHERE later.conversation_id = m.conversation_id AND later.seq > m.seq) AS later_count
+         FROM messages m
+         JOIN conversations c ON c.id = m.conversation_id
+         WHERE m.conversation_id = ? AND m.seq = ?`,
+      )
+      .get(conversationId, messageSeq) as
+      | {
+          role: string;
+          payload_json: string;
+          turn_context_json: string | null;
+          title: string;
+          skill_id: string | null;
+          later_count: number;
+        }
+      | undefined;
+    if (!row) throw new Error('message is no longer available');
+    if (row.role !== 'user') throw new Error('only user messages can be edited');
+    if (row.skill_id) {
+      throw new Error('skill conversations cannot be branched by editing a message');
+    }
+    if (!row.turn_context_json) {
+      throw new Error('this message predates exact edit boundaries and cannot be edited safely');
+    }
+    const message = JSON.parse(row.payload_json) as AgentMessage;
+    const context = Value.Decode(TurnContextSchema, JSON.parse(row.turn_context_json));
+    return {
+      conversationId,
+      messageSeq,
+      text: message.role === 'user' ? userText(message.content) : '',
+      title: row.title,
+      context,
+      boundaryExact: context.manifest.baseChangeCount !== undefined,
+      laterMessageCount: row.later_count,
+    };
+  }
+
+  /**
+   * Copy transcript messages before the edited user message into a new
+   * conversation. Runs, delegations, patches, and corpus grants remain owned
+   * by the original conversation.
+   */
+  forkAtUserMessage(conversationId: string, messageSeq: number): string {
+    const boundary = this.messageEditBoundary(conversationId, messageSeq);
+    const id = randomUUID();
+    const createdAt = new Date().toISOString();
+    const title = boundary.title.endsWith(' (edited)')
+      ? boundary.title
+      : `${boundary.title} (edited)`;
+    const messages = this.db
+      .prepare(
+        `SELECT seq, role, payload_json, created_at, turn_context_json
+         FROM messages
+         WHERE conversation_id = ? AND seq < ?
+         ORDER BY seq`,
+      )
+      .all(conversationId, messageSeq) as Array<{
+        seq: number;
+        role: string;
+        payload_json: string;
+        created_at: string;
+        turn_context_json: string | null;
+      }>;
+
+    this.db.exec('BEGIN');
+    try {
+      this.db
+        .prepare(
+          `INSERT INTO conversations
+             (id, title, created_at, skill_id, skill_version, corpus_grant_id,
+              parent_conversation_id, forked_from_message_seq)
+           VALUES (?, ?, ?, NULL, NULL, NULL, ?, ?)`,
+        )
+        .run(id, title, createdAt, conversationId, messageSeq);
+      const insert = this.db.prepare(
+        `INSERT INTO messages
+           (id, conversation_id, seq, role, payload_json, created_at, turn_context_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const message of messages) {
+        insert.run(
+          randomUUID(),
+          id,
+          message.seq,
+          message.role,
+          message.payload_json,
+          message.created_at,
+          message.turn_context_json,
+        );
+      }
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+    return id;
   }
 
   /** Verbatim AgentMessages for replay into agent.state.messages. */

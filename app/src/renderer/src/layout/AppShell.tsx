@@ -304,7 +304,7 @@ export default function AppShell({
     exportingRef.current = true;
     activeJobRef.current = { op: 'export', jobId: null };
     try {
-      if (targetId === openDocId) getEditorCommands()?.flush();
+      if (targetId === openDocId) await getEditorCommands()?.flush();
       setOperationNotice(jobProgressNotice('export'));
       const exported = await window.texeris.doc.exportDialog(targetId);
       if (exported) {

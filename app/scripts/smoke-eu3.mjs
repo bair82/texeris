@@ -32,6 +32,7 @@ try {
     env: {
       ...process.env,
       TEXERIS_FAUX_PROVIDER: '1',
+      TEXERIS_FAUX_REPEAT: '2',
       TEXERIS_PROJECT_DIR: projectDir,
       ELECTRON_ENABLE_LOGGING: '1',
       TEXERIS_SMOKE: '1',
@@ -182,6 +183,61 @@ try {
   check(
     'sending preserves the active document outline',
     await evaluate(`[...document.querySelector('.scope-select').options].some(o => o.value === 'section:Copy heading')`),
+  );
+
+  // Editing a persisted user message creates a branch, restores the exact
+  // document boundary that message saw, then resends the edited text.
+  await evaluate(`(async () => {
+    const doc = (await window.texeris.doc.list()).find(d => d.path === 'journal copy.md');
+    const current = await window.texeris.doc.getText(doc.id);
+    await window.texeris.doc.commit({
+      documentId: doc.id,
+      kind: 'typing',
+      splices: [{
+        from: current.text.length,
+        to: current.text.length,
+        deletedText: '',
+        insertedText: 'future text that rewind removes\\n',
+      }],
+    });
+    return true;
+  })()`);
+  await evaluate(`[...document.querySelectorAll('.msg-user .msg-actions button')].find(b => b.textContent === 'edit').click(); true`);
+  await waitFor(`!!document.querySelector('.message-edit textarea')`, 'message editor did not open');
+  check(
+    'edit warning previews a conversation branch and document restore',
+    (await evaluate(`document.querySelector('.message-edit-warning').textContent`)).includes('new conversation branch'),
+  );
+  await evaluate(setInput('.message-edit textarea', 'revised smoke question'));
+  await evaluate(`[...document.querySelectorAll('.message-edit-actions button')].find(b => b.textContent.includes('Save and resend')).click(); true`);
+  await waitFor(
+    `[...document.querySelectorAll('.msg-user')].some(m => m.textContent.includes('revised smoke question'))`,
+    'edited user message did not appear in the branch',
+  );
+  await waitFor(
+    `[...document.querySelectorAll('.msg-assistant')].some(m => m.textContent.includes('scripted offline response'))`,
+    'edited message did not receive an assistant answer',
+    80,
+  );
+  const rewindState = await evaluate(`(async () => {
+    const conversations = await window.texeris.chat.listConversations();
+    const doc = (await window.texeris.doc.list()).find(d => d.path === 'journal copy.md');
+    const current = await window.texeris.doc.getText(doc.id);
+    return {
+      conversations: conversations.map(c => ({ title: c.title, messageCount: c.messageCount })),
+      text: current.text,
+    };
+  })()`);
+  check(
+    'edit creates an independently listed conversation branch',
+    rewindState.conversations.length === 2 &&
+      rewindState.conversations.some(c => c.title.includes('(edited)')),
+    JSON.stringify(rewindState.conversations),
+  );
+  check(
+    'edit restores the exact pre-message document boundary',
+    rewindState.text === '# Copy heading\n',
+    JSON.stringify(rewindState.text),
   );
 
   // trash the duplicate

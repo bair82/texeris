@@ -592,6 +592,9 @@ Example names:
 - Invoke tools and skills.
 - Display proposed patches and reports.
 - Preserve conversation history.
+- Edit a persisted user message by creating a non-destructive conversation
+  branch and restoring the scoped document to the exact context that message
+  originally saw.
 
 ### Likely
 

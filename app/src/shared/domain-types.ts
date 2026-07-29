@@ -28,6 +28,8 @@ export interface RevisionSource {
   patchId?: string;
   /** For restores: the revision whose content was restored. */
   fromRevision?: number;
+  /** Exact boundary within a coalesced revision, when applicable. */
+  fromChangeCount?: number;
 }
 
 export interface DocumentInfo {

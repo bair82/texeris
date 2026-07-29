@@ -70,6 +70,10 @@ const api: TexerisApi = {
       ipcRenderer.invoke(ChatChannels.listRuns, { conversationId }),
     listDelegations: (conversationId) =>
       ipcRenderer.invoke(ChatChannels.listDelegations, { conversationId }),
+    previewMessageEdit: (conversationId, messageSeq) =>
+      ipcRenderer.invoke(ChatChannels.previewMessageEdit, { conversationId, messageSeq }),
+    forkMessage: (conversationId, messageSeq) =>
+      ipcRenderer.invoke(ChatChannels.forkMessage, { conversationId, messageSeq }),
     startTurn: (request) => ipcRenderer.invoke(ChatChannels.startTurn, request),
     cancel: (runId) => ipcRenderer.invoke(ChatChannels.cancel, { runId }),
     onEvent: (callback) => {

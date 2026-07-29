@@ -4,13 +4,20 @@ import type {
   ContextManifest,
   ContextScope,
   ConversationListItem,
+  EditMessagePreview,
   ModelMode,
   NormalizedAgentEvent,
   UiMessage,
   DelegationRecord,
 } from '../../shared/chat-types';
 import type { HeadingInfo } from '../../shared/doc-types';
-import { getEditorSelection, registerChatCommands } from './editor/editorBridge';
+import {
+  getEditorCommands,
+  getEditorSelection,
+  registerChatCommands,
+  reloadEditor,
+} from './editor/editorBridge';
+import { formatCompactDiff, lineDiff } from './editor/lib/diff';
 import MarkdownView from './MarkdownView';
 import { registerContextActionHandler, showContextMenu } from './contextMenuBridge';
 
@@ -26,6 +33,14 @@ interface LastTurn {
   text: string;
   mode: ModelMode;
   scope: ContextScope;
+}
+
+interface MessageEditState {
+  seq: number;
+  text: string;
+  preview: EditMessagePreview;
+  showDiff: boolean;
+  submitting: boolean;
 }
 
 interface ChatPanelProps {
@@ -63,8 +78,10 @@ export default function ChatPanel({
   const [error, setError] = useState<string | null>(null);
   const [lastTurn, setLastTurn] = useState<LastTurn | null>(null);
   const [copiedSeq, setCopiedSeq] = useState<number | null>(null);
+  const [messageEdit, setMessageEdit] = useState<MessageEditState | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
+  const conversationIdRef = useRef<string | null>(null);
 
   const refreshConversations = useCallback(async () => {
     setConversations(await window.texeris.chat.listConversations());
@@ -85,6 +102,7 @@ export default function ChatPanel({
       if (!id) {
         ({ conversationId: id } = await window.texeris.chat.getOrCreateConversation());
       }
+      conversationIdRef.current = id;
       setConversationId(id);
       setMessages(await window.texeris.chat.listMessages(id));
       setRuns(await window.texeris.chat.listRuns(id));
@@ -126,6 +144,7 @@ export default function ChatPanel({
       if (id === conversationId) {
         return;
       }
+      conversationIdRef.current = id;
       setConversationId(id);
       setMessages(await window.texeris.chat.listMessages(id));
       setRuns(await window.texeris.chat.listRuns(id));
@@ -133,6 +152,7 @@ export default function ChatPanel({
       setManifest(null);
       setError(null);
       setStreaming(null);
+      setMessageEdit(null);
       onConversationChange?.(id);
     },
     [conversationId, onConversationChange],
@@ -140,12 +160,14 @@ export default function ChatPanel({
 
   const newConversation = useCallback(async () => {
     const { conversationId: id } = await window.texeris.chat.newConversation();
+    conversationIdRef.current = id;
     setConversationId(id);
     setMessages([]);
     setRuns([]);
     setDelegations([]);
     setManifest(null);
     setError(null);
+    setMessageEdit(null);
     await refreshConversations();
     onConversationChange?.(id);
   }, [onConversationChange, refreshConversations]);
@@ -183,6 +205,32 @@ export default function ChatPanel({
     }
   };
 
+  const beginMessageEdit = useCallback(
+    async (message: UiMessage) => {
+      if (!conversationId || streaming || message.role !== 'user' || message.seq < 1) {
+        return;
+      }
+      setError(null);
+      try {
+        await getEditorCommands()?.flush();
+        const preview = await window.texeris.chat.previewMessageEdit(
+          conversationId,
+          message.seq,
+        );
+        setMessageEdit({
+          seq: message.seq,
+          text: message.text,
+          preview,
+          showDiff: false,
+          submitting: false,
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [conversationId, streaming],
+  );
+
   useEffect(() => registerContextActionHandler((event) => {
     if (event.context.kind === 'conversation') {
       const context = event.context;
@@ -206,8 +254,15 @@ export default function ChatPanel({
       setTimeout(() => setCopiedSeq((seq) => seq === message.seq ? null : seq), 1200);
       return true;
     }
+    if (event.context.kind === 'message' && event.action === 'message:edit') {
+      const context = event.context;
+      const message = messages.find((item) => item.seq === context.seq);
+      if (!message || message.role !== 'user') return false;
+      void beginMessageEdit(message);
+      return true;
+    }
     return false;
-  }), [conversations, messages, switchConversation]);
+  }), [beginMessageEdit, conversations, messages, switchConversation]);
 
   useEffect(() => {
     return window.texeris.chat.onEvent((event: NormalizedAgentEvent) => {
@@ -239,10 +294,11 @@ export default function ChatPanel({
           setError(event.errorMessage ?? 'unknown error');
         }
         setStreaming(null);
-        if (conversationId) {
-          void window.texeris.chat.listMessages(conversationId).then(setMessages);
-          void window.texeris.chat.listRuns(conversationId).then(setRuns);
-          void window.texeris.chat.listDelegations(conversationId).then(setDelegations);
+        const activeConversationId = conversationIdRef.current;
+        if (activeConversationId) {
+          void window.texeris.chat.listMessages(activeConversationId).then(setMessages);
+          void window.texeris.chat.listRuns(activeConversationId).then(setRuns);
+          void window.texeris.chat.listDelegations(activeConversationId).then(setDelegations);
         }
       } else if (event.type === 'delegation_start' || event.type === 'delegation_end') {
         setStreaming((s) => {
@@ -258,15 +314,22 @@ export default function ChatPanel({
   }, [conversationId, onOpenDocument]);
 
   const startTurn = useCallback(
-    async (turn: LastTurn) => {
-      if (!conversationId || streaming) {
+    async (
+      turn: LastTurn,
+      targetConversationId = conversationId,
+      targetDocumentId = documentId,
+    ) => {
+      if (!targetConversationId || streaming) {
         return;
       }
       try {
-        setHeadings(await window.texeris.doc.outline(documentId ?? undefined));
+        setHeadings(await window.texeris.doc.outline(targetDocumentId ?? undefined));
         // Echo the user's message immediately — the run may take a while.
         setMessages((m) => [...m, { seq: -Date.now(), role: 'user', text: turn.text }]);
-        await window.texeris.chat.startTurn({ conversationId, ...turn });
+        await window.texeris.chat.startTurn({
+          conversationId: targetConversationId,
+          ...turn,
+        });
         setLastTurn(turn);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
@@ -274,6 +337,58 @@ export default function ChatPanel({
     },
     [conversationId, documentId, streaming],
   );
+
+  const resendEditedMessage = useCallback(async () => {
+    if (!messageEdit || !conversationId || streaming) return;
+    const text = messageEdit.text.trim();
+    if (!text) return;
+    setMessageEdit((current) =>
+      current ? { ...current, submitting: true } : current,
+    );
+    setError(null);
+    try {
+      await getEditorCommands()?.flush();
+      const result = await window.texeris.chat.forkMessage(
+        conversationId,
+        messageEdit.seq,
+      );
+      conversationIdRef.current = result.conversationId;
+      setConversationId(result.conversationId);
+      setMessages(await window.texeris.chat.listMessages(result.conversationId));
+      setRuns([]);
+      setDelegations([]);
+      setManifest(null);
+      setMode(result.mode);
+      setScope(result.scope);
+      setMessageEdit(null);
+      onConversationChange?.(result.conversationId);
+      if (result.documentId === documentId) {
+        reloadEditor();
+      } else {
+        onOpenDocument?.(result.documentId);
+      }
+      await refreshConversations();
+      await startTurn(
+        { text, mode: result.mode, scope: result.scope },
+        result.conversationId,
+        result.documentId,
+      );
+    } catch (err) {
+      setMessageEdit((current) =>
+        current ? { ...current, submitting: false } : current,
+      );
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [
+    conversationId,
+    documentId,
+    messageEdit,
+    onConversationChange,
+    onOpenDocument,
+    refreshConversations,
+    startTurn,
+    streaming,
+  ]);
 
   const send = useCallback(async () => {
     if (!input.trim()) {
@@ -485,6 +600,10 @@ export default function ChatPanel({
             key={m.seq}
             className={`msg msg-${m.role}`}
             data-context-message-seq={m.seq}
+            data-context-message-role={m.role}
+            data-context-message-editable={
+              m.role === 'user' && m.seq > 0 && !streaming
+            }
           >
             {m.role === 'tool' ? (
               <span className="tool-chip">
@@ -492,21 +611,127 @@ export default function ChatPanel({
               </span>
             ) : (
               <>
-                <MarkdownView text={m.text} />
-                <button
-                  className="msg-copy"
-                  title="Copy message text"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(m.text);
-                    setCopiedSeq(m.seq);
-                    setTimeout(
-                      () => setCopiedSeq((s) => (s === m.seq ? null : s)),
-                      1200,
-                    );
-                  }}
-                >
-                  {copiedSeq === m.seq ? 'copied' : 'copy'}
-                </button>
+                {messageEdit?.seq === m.seq ? (
+                  <div className="message-edit">
+                    <textarea
+                      autoFocus
+                      rows={4}
+                      value={messageEdit.text}
+                      disabled={messageEdit.submitting}
+                      onChange={(event) =>
+                        setMessageEdit((current) =>
+                          current
+                            ? { ...current, text: event.target.value }
+                            : current,
+                        )
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === 'Escape') setMessageEdit(null);
+                        if (
+                          event.key === 'Enter' &&
+                          (event.metaKey || event.ctrlKey)
+                        ) {
+                          void resendEditedMessage();
+                        }
+                      }}
+                    />
+                    <p className="message-edit-warning">
+                      Resending creates a new conversation branch
+                      {messageEdit.preview.documentChanged
+                        ? messageEdit.preview.currentRevision ===
+                          messageEdit.preview.targetRevision
+                          ? ` and restores ${messageEdit.preview.documentPath} to an earlier saved boundary within revision ${messageEdit.preview.targetRevision}`
+                          : ` and restores ${messageEdit.preview.documentPath} from revision ${messageEdit.preview.currentRevision} to its state at revision ${messageEdit.preview.targetRevision}`
+                        : `; ${messageEdit.preview.documentPath} already matches this turn`}
+                      . The original conversation remains available.
+                    </p>
+                    {!messageEdit.preview.boundaryExact && (
+                      <p className="message-edit-note">
+                        This older message has revision-level rather than
+                        keystroke-level boundary data.
+                      </p>
+                    )}
+                    {(messageEdit.preview.laterMessageCount > 0 ||
+                      messageEdit.preview.pendingPatchCount > 0) && (
+                      <p className="message-edit-note">
+                        {messageEdit.preview.laterMessageCount > 0 &&
+                          `${messageEdit.preview.laterMessageCount} later message(s) remain in the original. `}
+                        {messageEdit.preview.pendingPatchCount > 0 &&
+                          `${messageEdit.preview.pendingPatchCount} pending patch(es) remain attributed to it.`}
+                      </p>
+                    )}
+                    {messageEdit.preview.documentChanged && (
+                      <button
+                        className="message-edit-preview"
+                        onClick={() =>
+                          setMessageEdit((current) =>
+                            current
+                              ? { ...current, showDiff: !current.showDiff }
+                              : current,
+                          )
+                        }
+                      >
+                        {messageEdit.showDiff ? 'Hide changes' : 'Preview document changes'}
+                      </button>
+                    )}
+                    {messageEdit.showDiff && (
+                      <pre className="message-edit-diff">
+                        {formatCompactDiff(
+                          lineDiff(
+                            messageEdit.preview.currentText,
+                            messageEdit.preview.targetText,
+                          ),
+                        )}
+                      </pre>
+                    )}
+                    <div className="message-edit-actions">
+                      <button
+                        disabled={messageEdit.submitting}
+                        onClick={() => setMessageEdit(null)}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        disabled={
+                          messageEdit.submitting || !messageEdit.text.trim()
+                        }
+                        onClick={() => void resendEditedMessage()}
+                      >
+                        {messageEdit.submitting
+                          ? 'Creating branch…'
+                          : 'Save and resend'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <MarkdownView text={m.text} />
+                    <span className="msg-actions">
+                      {m.role === 'user' && m.seq > 0 && (
+                        <button
+                          title="Edit message and create a branch"
+                          disabled={Boolean(streaming)}
+                          onClick={() => void beginMessageEdit(m)}
+                        >
+                          edit
+                        </button>
+                      )}
+                      <button
+                        title="Copy message text"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(m.text);
+                          setCopiedSeq(m.seq);
+                          setTimeout(
+                            () => setCopiedSeq((s) => (s === m.seq ? null : s)),
+                            1200,
+                          );
+                        }}
+                      >
+                        {copiedSeq === m.seq ? 'copied' : 'copy'}
+                      </button>
+                    </span>
+                  </>
+                )}
               </>
             )}
           </div>
