@@ -205,6 +205,14 @@ try {
   await evaluate(`document.querySelector('.msg-user .msg-actions button[aria-label="Edit message"]').click(); true`);
   await waitFor(`!!document.querySelector('.message-edit textarea')`, 'message editor did not open');
   check(
+    'message editor fits within the chat column',
+    await evaluate(`(() => {
+      const chat = document.querySelector('.chat').getBoundingClientRect();
+      const editor = document.querySelector('.msg-editing').getBoundingClientRect();
+      return editor.left >= chat.left && editor.right <= chat.right;
+    })()`),
+  );
+  check(
     'edit warning previews a conversation branch and document restore',
     (await evaluate(`document.querySelector('.message-edit-warning').textContent`)).includes('new conversation branch'),
   );

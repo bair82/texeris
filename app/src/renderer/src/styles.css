@@ -1083,6 +1083,17 @@ body.col-resizing {
   padding: 8px 12px;
 }
 
+.msg-editing {
+  width: 100%;
+  max-width: 100%;
+}
+
+.msg-editing .msg-content {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+
 .msg-assistant .msg-content {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
@@ -1149,7 +1160,7 @@ body.col-resizing {
 }
 
 .message-edit {
-  width: min(480px, 72vw);
+  width: 100%;
   max-width: 100%;
 }
 
