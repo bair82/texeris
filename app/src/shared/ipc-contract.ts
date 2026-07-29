@@ -32,6 +32,11 @@ import type { CorpusGrantView, ProfileBeginRequest } from './profile-types';
 import type { JobEvent } from './job-types';
 import type { PatchStyleMode } from './settings-types';
 import type { ContextActionEvent, ContextDescribeRequest, ContextDescriptor } from './context-menu-types';
+import type {
+  CitationAudit,
+  ReferenceImportReport,
+  ReferenceListItem,
+} from './reference-types';
 
 /**
  * IPC contract shared by main, preload, and renderer.
@@ -65,6 +70,12 @@ export interface TexerisApi {
     reply(requestId: string, context: ContextDescriptor): Promise<{ shown: boolean }>;
     show(context: ContextDescriptor, x: number, y: number): Promise<{ shown: boolean }>;
     onAction(callback: (event: ContextActionEvent) => void): () => void;
+  };
+  references: {
+    list(): Promise<ReferenceListItem[]>;
+    search(query: string, limit?: number): Promise<ReferenceListItem[]>;
+    importDialog(): Promise<ReferenceImportReport | null>;
+    audit(markdown: string): Promise<CitationAudit>;
   };
   chat: {
     getOrCreateConversation(): Promise<{ conversationId: string }>;

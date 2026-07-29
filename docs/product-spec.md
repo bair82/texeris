@@ -793,8 +793,10 @@ The first deterministic interchange workflow exports PDF, Markdown, DOCX, ODT,
 and RTF through a native save dialog. PDF is the default: a fixed A4 academic
 layout is produced from sanitized Pandoc HTML by an isolated Electron print
 renderer. Exports are derived artifacts and never replace the canonical project
-Markdown; citation markers may be preserved, but a formatted bibliography
-awaits the reference-library workflow.
+Markdown. When a document uses records from the project’s canonical
+`references.csl.json`, Pandoc citeproc now renders in-text citations and the
+bibliography automatically; unresolved keys are reported as export warnings.
+Export-time CSL style selection remains to be added.
 
 ### Exploratory
 
@@ -967,12 +969,14 @@ The first usable release should prioritise the complete writing loop over featur
 14. DOCX and Markdown export; PDF if practical in the first release.
 15. Named checkpoints.
 
-**Implementation audit, 2026-07-22:** the core editor/agent/revision loop,
+**Implementation audit, 2026-07-30:** the core editor/agent/revision loop,
 projects, checkpoints, and deterministic Markdown/office/PDF interchange work
-on the current development branch. macOS distribution, the reusable writing
-archive, the full editable profile lifecycle, packaged rewrite/tick skills,
-and structured references/bibliography export remain incomplete. The active
-ordering and exit gates are maintained in
+on the current development branch. The first structured-reference workflow also
+works end to end: CSL JSON/BibTeX/RIS import, search-first citation
+insert/replace, unresolved-key audit, and citeproc bibliography export. Reference
+detail editing and style selection, macOS distribution, the reusable writing
+archive, the full editable profile lifecycle, and packaged rewrite/tick skills
+remain incomplete. The active ordering and exit gates are maintained in
 [`development-plan.md`](development-plan.md); phase labels below remain product
 hypotheses rather than implementation status.
 

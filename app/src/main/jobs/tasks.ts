@@ -28,11 +28,19 @@ export interface PandocExportPayload {
   outputPath: string;
   format: 'docx' | 'odt' | 'rtf';
   resourceRoot?: string;
+  bibliographyPath?: string;
 }
 
 export interface PandocHtmlPayload {
   pandocPath: string;
   markdown: string;
+  bibliographyPath?: string;
+}
+
+export interface PandocReferenceImportPayload {
+  pandocPath: string;
+  fileName: string;
+  format: 'bibtex' | 'ris';
 }
 
 export interface PdfPrepareHtmlPayload {
@@ -40,6 +48,7 @@ export interface PdfPrepareHtmlPayload {
   markdown: string;
   title: string;
   resourceRoot: string;
+  bibliographyPath?: string;
 }
 
 export interface PdfExtractPayload {
@@ -99,6 +108,9 @@ async function pandocExport(payload: PandocExportPayload): Promise<{ warnings: s
         '--output', payload.outputPath,
         '--sandbox',
         ...(payload.resourceRoot ? [`--resource-path=${payload.resourceRoot}`] : []),
+        ...(payload.bibliographyPath
+          ? ['--citeproc', `--bibliography=${payload.bibliographyPath}`]
+          : []),
       ],
       { input: payload.markdown, cwd: payload.resourceRoot },
     );
@@ -112,12 +124,37 @@ async function pandocHtml(payload: PandocHtmlPayload): Promise<{ html: string; w
   try {
     const html = await execFileAsync(
       payload.pandocPath,
-      ['--from=markdown', '--to=html5', '--wrap=none', '--sandbox'],
+      [
+        '--from=markdown',
+        '--to=html5',
+        '--wrap=none',
+        '--sandbox',
+        ...(payload.bibliographyPath
+          ? ['--citeproc', `--bibliography=${payload.bibliographyPath}`]
+          : []),
+      ],
       { input: payload.markdown },
     );
     return { html, warnings: [] };
   } catch (error) {
     throw new Error(`Pandoc PDF preparation failed: ${errorMessage(error)}`);
+  }
+}
+
+async function pandocReferenceImport(
+  payload: PandocReferenceImportPayload,
+): Promise<{ cslJson: string }> {
+  try {
+    const cslJson = await execFileAsync(payload.pandocPath, [
+      payload.fileName,
+      `--from=${payload.format}`,
+      '--to=csljson',
+      '--standalone',
+      '--sandbox',
+    ]);
+    return { cslJson };
+  } catch (error) {
+    throw new Error(`Reference import failed: ${errorMessage(error)}`);
   }
 }
 
@@ -154,7 +191,11 @@ export async function inlineProjectImages(
 /** Inline images, convert to HTML via Pandoc, sanitize, and wrap for printToPDF. */
 async function pdfPrepareHtml(payload: PdfPrepareHtmlPayload): Promise<{ html: string; warnings: string[] }> {
   const inlined = await inlineProjectImages(payload.markdown, payload.resourceRoot);
-  const converted = await pandocHtml({ pandocPath: payload.pandocPath, markdown: inlined.markdown });
+  const converted = await pandocHtml({
+    pandocPath: payload.pandocPath,
+    markdown: inlined.markdown,
+    bibliographyPath: payload.bibliographyPath,
+  });
   if (/<img\b[^>]*\bsrc=["']https?:\/\//i.test(converted.html)
     && !inlined.warnings.some((warning) => warning.startsWith('Remote images'))) {
     inlined.warnings.push('Remote images were omitted from the PDF; only project-owned image assets are embedded.');
@@ -184,6 +225,8 @@ export async function runTask(
       return pandocExport(payload as PandocExportPayload);
     case 'pandoc-html':
       return pandocHtml(payload as PandocHtmlPayload);
+    case 'pandoc-reference-import':
+      return pandocReferenceImport(payload as PandocReferenceImportPayload);
     case 'pdf-prepare-html':
       return pdfPrepareHtml(payload as PdfPrepareHtmlPayload);
     case 'pdf-extract':

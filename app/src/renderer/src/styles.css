@@ -813,6 +813,174 @@ body.col-resizing {
   cursor: default;
 }
 
+/* ---------------------------- citation picker ---------------------------- */
+
+.citation-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: min(15vh, 120px);
+  background: rgba(0, 0, 0, 0.42);
+}
+
+.citation-picker {
+  display: flex;
+  flex-direction: column;
+  width: min(620px, calc(100vw - 40px));
+  max-height: min(620px, calc(100vh - 80px));
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--bg-panel);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.4);
+}
+
+.citation-picker > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 16px 18px 10px;
+}
+
+.citation-picker h2,
+.citation-picker p { margin: 0; }
+.citation-picker h2 { font-size: 16px; }
+.citation-picker header p {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.citation-picker header > button {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 20px;
+}
+
+.citation-search-row {
+  display: flex;
+  gap: 7px;
+  padding: 0 18px 11px;
+}
+
+.citation-search-row input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  padding: 7px 10px;
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.citation-search-row input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.citation-search-row button,
+.citation-empty button {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 5px 10px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.citation-report,
+.citation-import-warning,
+.citation-error,
+.citation-unresolved {
+  padding: 0 18px 9px;
+  color: var(--green);
+  font-size: 12px;
+}
+
+.citation-error { color: var(--red); }
+.citation-import-warning,
+.citation-unresolved {
+  color: var(--amber);
+  overflow-wrap: anywhere;
+}
+
+.citation-results {
+  min-height: 180px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 5px;
+}
+
+.citation-results > button {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  border: 0;
+  border-radius: 7px;
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.citation-results > button:hover,
+.citation-results > button.selected { background: var(--accent-dim); }
+
+.citation-result-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.citation-result-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.citation-key {
+  margin-left: auto;
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+}
+
+.citation-result-title {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.citation-empty {
+  display: flex;
+  min-height: 170px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text-muted);
+}
+
+.citation-picker > footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 18px 10px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
 /* match decorations in both editor modes */
 .search-match {
   background: rgba(110, 168, 254, 0.26);

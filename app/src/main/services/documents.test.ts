@@ -258,7 +258,9 @@ describe('exportDocumentFile', () => {
     const id = makeDoc('cited.md', 'A claim [@source].\n');
     const output = path.join(root, '..', `export-${path.basename(root)}.rtf`);
     try {
-      expect((await exportDocumentFile(ctx, id, output)).warnings.join(' ')).toMatch(/bibliography/);
+      expect((await exportDocumentFile(ctx, id, output)).warnings.join(' ')).toMatch(
+        /Unresolved citation key.*source/,
+      );
       await expect(exportDocumentFile(ctx, id, path.join(root, 'cited.md'))).rejects.toThrow(/different path/);
     } finally {
       fs.rmSync(output, { force: true });

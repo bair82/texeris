@@ -44,7 +44,7 @@ packaged-app verifier pass.
 
 | Area | Status |
 |---|---|
-| References and citations | Citation syntax renders, but there is no CSL JSON library, insert/edit UI, unresolved-key audit, citeproc bibliography, or reference import. Export explicitly does not render a bibliography. |
+| References and citations | The first G2 slice is operational: canonical project CSL JSON with a rebuildable SQLite index, CSL JSON/BibTeX/RIS import, search-first insert/replace UI, unresolved-key audit, and automatic citeproc PDF/office export. Reference-detail editing and export-time CSL style selection remain. |
 | Writing archive | Profile corpus grants are private, conversation-scoped inputs—not a browsable, searchable archive. There is no FTS5 archive UI or reusable attachment workflow. |
 | Skills | The runtime boundary exists, but the registry is hard-coded and only the writing-profile workflow is user-facing. Conservative rewrite and verbal-tick cleanup are not packaged skills with evaluations. |
 | PDF/source research | Text extraction exists; OCR, a source library, PDF viewing, page-linked reading, annotations, and question-answering over saved sources do not. |
@@ -334,6 +334,21 @@ Decision first:
 - Choose a portable canonical CSL JSON representation and its relationship to
   SQLite indexing. Recommended shape: a user-inspectable project CSL JSON file
   as canonical data, with SQLite as a rebuildable search/index layer.
+
+**Decision (2026-07-30):** `references.csl.json` in the project root is the
+portable canonical library. SQLite’s `reference_index` is a disposable search
+projection and is rebuilt whenever the canonical file’s content hash changes.
+The first UI stays deliberately small: one Cite action opens a search palette;
+an empty palette offers bibliography import in place, and double-clicking a
+rendered marker reuses the palette to replace it. Export invokes citeproc
+automatically when the document cites records in the library.
+
+**Implemented first slice (2026-07-30):** stable-key validation, duplicate/key
+conflict reporting, external-file index repair, CSL JSON/BibTeX/RIS import,
+author/title/year/key search, rendered and raw insertion, rendered replacement,
+missing/unused-key audit, and bibliography-aware PDF/DOCX/ODT/RTF export. The
+remaining G2 work is reference-detail editing, explicit missing-key resolution,
+export-time CSL style selection, and broader golden fixtures.
 
 Work:
 

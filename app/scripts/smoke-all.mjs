@@ -20,6 +20,7 @@ const SMOKE = [
   'scripts/smoke-eu5.mjs',
   'scripts/smoke-eu6.mjs',
   'scripts/smoke-eu7.mjs',
+  'scripts/smoke-citations.mjs',
   'scripts/smoke-pdf.mjs',
 ];
 

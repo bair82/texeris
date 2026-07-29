@@ -5,6 +5,7 @@ import { minimalSplice } from '../../shared/text-splice';
 import { atomicWriteText, hashText } from './document';
 import type { ProjectContext } from './project';
 import { convertToMarkdown, formatForPath, writePandocExport, type InterchangeFormat } from './pandoc';
+import { ReferenceService } from './references';
 import { reconcileImageAssetsBestEffort } from './assets';
 import { extractPdfText, MAX_PDF_BYTES, PdfExtractionError, pdfDocumentMarkdown } from './pdf';
 import { buildPdfPrintHtml } from './pdfExportHtml';
@@ -228,6 +229,12 @@ export async function exportDocumentFile(
   const sourcePath = path.resolve(ctx.root, row.path);
   if (path.resolve(outputPath) === sourcePath) throw new Error('choose a different path from the canonical project document');
   const text = fs.readFileSync(sourcePath, 'utf8');
+  const references = new ReferenceService(ctx);
+  const audit = references.audit(text);
+  const bibliographyPath =
+    audit.citedKeys.length > 0 && references.list().length > 0
+      ? references.filePath
+      : undefined;
   const tempPath = path.join(
     path.dirname(outputPath),
     `.${path.basename(outputPath)}.${randomUUID()}.tmp${path.extname(outputPath)}`,
@@ -238,7 +245,10 @@ export async function exportDocumentFile(
       atomicWriteText(tempPath, text);
     } else if (format === 'pdf') {
       if (!renderPdf) throw new Error('PDF rendering is unavailable');
-      const prepared = await buildPdfPrintHtml(text, row.title, ctx.root, { signal });
+      const prepared = await buildPdfPrintHtml(text, row.title, ctx.root, {
+        signal,
+        bibliographyPath,
+      });
       const bytes = await renderPdf(prepared.html);
       if (!bytes.subarray(0, 5).equals(Buffer.from('%PDF-'))) {
         throw new Error('PDF rendering returned an invalid file');
@@ -246,11 +256,24 @@ export async function exportDocumentFile(
       fs.writeFileSync(tempPath, bytes, { flag: 'wx' });
       warnings = prepared.warnings;
     } else {
-      warnings = await writePandocExport(text, tempPath, format, ctx.root, signal);
+      warnings = await writePandocExport(
+        text,
+        tempPath,
+        format,
+        ctx.root,
+        signal,
+        bibliographyPath,
+      );
     }
     fs.renameSync(tempPath, outputPath);
-    if (/\[@[-\w]+/.test(text)) {
-      warnings.push('Citation markers were preserved where possible, but no bibliography was rendered because this project has no reference library yet.');
+    if (audit.unresolvedKeys.length > 0) {
+      warnings.push(
+        `Unresolved citation key(s): ${audit.unresolvedKeys.join(', ')}.`,
+      );
+    } else if (audit.citedKeys.length > 0 && !bibliographyPath) {
+      warnings.push(
+        'Citation markers were preserved, but no bibliography was rendered because the project reference library is empty.',
+      );
     }
     return { path: outputPath, format, warnings };
   } catch (error) {

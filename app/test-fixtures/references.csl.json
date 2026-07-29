@@ -1,0 +1,25 @@
+[
+  {
+    "id": "smith2024",
+    "type": "article-journal",
+    "title": "The Geometry of Attention",
+    "author": [
+      { "family": "Smith", "given": "Ada" },
+      { "family": "Jones", "given": "Lin" }
+    ],
+    "issued": { "date-parts": [[2024]] },
+    "container-title": "Journal of Useful Models",
+    "volume": "12",
+    "issue": "3",
+    "page": "10-24",
+    "DOI": "10.1000/attention"
+  },
+  {
+    "id": "ivanov2021",
+    "type": "book",
+    "title": "Writing with Evidence",
+    "author": [{ "family": "Ivanov", "given": "Pavel" }],
+    "issued": { "date-parts": [[2021]] },
+    "publisher": "Example Press"
+  }
+]

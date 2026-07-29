@@ -388,6 +388,9 @@ export default function AppShell({
         case 'edit:find':
           editor?.openSearch();
           break;
+        case 'edit:insert-citation':
+          editor?.openCitationPicker();
+          break;
         case 'view:command-palette':
           setPaletteOpen((v) => !v);
           break;

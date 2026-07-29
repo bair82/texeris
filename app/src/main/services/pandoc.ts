@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { jobRunner } from '../jobs/current';
+import type { CslReference } from '../../shared/reference-types';
 
 /** Kept in lockstep with scripts/prepare-pandoc.mjs and the packaged resource. */
 export const PANDOC_VERSION = '3.10';
@@ -104,11 +105,19 @@ export async function writePandocExport(
   format: Exclude<InterchangeFormat, 'markdown' | 'pdf'>,
   resourceRoot?: string,
   signal?: AbortSignal,
+  bibliographyPath?: string,
 ): Promise<string[]> {
   const pandoc = requirePandoc();
   await jobRunner().run(
     'pandoc-export',
-    { pandocPath: pandoc.path, markdown, outputPath, format, resourceRoot },
+    {
+      pandocPath: pandoc.path,
+      markdown,
+      outputPath,
+      format,
+      resourceRoot,
+      bibliographyPath,
+    },
     { signal },
   );
   return pandoc.kind === 'development-path'
@@ -120,11 +129,12 @@ export async function writePandocExport(
 export async function writePandocHtml(
   markdown: string,
   signal?: AbortSignal,
+  bibliographyPath?: string,
 ): Promise<{ html: string; warnings: string[] }> {
   const pandoc = requirePandoc();
   const { html } = await jobRunner().run<{ html: string }>(
     'pandoc-html',
-    { pandocPath: pandoc.path, markdown },
+    { pandocPath: pandoc.path, markdown, bibliographyPath },
     { signal },
   );
   return {
@@ -133,6 +143,22 @@ export async function writePandocHtml(
       ? ['Using a development Pandoc installation; packaged builds use the pinned Texeris converter.']
       : [],
   };
+}
+
+export async function importBibliography(
+  fileName: string,
+  format: 'bibtex' | 'ris',
+  signal?: AbortSignal,
+): Promise<CslReference[]> {
+  const pandoc = requirePandoc();
+  const { cslJson } = await jobRunner().run<{ cslJson: string }>(
+    'pandoc-reference-import',
+    { pandocPath: pandoc.path, fileName, format },
+    { signal },
+  );
+  const parsed = JSON.parse(cslJson) as unknown;
+  if (!Array.isArray(parsed)) throw new Error('reference converter returned invalid CSL JSON');
+  return parsed as CslReference[];
 }
 
 export interface PandocResolution {
