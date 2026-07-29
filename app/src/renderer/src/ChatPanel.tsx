@@ -621,7 +621,9 @@ export default function ChatPanel({
         {messages.map((m) => (
           <div
             key={m.seq}
-            className={`msg msg-${m.role}`}
+            className={`msg msg-${m.role}${
+              messageEdit?.seq === m.seq ? ' msg-editing' : ''
+            }`}
             data-context-message-seq={m.seq}
             data-context-message-role={m.role}
             data-context-message-editable={
