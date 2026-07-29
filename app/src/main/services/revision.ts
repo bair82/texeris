@@ -90,7 +90,7 @@ export class RevisionService {
       return doc.current_revision; // no-op change group, nothing to record
     }
     if (meta.actor === 'user' && meta.source.kind === 'typing') {
-      const amended = this.tryAmendTip(doc, newText, splices, meta);
+      const amended = this.tryAmendTip(doc, baseText, newText, splices, meta);
       if (amended !== null) {
         reconcileImageAssetsBestEffort(this.projectRoot, this.db);
         return amended;
@@ -318,6 +318,12 @@ export class RevisionService {
         this.db.exec('COMMIT');
       } catch (err) {
         this.db.exec('ROLLBACK');
+        // The canonical rename happens before the SQLite transaction. If the
+        // transaction fails while the process is still alive, put the file
+        // back immediately instead of waiting for startup reconciliation.
+        if (options.writeFile) {
+          atomicWriteText(this.filePath(doc), baseText);
+        }
         throw err;
       }
     } finally {
@@ -336,6 +342,7 @@ export class RevisionService {
    */
   private tryAmendTip(
     doc: DocumentRow,
+    baseText: string,
     newText: string,
     splices: readonly TextSplice[],
     meta: CommitMeta,
@@ -441,6 +448,7 @@ export class RevisionService {
         this.db.exec('COMMIT');
       } catch (err) {
         this.db.exec('ROLLBACK');
+        atomicWriteText(this.filePath(doc), baseText);
         throw err;
       }
     } finally {

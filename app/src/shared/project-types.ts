@@ -5,11 +5,12 @@ import { Type, type Static } from '@sinclair/typebox';
  * The renderer reloads itself on the project:changed broadcast.
  */
 
-export interface ProjectInfo {
-  root: string;
-  projectId: string;
-  mainDocument: string;
-}
+export const ProjectInfoSchema = Type.Object({
+  root: Type.String(),
+  projectId: Type.String(),
+  mainDocument: Type.String(),
+});
+export type ProjectInfo = Static<typeof ProjectInfoSchema>;
 
 export const ProjectCreateRequestSchema = Type.Object({
   parentDir: Type.String({ minLength: 1 }),

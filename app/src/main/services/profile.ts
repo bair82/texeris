@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { ActiveWritingProfile, ProfileActivateRequest } from '../../shared/profile-types';
+import { Value } from '@sinclair/typebox/value';
+import {
+  ActiveWritingProfileSchema,
+  type ActiveWritingProfile,
+  type ProfileActivateRequest,
+} from '../../shared/profile-types';
 import type { WritingProfileView } from '../../shared/settings-types';
 import type { ProjectContext } from './project';
 import type { WorkspaceConfig } from './settings';
@@ -61,9 +66,9 @@ export class WritingProfileService {
     const id = this.config.activeProfileId;
     if (!id) return null;
     try {
-      return JSON.parse(
+      return Value.Decode(ActiveWritingProfileSchema, JSON.parse(
         fs.readFileSync(path.join(this.dir, 'profiles', id, 'manifest.json'), 'utf8'),
-      ) as ActiveWritingProfile;
+      ));
     } catch {
       return null;
     }
@@ -81,7 +86,7 @@ export class WritingProfileService {
 
   read(kind: 'writing-profile' | 'writing-style-report' | 'intellectual-profile'): string | null {
     const id = this.config.activeProfileId;
-    if (!id) return null;
+    if (!id || this.active()?.id !== id) return null;
     const file = path.join(this.dir, 'profiles', id, `${kind}.md`);
     try {
       return fs.readFileSync(file, 'utf8');

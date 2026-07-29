@@ -5,21 +5,24 @@ import {
   IpcChannels,
   type TexerisApi,
 } from '../shared/ipc-contract';
-import { MenuCommandChannel } from '../shared/commands';
+import { MenuCommandChannel, MenuCommandSchema } from '../shared/commands';
 import {
   ChatChannels,
   type NormalizedAgentEvent,
 } from '../shared/chat-types';
-import { DocChannels, type DocEvent } from '../shared/doc-types';
-import { PatchChannels, type PatchProposedEvent } from '../shared/patch-types';
-import { SettingsChannels } from '../shared/settings-types';
-import type { AppearanceConfig } from '../shared/settings-types';
+import { DocChannels, DocEventSchema } from '../shared/doc-types';
+import { PatchChannels, PatchProposedEventSchema } from '../shared/patch-types';
+import { AppearanceConfigSchema, SettingsChannels } from '../shared/settings-types';
 import { UiChannels } from '../shared/ui-types';
-import { ProjectChannels, type ProjectInfo } from '../shared/project-types';
+import { ProjectChannels, ProjectInfoSchema } from '../shared/project-types';
 import { HistoryChannels } from '../shared/doc-types';
 import { CorpusChannels, ProfileChannels } from '../shared/profile-types';
-import { JobChannels, type JobEvent } from '../shared/job-types';
-import { ContextMenuChannels, type ContextActionEvent, type ContextDescribeRequest } from '../shared/context-menu-types';
+import { JobChannels, JobEventSchema } from '../shared/job-types';
+import {
+  ContextActionEventSchema,
+  ContextDescribeRequestSchema,
+  ContextMenuChannels,
+} from '../shared/context-menu-types';
 
 const api: TexerisApi = {
   async getAppInfo() {
@@ -29,7 +32,7 @@ const api: TexerisApi = {
   },
   onMenuCommand: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, id: unknown) => {
-      callback(id as string);
+      callback(Value.Decode(MenuCommandSchema, id));
     };
     ipcRenderer.on(MenuCommandChannel, listener);
     return () => {
@@ -38,14 +41,16 @@ const api: TexerisApi = {
   },
   contextMenu: {
     onDescribe: (callback) => {
-      const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => callback(payload as ContextDescribeRequest);
+      const listener = (_event: Electron.IpcRendererEvent, payload: unknown) =>
+        callback(Value.Decode(ContextDescribeRequestSchema, payload));
       ipcRenderer.on(ContextMenuChannels.describe, listener);
       return () => ipcRenderer.removeListener(ContextMenuChannels.describe, listener);
     },
     reply: (requestId, context) => ipcRenderer.invoke(ContextMenuChannels.reply, { requestId, context }),
     show: (context, x, y) => ipcRenderer.invoke(ContextMenuChannels.show, { context, x, y }),
     onAction: (callback) => {
-      const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => callback(payload as ContextActionEvent);
+      const listener = (_event: Electron.IpcRendererEvent, payload: unknown) =>
+        callback(Value.Decode(ContextActionEventSchema, payload));
       ipcRenderer.on(ContextMenuChannels.action, listener);
       return () => ipcRenderer.removeListener(ContextMenuChannels.action, listener);
     },
@@ -84,7 +89,7 @@ const api: TexerisApi = {
     cancel: (jobId) => ipcRenderer.invoke(JobChannels.cancel, { jobId }),
     onEvent: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
-        callback(payload as JobEvent);
+        callback(Value.Decode(JobEventSchema, payload));
       };
       ipcRenderer.on(JobChannels.event, listener);
       return () => {
@@ -119,7 +124,7 @@ const api: TexerisApi = {
       ipcRenderer.invoke(DocChannels.deleteTrash, { documentId }),
     onEvent: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
-        callback(payload as DocEvent);
+        callback(Value.Decode(DocEventSchema, payload));
       };
       ipcRenderer.on(DocChannels.event, listener);
       return () => {
@@ -136,7 +141,7 @@ const api: TexerisApi = {
       ipcRenderer.invoke(PatchChannels.reject, { patchId, groupIds }),
     onEvent: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
-        callback(payload as PatchProposedEvent);
+        callback(Value.Decode(PatchProposedEventSchema, payload));
       };
       ipcRenderer.on(PatchChannels.event, listener);
       return () => {
@@ -160,7 +165,7 @@ const api: TexerisApi = {
       ipcRenderer.invoke(SettingsChannels.disableWritingProfile),
     onAppearanceChanged: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
-        callback(payload as AppearanceConfig);
+        callback(Value.Decode(AppearanceConfigSchema, payload));
       };
       ipcRenderer.on(SettingsChannels.appearanceChanged, listener);
       return () => {
@@ -182,7 +187,7 @@ const api: TexerisApi = {
       ipcRenderer.invoke(ProjectChannels.create, { parentDir, name }),
     onChanged: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
-        callback(payload as ProjectInfo);
+        callback(Value.Decode(ProjectInfoSchema, payload));
       };
       ipcRenderer.on(ProjectChannels.changed, listener);
       return () => {

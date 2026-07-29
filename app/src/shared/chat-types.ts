@@ -3,8 +3,9 @@ import { Type, type Static } from '@sinclair/typebox';
 /**
  * Chat/agent domain + IPC types shared by main, preload, and renderer.
  * Request payloads (renderer → main) are validated in main against these
- * schemas; events (main → renderer) originate in the trusted process and
- * are not re-validated.
+ * schemas. Streaming chat events originate in trusted main code and carry
+ * display content only; any later renderer request is validated again by
+ * main.
  */
 
 export type ModelMode = 'fast' | 'deep';

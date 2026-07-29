@@ -284,8 +284,16 @@ Work packages, in order:
    fed by a self-contained prepared artifact. Add progress/cancel/error status.
 5. **Fault injection:** test DB failure after file rename, interrupted export,
    missing source/cache, corrupted profile manifest, and startup reconciliation.
+   **Resolved 2026-07-29:** a failed revision transaction now restores the
+   canonical file immediately (including typing-tip amendments); focused tests
+   cover that split point, interrupted export cleanup, malformed profile
+   manifests, missing/tampered corpus derivatives, and startup reconciliation.
 6. **Contract hardening:** validate security-relevant IPC responses/events or
    narrow the documented guarantee to the actual boundary.
+   **Resolved 2026-07-29:** renderer requests remain runtime-decoded in main;
+   preload now decodes main push events that trigger actions or state changes.
+   Trusted invoke responses and display-only chat streams remain statically
+   typed, and the architecture now states that boundary explicitly.
 7. **Daily editor reliability:** fix active-document outline refresh; implement
    the app-level spellchecker after deciding initial languages and dictionary
    distribution; expose revision restore as the cross-session undo story.

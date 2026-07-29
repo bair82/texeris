@@ -109,9 +109,18 @@ export interface DocText {
 }
 
 /** main → renderer push events about external file changes (plan §8). */
-export type DocEvent =
-  | { type: 'external-import'; documentId: string; revision: number }
-  | { type: 'external-conflict'; documentId: string };
+export const DocEventSchema = Type.Union([
+  Type.Object({
+    type: Type.Literal('external-import'),
+    documentId: Type.String(),
+    revision: Type.Integer({ minimum: 1 }),
+  }),
+  Type.Object({
+    type: Type.Literal('external-conflict'),
+    documentId: Type.String(),
+  }),
+]);
+export type DocEvent = Static<typeof DocEventSchema>;
 
 export interface HeadingInfo {
   level: number;

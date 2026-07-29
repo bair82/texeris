@@ -44,8 +44,18 @@ export const ContextShowRequestSchema = Type.Object({
   y: Type.Integer(),
 });
 
-export interface ContextDescribeRequest { requestId: string; x: number; y: number }
-export interface ContextActionEvent { action: ContextAction; context: ContextDescriptor }
+export const ContextDescribeRequestSchema = Type.Object({
+  requestId: Type.String(),
+  x: Type.Integer(),
+  y: Type.Integer(),
+});
+export type ContextDescribeRequest = Static<typeof ContextDescribeRequestSchema>;
+
+export const ContextActionEventSchema = Type.Object({
+  action: ContextActionSchema,
+  context: ContextDescriptorSchema,
+});
+export type ContextActionEvent = Static<typeof ContextActionEventSchema>;
 
 export const ContextMenuChannels = {
   describe: 'texeris:context-menu-describe',

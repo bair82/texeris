@@ -396,7 +396,13 @@ type AppRequest =
   | { type: "export.run"; input: ExportInput };
 ```
 
-Validate IPC payloads at runtime. TypeScript types alone do not protect a process boundary.
+Treat renderer-to-main requests as untrusted and decode them at runtime in
+main; TypeScript types alone do not protect that process boundary. Decode
+main-to-renderer push events in preload when they trigger renderer actions or
+state changes. Ordinary invoke responses and streaming chat display events
+originate in trusted main code and remain statically typed; any renderer
+request they lead to is decoded again in main. This is the current trust model,
+not a claim that every value crossing IPC is redundantly decoded.
 
 ## 7.5 Native context menus
 
@@ -1416,7 +1422,8 @@ Security is not the initial product differentiator, but several defaults prevent
 
 - Enable renderer sandboxing and context isolation in Electron.
 - Expose only the required preload APIs.
-- Validate all IPC payloads.
+- Runtime-validate untrusted renderer requests and action/state push events at
+  their receiving boundary.
 - Keep provider credentials outside project files.
 - Treat imported HTML/web content as untrusted text.
 - Do not render arbitrary source HTML with application privileges.
