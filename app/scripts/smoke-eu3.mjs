@@ -202,7 +202,7 @@ try {
     });
     return true;
   })()`);
-  await evaluate(`[...document.querySelectorAll('.msg-user .msg-actions button')].find(b => b.textContent === 'edit').click(); true`);
+  await evaluate(`document.querySelector('.msg-user .msg-actions button[aria-label="Edit message"]').click(); true`);
   await waitFor(`!!document.querySelector('.message-edit textarea')`, 'message editor did not open');
   check(
     'edit warning previews a conversation branch and document restore',
