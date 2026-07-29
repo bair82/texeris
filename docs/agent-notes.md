@@ -236,3 +236,10 @@ restores its exact document boundary, and resends the unchanged prompt with its
 original mode/scope. The original answer, run, and patches remain preserved;
 the new branch is labelled `regenerated`. Typecheck, 222 tests, production
 build, EU3 edit/regenerate management, and EU5 native-menu smokes pass.
+
+**codex, 2026-07-29** — the chat header now has stable visual hierarchy:
+conversation identity plus New/Usage icons on the first row, model and context
+scope on the second, and an optional one-line context manifest below. Edited
+and regenerated suffixes render as branch badges rather than title text. EU3
+guards row geometry, usage toggling, branch badges, and the existing
+conversation lifecycle; typecheck, 222 tests, build, and EU5 remain green.

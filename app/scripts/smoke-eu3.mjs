@@ -116,6 +116,24 @@ try {
     'main document is marked',
     await evaluate(`!!document.querySelector('.nav-main-dot')`),
   );
+  check(
+    'chat header keeps conversation and context on distinct rows',
+    await evaluate(`(() => {
+      const header = document.querySelector('.chat-header').getBoundingClientRect();
+      const primary = document.querySelector('.chat-header-primary').getBoundingClientRect();
+      const context = document.querySelector('.chat-header-context').getBoundingClientRect();
+      return primary.bottom < context.top &&
+        primary.left >= header.left && primary.right <= header.right &&
+        context.left >= header.left && context.right <= header.right;
+    })()`),
+  );
+  await evaluate(
+    `document.querySelector('.chat-header-icon[aria-label="Usage records"]').click(); true`,
+  );
+  check('usage icon toggles the usage panel', await evaluate(`!!document.querySelector('.usage-panel')`));
+  await evaluate(
+    `document.querySelector('.chat-header-icon[aria-label="Usage records"]').click(); true`,
+  );
 
   // create a second document through the nav
   await evaluate(`document.querySelector('.nav-action:not(.import-action)').click(); true`);
@@ -275,6 +293,12 @@ try {
       regeneratedConversations.some(title => title.includes('(regenerated)')),
     JSON.stringify(regeneratedConversations),
   );
+  check(
+    'active conversation shows its branch as a badge',
+    await evaluate(
+      `document.querySelector('.conv-branch')?.textContent === 'regenerated'`,
+    ),
+  );
 
   // trash the duplicate
   await evaluate(withDocument('journal copy.md', 'trash'));
@@ -298,7 +322,7 @@ try {
   // start a new chat, then reopen the renamed one. (Synthetic .click() emits
   // no mousedown, so the picker's outside-click close never fires here —
   // open it idempotently instead of toggling.)
-  await evaluate(`[...document.querySelectorAll('.usage-toggle')].find(b => b.textContent === 'new chat').click(); true`);
+  await evaluate(`document.querySelector('.chat-header-icon[aria-label="New conversation"]').click(); true`);
   await sleep(400);
   check(
     'new chat starts empty',
