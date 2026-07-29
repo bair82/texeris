@@ -13,6 +13,7 @@ import {
 import HistoryPanel from './HistoryPanel';
 import SearchPanel from './SearchPanel';
 import Toolbar from './Toolbar';
+import CitationPicker from './CitationPicker';
 
 type SaveState = 'loading' | 'saved' | 'dirty' | 'saving' | 'error';
 
@@ -113,6 +114,9 @@ export default function EditorRegion({
   const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [citationPicker, setCitationPicker] = useState<
+    { mode: 'insert' } | { mode: 'replace'; position: number } | null
+  >(null);
   const [wordCount, setWordCount] = useState<number | null>(null);
   const [selStats, setSelStats] = useState<{ words: number; chars: number } | null>(null);
   const lastCountedTextRef = useRef<string | null>(null);
@@ -329,6 +333,7 @@ export default function EditorRegion({
       undo: () => sessionRef.current?.undo() ?? false,
       redo: () => sessionRef.current?.redo() ?? false,
       openSearch: () => setSearchOpen(true),
+      openCitationPicker: () => setCitationPicker({ mode: 'insert' }),
       toggleHistory: () => setShowHistory((v) => !v),
       toggleMode: () =>
         switchModeRef.current(modeRef.current === 'rendered' ? 'raw' : 'rendered'),
@@ -432,15 +437,46 @@ export default function EditorRegion({
   return (
     <section
       className="editor-region"
+      onDoubleClick={(event) => {
+        const target =
+          event.target instanceof Element ? event.target.closest('.cite') : null;
+        if (mode === 'rendered' && target && activeEditor) {
+          const position = activeEditor.view.posAtDOM(target, 0);
+          setCitationPicker({ mode: 'replace', position });
+        }
+      }}
       onKeyDownCapture={(e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
           e.preventDefault();
           setSearchOpen(true);
+        } else if (
+          (e.ctrlKey || e.metaKey) &&
+          e.shiftKey &&
+          e.key.toLowerCase() === 'c'
+        ) {
+          e.preventDefault();
+          setCitationPicker({ mode: 'insert' });
         }
       }}
     >
-      {activeEditor && <Toolbar editor={activeEditor} />}
+      {activeEditor && (
+        <Toolbar editor={activeEditor} onCite={() => setCitationPicker({ mode: 'insert' })} />
+      )}
       <div className="editor-host" ref={hostRef} />
+      {citationPicker && (
+        <CitationPicker
+          markdown={sessionRef.current?.getText() ?? ''}
+          replacing={citationPicker.mode === 'replace'}
+          onInsert={(key) => {
+            if (citationPicker.mode === 'replace') {
+              sessionRef.current?.replaceCitation(citationPicker.position, key);
+            } else {
+              sessionRef.current?.insertCitation(key);
+            }
+          }}
+          onClose={() => setCitationPicker(null)}
+        />
+      )}
       {showHistory && openDocId && <HistoryPanel documentId={openDocId} />}
       {searchOpen && sessionRef.current && (
         <SearchPanel session={sessionRef.current} onClose={() => setSearchOpen(false)} />

@@ -84,10 +84,16 @@ import { addImageAsset } from './services/assets';
 import { createDocument, ensureDocument } from './services/project';
 import { CorpusChannels, CorpusDeleteRequestSchema, ProfileBeginRequestSchema, ProfileChannels } from '../shared/profile-types';
 import { JobCancelRequestSchema, JobChannels, type JobEvent } from '../shared/job-types';
+import {
+  ReferenceAuditRequestSchema,
+  ReferenceChannels,
+  ReferenceSearchRequestSchema,
+} from '../shared/reference-types';
 import type { CorpusService } from './services/corpus';
 import type { WritingProfileService } from './services/profile';
 import { printHtmlToPdf } from './pdfExport';
 import { isCancellation } from './jobs/runner';
+import { ReferenceService } from './services/references';
 
 export interface IpcDeps {
   requireProject(): ProjectContext;
@@ -260,6 +266,40 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   ipcMain.handle(ChatChannels.listDelegations, (_event, raw: unknown) => {
     const req = Value.Decode(ConversationRequestSchema, raw);
     return deps.requireConversations().listDelegations(req.conversationId);
+  });
+
+  ipcMain.handle(ReferenceChannels.list, () =>
+    new ReferenceService(deps.requireProject()).list(),
+  );
+  ipcMain.handle(ReferenceChannels.search, (_event, raw: unknown) => {
+    const req = Value.Decode(ReferenceSearchRequestSchema, raw);
+    return new ReferenceService(deps.requireProject()).search(
+      req.query,
+      req.limit,
+    );
+  });
+  ipcMain.handle(ReferenceChannels.audit, (_event, raw: unknown) => {
+    const req = Value.Decode(ReferenceAuditRequestSchema, raw);
+    return new ReferenceService(deps.requireProject()).audit(req.markdown);
+  });
+  ipcMain.handle(ReferenceChannels.importDialog, async (event) => {
+    let sourcePath =
+      process.env.TEXERIS_SMOKE === '1'
+        ? process.env.TEXERIS_REFERENCE_IMPORT_PATH
+        : undefined;
+    if (!sourcePath) {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      const result = await dialog.showOpenDialog(win!, {
+        title: 'Import references',
+        filters: [
+          { name: 'Bibliography', extensions: ['json', 'bib', 'bibtex', 'ris'] },
+        ],
+        properties: ['openFile'],
+      });
+      if (result.canceled || result.filePaths.length === 0) return null;
+      sourcePath = result.filePaths[0];
+    }
+    return new ReferenceService(deps.requireProject()).importFile(sourcePath);
   });
 
   ipcMain.handle(ChatChannels.previewMessageEdit, (_event, raw: unknown) => {

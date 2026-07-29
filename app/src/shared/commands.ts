@@ -28,6 +28,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   { id: 'edit:undo', section: 'Edit', title: 'Undo', shortcutHint: 'Ctrl+Z in editor' },
   { id: 'edit:redo', section: 'Edit', title: 'Redo', shortcutHint: 'Ctrl+Shift+Z in editor' },
   { id: 'edit:find', section: 'Edit', title: 'Find in Document', accelerator: 'CmdOrCtrl+F' },
+  { id: 'edit:insert-citation', section: 'Edit', title: 'Insert Citation…', accelerator: 'CmdOrCtrl+Shift+C' },
 
   { id: 'view:command-palette', section: 'View', title: 'Command Palette', accelerator: 'CmdOrCtrl+K', shortcutHint: 'Ctrl+K / Ctrl+P' },
   { id: 'view:toggle-mode', section: 'View', title: 'Toggle Rendered / Raw', accelerator: 'CmdOrCtrl+E' },

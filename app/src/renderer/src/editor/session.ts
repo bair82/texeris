@@ -73,6 +73,10 @@ export interface EditorSession {
   /** Editor-local undo/redo (per-session history; lost on session swap). */
   undo(): boolean;
   redo(): boolean;
+  /** Insert a canonical Pandoc citation marker at the current selection. */
+  insertCitation(key: string): void;
+  /** Replace a rendered citation atom at its ProseMirror position. */
+  replaceCitation(position: number, key: string): void;
   focus(): void;
   prepareContextAt(x: number, y: number): { image: boolean; canUndo: boolean; canRedo: boolean };
   contextAction(action: string): boolean;
@@ -323,6 +327,51 @@ export class RenderedSession implements EditorSession {
 
   flush(): void {
     this.accumulator.flush();
+  }
+
+  insertCitation(key: string): void {
+    const raw = `[@${key}]`;
+    this.editor
+      .chain()
+      .focus()
+      .insertContent({
+        type: 'citation',
+        attrs: {
+          raw,
+          items: [{ suppressAuthor: false, key, suffix: '' }],
+        },
+      })
+      .run();
+  }
+
+  replaceCitation(position: number, key: string): void {
+    const raw = `[@${key}]`;
+    let citationPosition: number | null = null;
+    let distance = Number.POSITIVE_INFINITY;
+    this.editor.state.doc.descendants((node, nodePosition) => {
+      if (node.type.name !== 'citation') return;
+      const nextDistance = Math.abs(nodePosition - position);
+      if (nextDistance < distance) {
+        distance = nextDistance;
+        citationPosition = nodePosition;
+      }
+    });
+    if (citationPosition === null) {
+      this.insertCitation(key);
+      return;
+    }
+    const replacement = this.editor.state.schema.nodes.citation.create({
+      raw,
+      items: [{ suppressAuthor: false, key, suffix: '' }],
+    });
+    this.editor.view.dispatch(
+      this.editor.state.tr.replaceWith(
+        citationPosition,
+        citationPosition + 1,
+        replacement,
+      ),
+    );
+    this.editor.view.focus();
   }
 
   setHighlights(ranges: HighlightRange[]): void {
@@ -705,6 +754,20 @@ export class RawSession implements EditorSession {
 
   flush(): void {
     this.accumulator.flush();
+  }
+
+  insertCitation(key: string): void {
+    const marker = `[@${key}]`;
+    const { from, to } = this.view.state.selection.main;
+    this.view.dispatch({
+      changes: { from, to, insert: marker },
+      selection: { anchor: from + marker.length },
+    });
+    this.view.focus();
+  }
+
+  replaceCitation(_position: number, key: string): void {
+    this.insertCitation(key);
   }
 
   setHighlights(ranges: HighlightRange[]): void {

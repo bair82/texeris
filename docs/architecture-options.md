@@ -430,7 +430,7 @@ Example:
 my-paper/
   manuscript.md
   notes.md
-  references.json
+  references.csl.json
   style.md
   sources/
   .scholar-workspace/
@@ -1060,15 +1060,18 @@ The underlying document remains text. Clicking a marker can open a reference pop
 
 CSL JSON is a strong default for structured reference records because Pandoc and CSL processors can consume it.
 
-Possible arrangement:
+Implemented arrangement:
 
 ```text
-references.json
+references.csl.json
 ```
 
-or one reference table in SQLite with export to CSL JSON. The choice depends on whether file portability or transactional editing matters more.
-
-A hybrid is possible: JSON is the project interchange file; SQLite is the indexed working representation.
+**Outcome (2026-07-30):** the project-root CSL JSON file is canonical and
+user-inspectable. SQLite’s `reference_index` is only a rebuildable search
+projection; a content hash detects external edits and repairs the index before
+reads. Imports preserve complete CSL records in the canonical file. This keeps
+Pandoc interoperability and recovery independent of Texeris while retaining
+fast local search.
 
 ## 16.4 Parsing and validation
 

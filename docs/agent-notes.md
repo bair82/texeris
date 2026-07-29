@@ -243,3 +243,14 @@ scope on the second, and an optional one-line context manifest below. Edited
 and regenerated suffixes render as branch badges rather than title text. EU3
 guards row geometry, usage toggling, branch badges, and the existing
 conversation lifecycle; typecheck, 222 tests, build, and EU5 remain green.
+
+**codex, 2026-07-30** — implemented the first coherent G2 references slice.
+The project-root `references.csl.json` is canonical and SQLite is a rebuildable
+search projection. One Cite palette handles empty-library import, search, and
+insertion; rendered markers can be double-clicked and replaced through the same
+flow, while raw mode inserts the same Pandoc syntax through the command
+shortcut. CSL JSON, BibTeX, and RIS import preserve converted records and report
+duplicates/key conflicts. PDF and office export now invoke citeproc
+automatically and warn on unresolved keys. A dedicated Electron smoke covers
+BibTeX import, rendered/raw insertion, replacement, and bibliography-bearing PDF
+round-trip. Reference-detail editing and export-time CSL style selection remain.

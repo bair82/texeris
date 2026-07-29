@@ -93,6 +93,32 @@ describe('job tasks', () => {
     expect(result.markdown).toContain('Body paragraph text.');
   });
 
+  it.skipIf(!pandoc)('converts BibTeX and RIS bibliographies to CSL JSON', async () => {
+    const fixtures = path.resolve(import.meta.dirname, '../../../test-fixtures');
+    for (const [fileName, format] of [
+      ['references.bib', 'bibtex'],
+      ['references.ris', 'ris'],
+    ] as const) {
+      const result = (await runTask('pandoc-reference-import', {
+        pandocPath: pandoc!,
+        fileName: path.join(fixtures, fileName),
+        format,
+      })) as { cslJson: string };
+      const records = JSON.parse(result.cslJson) as Array<{
+        id: string;
+        title: string;
+      }>;
+      expect(records).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'smith2024',
+            title: 'The Geometry of Attention',
+          }),
+        ]),
+      );
+    }
+  });
+
   it.skipIf(!pandoc)('prepares sanitized print HTML with inlined images via pdf-prepare-html', async () => {
     const relative = 'assets/paper/media/figure.png';
     fs.mkdirSync(path.dirname(path.join(root, relative)), { recursive: true });

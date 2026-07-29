@@ -227,4 +227,19 @@ export const migrations: ReadonlyArray<(db: DatabaseSync) => void> = [
       WHERE messages.role = 'user';
     `);
   },
+  // 0006: rebuildable search index for the canonical project CSL JSON file.
+  (db) => {
+    db.exec(`
+      CREATE TABLE reference_index(
+        citation_key TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        authors TEXT NOT NULL,
+        issued_year TEXT NOT NULL,
+        doi TEXT,
+        record_json TEXT NOT NULL
+      );
+      CREATE INDEX idx_reference_title ON reference_index(title);
+      CREATE INDEX idx_reference_authors ON reference_index(authors);
+    `);
+  },
 ];

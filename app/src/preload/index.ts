@@ -23,6 +23,7 @@ import {
   ContextDescribeRequestSchema,
   ContextMenuChannels,
 } from '../shared/context-menu-types';
+import { ReferenceChannels } from '../shared/reference-types';
 
 const api: TexerisApi = {
   async getAppInfo() {
@@ -54,6 +55,14 @@ const api: TexerisApi = {
       ipcRenderer.on(ContextMenuChannels.action, listener);
       return () => ipcRenderer.removeListener(ContextMenuChannels.action, listener);
     },
+  },
+  references: {
+    list: () => ipcRenderer.invoke(ReferenceChannels.list),
+    search: (query, limit) =>
+      ipcRenderer.invoke(ReferenceChannels.search, { query, limit }),
+    importDialog: () => ipcRenderer.invoke(ReferenceChannels.importDialog),
+    audit: (markdown) =>
+      ipcRenderer.invoke(ReferenceChannels.audit, { markdown }),
   },
   chat: {
     getOrCreateConversation: () =>
