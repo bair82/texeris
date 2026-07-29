@@ -1164,6 +1164,12 @@ body.col-resizing {
   max-width: 100%;
 }
 
+.regenerate-confirm {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
 .message-edit textarea {
   box-sizing: border-box;
   width: 100%;

@@ -180,6 +180,9 @@ export type ConversationRequest = Static<typeof ConversationRequestSchema>;
 export const EditMessageRequestSchema = Type.Object({
   conversationId: Type.String(),
   messageSeq: Type.Integer({ minimum: 1 }),
+  reason: Type.Optional(
+    Type.Union([Type.Literal('edit'), Type.Literal('regenerate')]),
+  ),
 });
 export type EditMessageRequest = Static<typeof EditMessageRequestSchema>;
 

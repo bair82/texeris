@@ -79,6 +79,7 @@ export function forkMessage(
   conversations: ConversationService,
   conversationId: string,
   messageSeq: number,
+  reason: 'edit' | 'regenerate' = 'edit',
 ): ForkMessageResult {
   const preview = previewMessageEdit(
     project,
@@ -86,7 +87,11 @@ export function forkMessage(
     conversationId,
     messageSeq,
   );
-  const forkId = conversations.forkAtUserMessage(conversationId, messageSeq);
+  const forkId = conversations.forkAtUserMessage(
+    conversationId,
+    messageSeq,
+    reason,
+  );
   try {
     const restoredRevision = project.revisions.restoreBoundary(
       preview.documentId,

@@ -38,6 +38,7 @@ export function describeContextAt(x: number, y: number): ContextDescriptor {
         ? message.dataset.contextMessageRole
         : 'tool',
     editable: message.dataset.contextMessageEditable === 'true',
+    regeneratable: message.dataset.contextMessageRegeneratable === 'true',
   };
   if (element?.closest('.editor-host')) {
     return getEditorCommands()?.contextAt(x, y) ?? { kind: 'generic' };

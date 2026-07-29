@@ -28,6 +28,7 @@ export const ContextDescriptorSchema = Type.Union([
       Type.Literal('tool'),
     ]),
     editable: Type.Boolean(),
+    regeneratable: Type.Boolean(),
   }),
 ]);
 export type ContextDescriptor = Static<typeof ContextDescriptorSchema>;
@@ -40,7 +41,7 @@ export const ContextActionSchema = Type.Union([
   Type.Literal('document:set-main'), Type.Literal('document:trash'),
   Type.Literal('conversation:open'), Type.Literal('conversation:rename'),
   Type.Literal('conversation:delete'), Type.Literal('message:copy'),
-  Type.Literal('message:edit'),
+  Type.Literal('message:edit'), Type.Literal('message:regenerate'),
 ]);
 export type ContextAction = Static<typeof ContextActionSchema>;
 

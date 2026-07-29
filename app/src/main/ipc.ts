@@ -280,6 +280,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       deps.requireConversations(),
       req.conversationId,
       req.messageSeq,
+      req.reason ?? 'edit',
     );
   });
 

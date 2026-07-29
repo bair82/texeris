@@ -92,17 +92,20 @@ describe('native context menu model', () => {
 
   it('validates every renderer context discriminator', () => {
     expect(Value.Check(ContextDescriptorSchema, {
-      kind: 'message', seq: 4, role: 'user', editable: true,
+      kind: 'message', seq: 4, role: 'user', editable: true, regeneratable: false,
     })).toBe(true);
     expect(Value.Check(ContextDescriptorSchema, { kind: 'document', documentId: 'd' })).toBe(false);
   });
 
   it('offers Edit Message only for user messages', () => {
     expect(labels(contextMenuTemplate(sender, {
-      kind: 'message', seq: 1, role: 'user', editable: true,
+      kind: 'message', seq: 1, role: 'user', editable: true, regeneratable: false,
     }))).toEqual(['Edit Message…', 'Copy Message']);
     expect(labels(contextMenuTemplate(sender, {
-      kind: 'message', seq: 2, role: 'assistant', editable: false,
+      kind: 'message', seq: 2, role: 'assistant', editable: false, regeneratable: true,
+    }))).toEqual(['Regenerate Response…', 'Copy Message']);
+    expect(labels(contextMenuTemplate(sender, {
+      kind: 'message', seq: 3, role: 'assistant', editable: false, regeneratable: false,
     }))).toEqual(['Copy Message']);
   });
 });

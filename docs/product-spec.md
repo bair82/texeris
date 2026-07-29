@@ -595,6 +595,8 @@ Example names:
 - Edit a persisted user message by creating a non-destructive conversation
   branch and restoring the scoped document to the exact context that message
   originally saw.
+- Regenerate the latest completed AI response through the same branch-and-
+  restore model, preserving the original response and its patches.
 
 ### Likely
 

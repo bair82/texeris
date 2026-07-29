@@ -117,6 +117,11 @@ export function contextMenuTemplate(
     if (context.role === 'user' && context.editable) {
       items.push(actionItem(sender, context, 'Edit Message…', 'message:edit'));
     }
+    if (context.role === 'assistant' && context.regeneratable) {
+      items.push(
+        actionItem(sender, context, 'Regenerate Response…', 'message:regenerate'),
+      );
+    }
     items.push(actionItem(sender, context, 'Copy Message', 'message:copy'));
   }
   if (items.at(-1)?.type === 'separator') items.pop();
