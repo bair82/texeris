@@ -264,13 +264,17 @@ export class ConversationService {
    * conversation. Runs, delegations, patches, and corpus grants remain owned
    * by the original conversation.
    */
-  forkAtUserMessage(conversationId: string, messageSeq: number): string {
+  forkAtUserMessage(
+    conversationId: string,
+    messageSeq: number,
+    reason: 'edit' | 'regenerate' = 'edit',
+  ): string {
     const boundary = this.messageEditBoundary(conversationId, messageSeq);
     const id = randomUUID();
     const createdAt = new Date().toISOString();
-    const title = boundary.title.endsWith(' (edited)')
-      ? boundary.title
-      : `${boundary.title} (edited)`;
+    const suffix = reason === 'regenerate' ? 'regenerated' : 'edited';
+    const titleBase = boundary.title.replace(/ \((edited|regenerated)\)$/, '');
+    const title = `${titleBase} (${suffix})`;
     const messages = this.db
       .prepare(
         `SELECT seq, role, payload_json, created_at, turn_context_json

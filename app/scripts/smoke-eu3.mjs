@@ -32,7 +32,7 @@ try {
     env: {
       ...process.env,
       TEXERIS_FAUX_PROVIDER: '1',
-      TEXERIS_FAUX_REPEAT: '2',
+      TEXERIS_FAUX_REPEAT: '3',
       TEXERIS_PROJECT_DIR: projectDir,
       ELECTRON_ENABLE_LOGGING: '1',
       TEXERIS_SMOKE: '1',
@@ -246,6 +246,34 @@ try {
     'edit restores the exact pre-message document boundary',
     rewindState.text === '# Copy heading\n',
     JSON.stringify(rewindState.text),
+  );
+
+  // Regenerating the latest completed answer reuses the same turn through a
+  // distinct branch and keeps the prior response available.
+  await evaluate(`document.querySelector('.msg-assistant .msg-actions button[aria-label="Regenerate response"]').click(); true`);
+  await waitFor(
+    `!!document.querySelector('.regenerate-confirm')`,
+    'regenerate confirmation did not appear',
+  );
+  check(
+    'regenerate explains branch preservation',
+    (await evaluate(`document.querySelector('.regenerate-confirm').textContent`))
+      .includes('original response remains available'),
+  );
+  await evaluate(`[...document.querySelectorAll('.regenerate-confirm .message-edit-actions button')].find(b => b.textContent === 'Regenerate').click(); true`);
+  await waitFor(
+    `[...document.querySelectorAll('.msg-assistant')].some(m => m.textContent.includes('scripted offline response'))`,
+    'regenerated assistant answer never arrived',
+    80,
+  );
+  const regeneratedConversations = await evaluate(
+    `(async () => (await window.texeris.chat.listConversations()).map(c => c.title))()`,
+  );
+  check(
+    'regenerate creates a preserved conversation branch',
+    regeneratedConversations.length === 3 &&
+      regeneratedConversations.some(title => title.includes('(regenerated)')),
+    JSON.stringify(regeneratedConversations),
   );
 
   // trash the duplicate

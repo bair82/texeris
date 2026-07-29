@@ -228,3 +228,11 @@ remain intact; skill conversations and unsafe legacy boundaries are rejected.
 Pending editor typing is committed before preview or rewind. Typecheck, 222
 tests, production build, EU3 rewind/management, EU5 native menus, and editor
 persistence smokes pass. Checkpoint-linked conversation rewind remains deferred.
+
+**codex, 2026-07-29** — the latest completed assistant response now offers
+Regenerate in its hover toolbar and native context menu. A compact confirmation
+uses the existing rewind preview, then branches at the preceding user message,
+restores its exact document boundary, and resends the unchanged prompt with its
+original mode/scope. The original answer, run, and patches remain preserved;
+the new branch is labelled `regenerated`. Typecheck, 222 tests, production
+build, EU3 edit/regenerate management, and EU5 native-menu smokes pass.

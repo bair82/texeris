@@ -85,6 +85,7 @@ export interface TexerisApi {
     forkMessage(
       conversationId: string,
       messageSeq: number,
+      reason?: 'edit' | 'regenerate',
     ): Promise<ForkMessageResult>;
     startTurn(request: StartTurnRequest): Promise<{ runId: string }>;
     cancel(runId: string): Promise<{ cancelled: boolean }>;

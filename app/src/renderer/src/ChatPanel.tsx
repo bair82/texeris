@@ -5,6 +5,7 @@ import type {
   ContextScope,
   ConversationListItem,
   EditMessagePreview,
+  ForkMessageResult,
   ModelMode,
   NormalizedAgentEvent,
   UiMessage,
@@ -43,7 +44,46 @@ interface MessageEditState {
   submitting: boolean;
 }
 
-function MessageActionIcon({ kind }: { kind: 'edit' | 'copy' | 'check' }) {
+interface RegenerateState {
+  assistantSeq: number;
+  userSeq: number;
+  text: string;
+  preview: EditMessagePreview;
+  showDiff: boolean;
+  submitting: boolean;
+}
+
+function latestRegeneratableTurn(messages: UiMessage[]) {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message.seq < 1 || message.role === 'tool') continue;
+    if (message.role !== 'assistant') return null;
+    for (let j = i - 1; j >= 0; j -= 1) {
+      const user = messages[j];
+      if (user.seq > 0 && user.role === 'user') {
+        return { assistantSeq: message.seq, user };
+      }
+    }
+    return null;
+  }
+  return null;
+}
+
+function rewindDescription(preview: EditMessagePreview): string {
+  if (!preview.documentChanged) {
+    return `${preview.documentPath} already matches that turn`;
+  }
+  if (preview.currentRevision === preview.targetRevision) {
+    return `restores ${preview.documentPath} to an earlier saved boundary within revision ${preview.targetRevision}`;
+  }
+  return `restores ${preview.documentPath} from revision ${preview.currentRevision} to its state at revision ${preview.targetRevision}`;
+}
+
+function MessageActionIcon({
+  kind,
+}: {
+  kind: 'edit' | 'copy' | 'check' | 'regenerate';
+}) {
   if (kind === 'edit') {
     return (
       <svg viewBox="0 0 20 20" aria-hidden="true">
@@ -55,6 +95,14 @@ function MessageActionIcon({ kind }: { kind: 'edit' | 'copy' | 'check' }) {
     return (
       <svg viewBox="0 0 20 20" aria-hidden="true">
         <path d="m4 10.5 3.5 3.5L16 5.5" />
+      </svg>
+    );
+  }
+  if (kind === 'regenerate') {
+    return (
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        <path d="M15.5 7A6 6 0 1 0 16 12" />
+        <path d="M12.5 3.5h3.5V7" />
       </svg>
     );
   }
@@ -102,6 +150,7 @@ export default function ChatPanel({
   const [lastTurn, setLastTurn] = useState<LastTurn | null>(null);
   const [copiedSeq, setCopiedSeq] = useState<number | null>(null);
   const [messageEdit, setMessageEdit] = useState<MessageEditState | null>(null);
+  const [regenerate, setRegenerate] = useState<RegenerateState | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
   const conversationIdRef = useRef<string | null>(null);
@@ -176,6 +225,7 @@ export default function ChatPanel({
       setError(null);
       setStreaming(null);
       setMessageEdit(null);
+      setRegenerate(null);
       onConversationChange?.(id);
     },
     [conversationId, onConversationChange],
@@ -191,6 +241,7 @@ export default function ChatPanel({
     setManifest(null);
     setError(null);
     setMessageEdit(null);
+    setRegenerate(null);
     await refreshConversations();
     onConversationChange?.(id);
   }, [onConversationChange, refreshConversations]);
@@ -247,11 +298,46 @@ export default function ChatPanel({
           showDiff: false,
           submitting: false,
         });
+        setRegenerate(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       }
     },
     [conversationId, streaming],
+  );
+
+  const beginRegenerate = useCallback(
+    async (assistantSeq: number) => {
+      const turn = latestRegeneratableTurn(messages);
+      if (
+        !conversationId ||
+        streaming ||
+        !turn ||
+        turn.assistantSeq !== assistantSeq
+      ) {
+        return;
+      }
+      setError(null);
+      try {
+        await getEditorCommands()?.flush();
+        const preview = await window.texeris.chat.previewMessageEdit(
+          conversationId,
+          turn.user.seq,
+        );
+        setRegenerate({
+          assistantSeq,
+          userSeq: turn.user.seq,
+          text: turn.user.text,
+          preview,
+          showDiff: false,
+          submitting: false,
+        });
+        setMessageEdit(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [conversationId, messages, streaming],
   );
 
   useEffect(() => registerContextActionHandler((event) => {
@@ -284,8 +370,18 @@ export default function ChatPanel({
       void beginMessageEdit(message);
       return true;
     }
+    if (event.context.kind === 'message' && event.action === 'message:regenerate') {
+      void beginRegenerate(event.context.seq);
+      return true;
+    }
     return false;
-  }), [beginMessageEdit, conversations, messages, switchConversation]);
+  }), [
+    beginMessageEdit,
+    beginRegenerate,
+    conversations,
+    messages,
+    switchConversation,
+  ]);
 
   useEffect(() => {
     return window.texeris.chat.onEvent((event: NormalizedAgentEvent) => {
@@ -361,6 +457,40 @@ export default function ChatPanel({
     [conversationId, documentId, streaming],
   );
 
+  const continueFromFork = useCallback(
+    async (result: ForkMessageResult, text: string) => {
+      conversationIdRef.current = result.conversationId;
+      setConversationId(result.conversationId);
+      setMessages(await window.texeris.chat.listMessages(result.conversationId));
+      setRuns([]);
+      setDelegations([]);
+      setManifest(null);
+      setMode(result.mode);
+      setScope(result.scope);
+      setMessageEdit(null);
+      setRegenerate(null);
+      onConversationChange?.(result.conversationId);
+      if (result.documentId === documentId) {
+        reloadEditor();
+      } else {
+        onOpenDocument?.(result.documentId);
+      }
+      await refreshConversations();
+      await startTurn(
+        { text, mode: result.mode, scope: result.scope },
+        result.conversationId,
+        result.documentId,
+      );
+    },
+    [
+      documentId,
+      onConversationChange,
+      onOpenDocument,
+      refreshConversations,
+      startTurn,
+    ],
+  );
+
   const resendEditedMessage = useCallback(async () => {
     if (!messageEdit || !conversationId || streaming) return;
     const text = messageEdit.text.trim();
@@ -374,28 +504,9 @@ export default function ChatPanel({
       const result = await window.texeris.chat.forkMessage(
         conversationId,
         messageEdit.seq,
+        'edit',
       );
-      conversationIdRef.current = result.conversationId;
-      setConversationId(result.conversationId);
-      setMessages(await window.texeris.chat.listMessages(result.conversationId));
-      setRuns([]);
-      setDelegations([]);
-      setManifest(null);
-      setMode(result.mode);
-      setScope(result.scope);
-      setMessageEdit(null);
-      onConversationChange?.(result.conversationId);
-      if (result.documentId === documentId) {
-        reloadEditor();
-      } else {
-        onOpenDocument?.(result.documentId);
-      }
-      await refreshConversations();
-      await startTurn(
-        { text, mode: result.mode, scope: result.scope },
-        result.conversationId,
-        result.documentId,
-      );
+      await continueFromFork(result, text);
     } catch (err) {
       setMessageEdit((current) =>
         current ? { ...current, submitting: false } : current,
@@ -404,14 +515,32 @@ export default function ChatPanel({
     }
   }, [
     conversationId,
-    documentId,
+    continueFromFork,
     messageEdit,
-    onConversationChange,
-    onOpenDocument,
-    refreshConversations,
-    startTurn,
     streaming,
   ]);
+
+  const regenerateLastResponse = useCallback(async () => {
+    if (!regenerate || !conversationId || streaming) return;
+    setRegenerate((current) =>
+      current ? { ...current, submitting: true } : current,
+    );
+    setError(null);
+    try {
+      await getEditorCommands()?.flush();
+      const result = await window.texeris.chat.forkMessage(
+        conversationId,
+        regenerate.userSeq,
+        'regenerate',
+      );
+      await continueFromFork(result, regenerate.text);
+    } catch (err) {
+      setRegenerate((current) =>
+        current ? { ...current, submitting: false } : current,
+      );
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [conversationId, continueFromFork, regenerate, streaming]);
 
   const send = useCallback(async () => {
     if (!input.trim()) {
@@ -440,6 +569,8 @@ export default function ChatPanel({
       void window.texeris.chat.cancel(streaming.runId);
     }
   }, [streaming]);
+
+  const regeneratableTurn = latestRegeneratableTurn(messages);
 
   return (
     <section className="chat">
@@ -629,6 +760,11 @@ export default function ChatPanel({
             data-context-message-editable={
               m.role === 'user' && m.seq > 0 && !streaming
             }
+            data-context-message-regeneratable={
+              m.role === 'assistant' &&
+              m.seq === regeneratableTurn?.assistantSeq &&
+              !streaming
+            }
           >
             {m.role === 'tool' ? (
               <span className="tool-chip">
@@ -730,7 +866,71 @@ export default function ChatPanel({
                     </div>
                     </div>
                   ) : (
-                    <MarkdownView text={m.text} />
+                    <>
+                      <MarkdownView text={m.text} />
+                      {regenerate?.assistantSeq === m.seq && (
+                        <div className="regenerate-confirm">
+                          <p className="message-edit-warning">
+                            Regenerating creates a new conversation branch
+                            {regenerate.preview.documentChanged
+                              ? ` and ${rewindDescription(regenerate.preview)}`
+                              : `; ${regenerate.preview.documentPath} already matches that turn`}
+                            . The original response remains available.
+                          </p>
+                          {regenerate.preview.pendingPatchCount > 0 && (
+                            <p className="message-edit-note">
+                              {regenerate.preview.pendingPatchCount} pending
+                              patch(es) remain attributed to the original.
+                            </p>
+                          )}
+                          {regenerate.preview.documentChanged && (
+                            <button
+                              className="message-edit-preview"
+                              onClick={() =>
+                                setRegenerate((current) =>
+                                  current
+                                    ? {
+                                        ...current,
+                                        showDiff: !current.showDiff,
+                                      }
+                                    : current,
+                                )
+                              }
+                            >
+                              {regenerate.showDiff
+                                ? 'Hide changes'
+                                : 'Preview document changes'}
+                            </button>
+                          )}
+                          {regenerate.showDiff && (
+                            <pre className="message-edit-diff">
+                              {formatCompactDiff(
+                                lineDiff(
+                                  regenerate.preview.currentText,
+                                  regenerate.preview.targetText,
+                                ),
+                              )}
+                            </pre>
+                          )}
+                          <div className="message-edit-actions">
+                            <button
+                              disabled={regenerate.submitting}
+                              onClick={() => setRegenerate(null)}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              disabled={regenerate.submitting}
+                              onClick={() => void regenerateLastResponse()}
+                            >
+                              {regenerate.submitting
+                                ? 'Creating branch…'
+                                : 'Regenerate'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
                 {messageEdit?.seq !== m.seq && (
@@ -746,6 +946,18 @@ export default function ChatPanel({
                         <MessageActionIcon kind="edit" />
                       </button>
                     )}
+                    {m.role === 'assistant' &&
+                      m.seq === regeneratableTurn?.assistantSeq && (
+                        <button
+                          type="button"
+                          aria-label="Regenerate response"
+                          title="Regenerate response in a new branch"
+                          disabled={Boolean(streaming)}
+                          onClick={() => void beginRegenerate(m.seq)}
+                        >
+                          <MessageActionIcon kind="regenerate" />
+                        </button>
+                      )}
                     <button
                       type="button"
                       aria-label={copiedSeq === m.seq ? 'Copied' : 'Copy message'}

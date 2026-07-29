@@ -117,6 +117,19 @@ describe('edit-message conversation rewind', () => {
         .prepare('SELECT COUNT(*) AS n FROM patches WHERE id = ?')
         .get('patch-later'),
     ).toMatchObject({ n: 1 });
+
+    const regenerated = forkMessage(
+      project,
+      conversations,
+      originalId,
+      2,
+      'regenerate',
+    );
+    expect(
+      conversations.listConversations().find(
+        (item) => item.id === regenerated.conversationId,
+      )?.title,
+    ).toContain('(regenerated)');
   });
 
   it('rejects messages without a safe turn boundary', () => {

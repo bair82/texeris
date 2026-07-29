@@ -179,7 +179,9 @@ rapidly turning a prototype into a real application.
    **Resolved 2026-07-29:** Edit message previews the rollback, creates a
    non-destructive conversation branch, restores the scoped document at its
    exact revision/change boundary, and resends with the original mode and
-   scope. Checkpoints retain their existing document-only restore semantics.
+   scope. Regenerate on the latest assistant response reuses the same safe
+   branch/restore operation without changing the prompt. Checkpoints retain
+   their existing document-only restore semantics.
 4. Section movement/folding and math remain meaningful document-authoring
    gaps. Split view and more themes are lower-value until real use says
    otherwise.
@@ -309,8 +311,10 @@ Work packages, in order:
    messages. Hover and native context-menu actions open an inline editor with a
    rollback warning and optional compact diff. Save creates a transcript fork,
    restores the one scoped document as a new revision, and resends; original
-   messages, revisions, and patches remain intact. General checkpoint-linked
-   conversation rewind is deferred rather than inferred from legacy data.
+   messages, revisions, and patches remain intact. The latest assistant response
+   also offers Regenerate through the same branch/restore path. General
+   checkpoint-linked conversation rewind is deferred rather than inferred from
+   legacy data.
 
 Exit gate:
 

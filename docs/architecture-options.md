@@ -803,8 +803,11 @@ transcript messages into a new conversation, records the fork origin, restores
 the scoped document as a new append-only revision, and resends with the
 original mode and scope. Runs, delegations, corpus grants, and patches are not
 copied; pending patches remain visibly attributable to the preserved original
-conversation. Checkpoints remain document-only until a demonstrated workflow
-requires linking them to conversation boundaries.
+conversation. Regenerating the latest completed assistant response uses this
+same operation at its preceding user message without changing the prompt; the
+fork is labelled `regenerated` and the original response remains available.
+Checkpoints remain document-only until a demonstrated workflow requires linking
+them to conversation boundaries.
 
 ## 12.5 Context assembly
 
