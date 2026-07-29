@@ -118,6 +118,55 @@ describe('RevisionService.commit', () => {
     expect(seq).toBe(1);
     expect(ctx.revisions.getCurrentRevision(docId)).toBe(1);
   });
+
+  it('restores the canonical file when the revision transaction fails after rename', () => {
+    ctx.db.exec(`
+      CREATE TRIGGER inject_revision_failure
+      BEFORE INSERT ON revisions
+      BEGIN
+        SELECT RAISE(ABORT, 'injected revision failure');
+      END
+    `);
+
+    expect(() =>
+      ctx.revisions.commit(docId, [typing('not committed', 0)], {
+        actor: 'user',
+        source: { kind: 'paste' },
+      }),
+    ).toThrow(/injected revision failure/);
+
+    expect(readFile()).toBe('');
+    expect(ctx.revisions.getCurrentRevision(docId)).toBe(0);
+    expect(
+      ctx.db.prepare('SELECT COUNT(*) AS n FROM revisions WHERE document_id = ?')
+        .get(docId),
+    ).toMatchObject({ n: 0 });
+  });
+
+  it('restores the canonical file when amending the typing tip fails', () => {
+    ctx.revisions.commit(docId, [typing('hello', 0)], {
+      actor: 'user',
+      source: { kind: 'typing' },
+    });
+    ctx.db.exec(`
+      CREATE TRIGGER inject_amend_failure
+      BEFORE INSERT ON revision_changes
+      WHEN NEW.document_id = '${docId}' AND NEW.seq = 1 AND NEW.idx = 1
+      BEGIN
+        SELECT RAISE(ABORT, 'injected amend failure');
+      END
+    `);
+
+    expect(() =>
+      ctx.revisions.commit(docId, [typing(' world', 5)], {
+        actor: 'user',
+        source: { kind: 'typing' },
+      }),
+    ).toThrow(/injected amend failure/);
+
+    expect(readFile()).toBe('hello');
+    expect(ctx.revisions.getTextAt(docId, 1)).toBe('hello');
+  });
 });
 
 describe('snapshots and replay', () => {

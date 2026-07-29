@@ -1,3 +1,5 @@
+import { Type } from '@sinclair/typebox';
+
 /**
  * Command definitions (M1.5 EU5): the single source for the app menu
  * (main), the command palette and the shortcuts overlay (renderer). Actions
@@ -41,6 +43,9 @@ export const COMMANDS: readonly CommandSpec[] = [
 ] as const;
 
 export type CommandId = (typeof COMMANDS)[number]['id'];
+export const MenuCommandSchema = Type.Union(
+  COMMANDS.map((command) => Type.Literal(command.id)),
+);
 
 /** main → renderer push channel carrying a command id from the app menu. */
 export const MenuCommandChannel = 'texeris:menu-command';

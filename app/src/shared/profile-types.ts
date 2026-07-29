@@ -1,23 +1,27 @@
 import { Type, type Static } from '@sinclair/typebox';
 
-export type ProfileArtifactKind =
-  | 'writing-style-report'
-  | 'writing-profile'
-  | 'intellectual-profile';
+export const ProfileArtifactKindSchema = Type.Union([
+  Type.Literal('writing-style-report'),
+  Type.Literal('writing-profile'),
+  Type.Literal('intellectual-profile'),
+]);
+export type ProfileArtifactKind = Static<typeof ProfileArtifactKindSchema>;
 
-export interface ProfileArtifactRef {
-  kind: ProfileArtifactKind;
-  documentId: string;
-  path: string;
-  revision: number;
-}
+export const ProfileArtifactRefSchema = Type.Object({
+  kind: ProfileArtifactKindSchema,
+  documentId: Type.String(),
+  path: Type.String(),
+  revision: Type.Integer({ minimum: 0 }),
+});
+export type ProfileArtifactRef = Static<typeof ProfileArtifactRefSchema>;
 
-export interface ActiveWritingProfile {
-  id: string;
-  activatedAt: string;
-  sourceProject: string;
-  artifacts: ProfileArtifactRef[];
-}
+export const ActiveWritingProfileSchema = Type.Object({
+  id: Type.String(),
+  activatedAt: Type.String(),
+  sourceProject: Type.String(),
+  artifacts: Type.Array(ProfileArtifactRefSchema, { minItems: 3, maxItems: 3 }),
+});
+export type ActiveWritingProfile = Static<typeof ActiveWritingProfileSchema>;
 
 export interface CorpusSourceView {
   id: string;

@@ -33,10 +33,11 @@ import type { ContextActionEvent, ContextDescribeRequest, ContextDescriptor } fr
 
 /**
  * IPC contract shared by main, preload, and renderer.
- * Renderer requests are validated by main against TypeBox schemas. Trusted
- * main-originated events and most responses are currently typed but not
- * decoded again in preload; see the contract-hardening item in the active
- * development plan.
+ * Renderer requests are untrusted and decoded by main against TypeBox
+ * schemas. Main-originated events that trigger renderer actions or state
+ * changes are decoded in preload. Invoke responses originate in trusted main
+ * code and remain statically typed unless a boundary has a specific need for
+ * runtime decoding (AppInfo is the current example).
  */
 
 export const IpcChannels = {

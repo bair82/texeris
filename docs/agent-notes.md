@@ -208,3 +208,13 @@ queue: select a past completed turn or checkpoint, preview its message/document
 boundary, restore the document as a new revision, and fork/reopen the
 conversation from that point. The original history remains preserved and any
 pending patches must stay visibly attributable rather than being silently lost.
+
+**codex, 2026-07-29** — completed focused G1 hardening without adding new
+frameworks. Revision transaction failures now restore the already-renamed
+canonical file immediately, including typing-tip amendments. Export interruption
+and malformed profile manifests have explicit safe-state tests; existing corpus
+and startup-reconciliation tests cover the remaining fault matrix. Preload now
+runtime-decodes the bounded set of main push events that trigger renderer
+actions or state changes, while the architecture documents trusted invoke
+responses and display-only chat streams accurately. Typecheck, 217 tests, and
+the production build pass.

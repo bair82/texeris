@@ -281,6 +281,26 @@ describe('exportDocumentFile', () => {
       fs.rmSync(output, { force: true });
     }
   });
+
+  it('leaves an existing export and no temp file when PDF rendering fails', async () => {
+    const output = path.join(root, '..', `export-${path.basename(root)}.pdf`);
+    fs.writeFileSync(output, 'previous export');
+    try {
+      await expect(
+        exportDocumentFile(ctx, mainId, output, async () => {
+          throw new Error('injected renderer failure');
+        }),
+      ).rejects.toThrow(/injected renderer failure/);
+      expect(fs.readFileSync(output, 'utf8')).toBe('previous export');
+      expect(
+        fs.readdirSync(path.dirname(output)).filter((entry) =>
+          entry.startsWith(`.${path.basename(output)}.`),
+        ),
+      ).toEqual([]);
+    } finally {
+      fs.rmSync(output, { force: true });
+    }
+  });
 });
 
 describe('setMainDocument', () => {
