@@ -43,6 +43,29 @@ interface MessageEditState {
   submitting: boolean;
 }
 
+function MessageActionIcon({ kind }: { kind: 'edit' | 'copy' | 'check' }) {
+  if (kind === 'edit') {
+    return (
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        <path d="M13.9 3.1a1.7 1.7 0 0 1 2.4 2.4L7.2 14.6l-3.3.8.8-3.3 9.2-9Z" />
+      </svg>
+    );
+  }
+  if (kind === 'check') {
+    return (
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        <path d="m4 10.5 3.5 3.5L16 5.5" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      <rect x="6.5" y="6.5" width="9" height="9" rx="1.5" />
+      <path d="M13.5 6.5v-2a1.5 1.5 0 0 0-1.5-1.5H4.5A1.5 1.5 0 0 0 3 4.5V12A1.5 1.5 0 0 0 4.5 13.5h2" />
+    </svg>
+  );
+}
+
 interface ChatPanelProps {
   /** Conversation to reopen at mount (persisted workspace state, EU1/EU3). */
   initialConversationId?: string | null;
@@ -611,8 +634,9 @@ export default function ChatPanel({
               </span>
             ) : (
               <>
-                {messageEdit?.seq === m.seq ? (
-                  <div className="message-edit">
+                <div className="msg-content">
+                  {messageEdit?.seq === m.seq ? (
+                    <div className="message-edit">
                     <textarea
                       autoFocus
                       rows={4}
@@ -702,35 +726,42 @@ export default function ChatPanel({
                           : 'Save and resend'}
                       </button>
                     </div>
-                  </div>
-                ) : (
-                  <>
+                    </div>
+                  ) : (
                     <MarkdownView text={m.text} />
-                    <span className="msg-actions">
-                      {m.role === 'user' && m.seq > 0 && (
-                        <button
-                          title="Edit message and create a branch"
-                          disabled={Boolean(streaming)}
-                          onClick={() => void beginMessageEdit(m)}
-                        >
-                          edit
-                        </button>
-                      )}
+                  )}
+                </div>
+                {messageEdit?.seq !== m.seq && (
+                  <span className="msg-actions" aria-label="Message actions">
+                    {m.role === 'user' && m.seq > 0 && (
                       <button
-                        title="Copy message text"
-                        onClick={() => {
-                          void navigator.clipboard.writeText(m.text);
-                          setCopiedSeq(m.seq);
-                          setTimeout(
-                            () => setCopiedSeq((s) => (s === m.seq ? null : s)),
-                            1200,
-                          );
-                        }}
+                        type="button"
+                        aria-label="Edit message"
+                        title="Edit message and create a branch"
+                        disabled={Boolean(streaming)}
+                        onClick={() => void beginMessageEdit(m)}
                       >
-                        {copiedSeq === m.seq ? 'copied' : 'copy'}
+                        <MessageActionIcon kind="edit" />
                       </button>
-                    </span>
-                  </>
+                    )}
+                    <button
+                      type="button"
+                      aria-label={copiedSeq === m.seq ? 'Copied' : 'Copy message'}
+                      title={copiedSeq === m.seq ? 'Copied' : 'Copy message'}
+                      onClick={() => {
+                        void navigator.clipboard.writeText(m.text);
+                        setCopiedSeq(m.seq);
+                        setTimeout(
+                          () => setCopiedSeq((s) => (s === m.seq ? null : s)),
+                          1200,
+                        );
+                      }}
+                    >
+                      <MessageActionIcon
+                        kind={copiedSeq === m.seq ? 'check' : 'copy'}
+                      />
+                    </button>
+                  </span>
                 )}
               </>
             )}
