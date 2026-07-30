@@ -145,12 +145,38 @@ try {
   await focusEnd();
   await evaluate("document.querySelector('.citation-insert').click(); true");
   await waitFor("!!document.querySelector('.citation-picker')", 'citation picker never opened');
+  await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
+  await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' });
+  await waitFor(
+    "!document.querySelector('.citation-picker')",
+    'Escape did not close citation search',
+  );
+  check(
+    'Escape closes citation search',
+    await evaluate("!document.querySelector('.citation-picker')"),
+  );
+  await evaluate("document.querySelector('.citation-insert').click(); true");
+  await waitFor("!!document.querySelector('.citation-picker')", 'citation picker did not reopen');
   check(
     'empty library offers add and import in the same picker',
     await evaluate("document.querySelector('.citation-empty')?.textContent.includes('Add a reference') && document.querySelector('.citation-empty')?.textContent.includes('Import a bibliography')"),
   );
   await evaluate("[...document.querySelectorAll('.citation-empty button')].find(button => button.textContent === 'Add a reference').click(); true");
   await waitFor("!!document.querySelector('.reference-form')", 'manual reference form did not open');
+  await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
+  await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' });
+  await waitFor(
+    "!document.querySelector('.citation-picker')",
+    'Escape did not close add-reference form',
+  );
+  check(
+    'Escape closes add-reference form',
+    await evaluate("!document.querySelector('.citation-picker')"),
+  );
+  await evaluate("document.querySelector('.citation-insert').click(); true");
+  await waitFor("!!document.querySelector('.citation-picker')", 'citation picker did not reopen after form close');
+  await evaluate("[...document.querySelectorAll('.citation-empty button')].find(button => button.textContent === 'Add a reference').click(); true");
+  await waitFor("!!document.querySelector('.reference-form')", 'manual reference form did not reopen');
   if (process.env.TEXERIS_LIVE_DOI_SMOKE) {
     await evaluate(setInput('.reference-form input[placeholder=\"10.1000/example\"]', process.env.TEXERIS_LIVE_DOI_SMOKE));
     await evaluate("[...document.querySelectorAll('.reference-form button')].find(button => button.textContent === 'Find details').click(); true");
