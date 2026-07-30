@@ -40,6 +40,11 @@ export interface ArchiveImportReport {
   warnings: string[];
 }
 
+export interface ArchiveReindexReport {
+  sources: number;
+  passages: number;
+}
+
 export const ArchiveImportRequestSchema = Type.Object({
   source: Type.Union([Type.Literal('files'), Type.Literal('folder')]),
 });
@@ -70,5 +75,6 @@ export const ArchiveChannels = {
   preview: 'texeris:archive-preview',
   passages: 'texeris:archive-passages',
   delete: 'texeris:archive-delete',
+  reindex: 'texeris:archive-reindex',
   buildProfile: 'texeris:archive-build-profile',
 } as const;

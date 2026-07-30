@@ -664,7 +664,8 @@ profile. The archive is not searched silently.
   derivatives retain page markers for later source attribution.
 - Filter by document type, project, date, or status.
 - Detect duplicate imports.
-- Re-index changed files.
+- Rebuild the disposable search index from stored archive passages without
+  changing passage identities used by conversations.
 
 ### Exploratory
 

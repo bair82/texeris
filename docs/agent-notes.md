@@ -315,3 +315,14 @@ citations, and explicit local archive attachments, ending with only the
 essential controls. Existing user-owned `welcome.md` files remain untouched.
 Typecheck, 247 tests (6 skipped), production build, and the EU7 new-project
 onboarding smoke pass.
+
+**codex, 2026-07-30** — added a bounded archive repair surface before moving
+to G4 skills. The Archive header can now rebuild its disposable FTS5 projection
+atomically from stored source/passage rows in a cancellable worker. Passage IDs
+do not change, preserving archive attachments and historical chat manifests.
+A corruption test replaces the index with false content and verifies that
+re-index removes it and restores real search results with the original passage
+identity; the archive desktop smoke covers the renderer/preload/main/worker
+path. Also recorded the later searchable Help system as shipped Markdown with
+contextual entry points, keeping `welcome.md` brief. Typecheck, 248 tests
+(6 skipped), production build, and archive smoke pass.

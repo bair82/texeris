@@ -1279,7 +1279,7 @@ references:
 archive/
   archive.sqlite       # source metadata, passages, FTS5 projection
   snapshots/           # immutable imported bytes
-  markdown/            # integrity-checked searchable derivatives
+  derivatives/         # integrity-checked searchable Markdown
 ```
 
 The Electron main process owns import, conversion, indexing, preview,
@@ -1288,8 +1288,11 @@ records through the preload bridge. Search never adds model context by itself:
 the user attaches stable passage IDs, main resolves those IDs to raw saved
 passages for the turn, and the context manifest records the IDs. Profile builds
 reuse archived snapshots through the existing conversation-scoped corpus grant
-path. This intentionally leaves embeddings, live-folder watching, OCR, tags,
-and automatic retrieval outside the first slice.
+path. The FTS5 table is explicitly disposable: a user-triggered worker task
+rebuilds it atomically from `archive_sources` and `archive_passages`, preserving
+passage IDs already stored in conversation manifests. This intentionally leaves
+embeddings, live-folder watching, OCR, tags, and automatic retrieval outside
+the first slice.
 
 ---
 

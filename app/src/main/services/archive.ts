@@ -6,6 +6,7 @@ import type {
   ArchiveAttachment,
   ArchiveImportReport,
   ArchivePreview,
+  ArchiveReindexReport,
   ArchiveSearchResult,
   ArchiveSourceView,
 } from '../../shared/archive-types';
@@ -14,6 +15,7 @@ import { convertToMarkdown, PANDOC_VERSION } from './pandoc';
 import { extractPdfText, pdfCorpusMarkdown, PDF_EXTRACTOR_VERSION } from './pdf';
 import { isCancellation, throwIfCancelled } from '../jobs/runner';
 import { workspaceDir } from './settings';
+import { jobRunner } from '../jobs/current';
 
 const SUPPORTED = new Set([
   '.md', '.markdown', '.mdown', '.txt', '.html', '.htm', '.docx', '.odt', '.rtf', '.pdf',
@@ -80,12 +82,14 @@ export interface ArchiveOptions {
 /** Workspace-global immutable writing snapshots and their rebuildable FTS projection. */
 export class ArchiveService {
   readonly root: string;
+  private readonly databasePath: string;
   private readonly db: DatabaseSync;
 
   constructor(options: ArchiveOptions = {}) {
     this.root = path.join(options.dir ?? workspaceDir(), 'archive');
     fs.mkdirSync(this.root, { recursive: true });
-    this.db = new DatabaseSync(path.join(this.root, 'archive.sqlite'));
+    this.databasePath = path.join(this.root, 'archive.sqlite');
+    this.db = new DatabaseSync(this.databasePath);
     this.db.exec('PRAGMA journal_mode = WAL');
     this.db.exec('PRAGMA foreign_keys = ON');
     this.migrate();
@@ -240,6 +244,15 @@ export class ArchiveService {
       excerpt: row.excerpt,
       startOffset: row.start_offset,
     }));
+  }
+
+  /** Atomically rebuild the disposable FTS projection from stored passages. */
+  reindex(signal?: AbortSignal): Promise<ArchiveReindexReport> {
+    return jobRunner().run<ArchiveReindexReport>(
+      'archive-reindex',
+      { databasePath: this.databasePath },
+      { signal },
+    );
   }
 
   preview(sourceId: string, offset = 0): ArchivePreview {

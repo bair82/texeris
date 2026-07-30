@@ -454,6 +454,12 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return { deleted: true };
   });
 
+  ipcMain.handle(ArchiveChannels.reindex, (event) =>
+    runJob(event.sender, 'archive-reindex', (signal) =>
+      deps.archive.reindex(signal),
+    ),
+  );
+
   // --------------------------------------------------------- writing profile
 
   const launchProfile = async (

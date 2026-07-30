@@ -433,10 +433,14 @@ Implemented first slice (2026-07-30):
   turn manifests and survive edit/regenerate rewind.
 - Selected archived works can feed the existing writing-profile workflow
   without reselecting their original files.
+- A user-triggered re-index operation atomically rebuilds FTS5 from the stored
+  passage rows in a cancellable worker. Stable passage IDs are preserved, so
+  existing chat manifests and attachments remain resolvable.
 
 Remaining work:
 
-- Re-index and integrity repair commands.
+- Derivative/snapshot integrity reporting and bounded repair where canonical
+  local data is sufficient; never fabricate or silently replace a snapshot.
 - Evaluate actual FTS misses before selecting embeddings or a vector store.
 
 Exit gate:
@@ -501,6 +505,9 @@ Work:
   motion; performance budgets for large manuscripts and archives.
 - Backup/export documentation for project and workspace-global profile/archive
   data.
+- Searchable in-app Help backed by versioned shipped Markdown, with contextual
+  links from relevant empty/error states. Keep `welcome.md` as orientation,
+  not the permanent manual.
 
 ## 6. Prioritised next queue
 
@@ -518,12 +525,15 @@ Do not begin G2 until items 1–7 are closed:
 8. ~~Add safe conversation/document rewind with preview and non-destructive
    conversation branching.~~ Done 2026-07-29 through Edit message; checkpoints
    remain document-only.
-9. Build references/citation library and bibliography-aware export (G2).
-10. Build archive + FTS5 retrieval (G3).
+9. ~~Ship the everyday reference/citation library and bibliography-aware
+   export slice (G2).~~ Done 2026-07-30; reference-detail editing remains.
+10. ~~Build archive + FTS5 retrieval (G3), including deterministic search-index
+    rebuild.~~ Done 2026-07-30; tune retrieval only from observed misses.
 11. Productise and evaluate the next two skills (G4).
 12. Resume app-level spellcheck as a bounded daily-use package; it may move
    earlier if current writing sessions make it more costly than items 6–7.
-13. Only then consider math, section manipulation, PDF viewing/OCR, split view,
+13. Add the lightweight searchable Help system before broader distribution.
+14. Only then consider math, section manipulation, PDF viewing/OCR, split view,
    additional themes, a console, or generic AI shortcuts.
 
 ## 7. Definition of done for every work package

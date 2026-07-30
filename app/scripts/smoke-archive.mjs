@@ -123,6 +123,13 @@ try {
   );
   check('local work imported into archive', true);
 
+  await evaluate(`document.querySelector('[title="Rebuild archive search index"]').click(); true`);
+  await waitFor(
+    `document.querySelector('.archive-report')?.textContent.includes('Search index rebuilt')`,
+    'archive re-index did not report completion',
+  );
+  check('archive search index rebuild is available in the panel', true);
+
   check('search query entered', await evaluate(setInput('.archive-search input', 'orrery')));
   await waitFor(`!!document.querySelector('.archive-result')`, 'archive search returned no passage');
   check(

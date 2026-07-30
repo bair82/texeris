@@ -47,6 +47,7 @@ import type {
   ArchiveAttachment,
   ArchiveImportReport,
   ArchivePreview,
+  ArchiveReindexReport,
   ArchiveSearchResult,
   ArchiveSourceView,
 } from './archive-types';
@@ -109,6 +110,7 @@ export interface TexerisApi {
     search(query: string, limit?: number): Promise<ArchiveSearchResult[]>;
     preview(sourceId: string, offset?: number): Promise<ArchivePreview>;
     delete(sourceId: string): Promise<{ deleted: boolean }>;
+    reindex(): Promise<ArchiveReindexReport>;
     passages(passageIds: string[]): Promise<ArchiveAttachment[]>;
     buildProfile(sourceIds: string[]): Promise<{
       conversationId: string;

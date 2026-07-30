@@ -32,7 +32,7 @@ export default function ArchivePanel({
   const [addMenu, setAddMenu] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [busy, setBusy] = useState<'import' | 'profile' | null>(null);
+  const [busy, setBusy] = useState<'import' | 'reindex' | 'profile' | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
   const [report, setReport] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -48,11 +48,11 @@ export default function ArchivePanel({
   }, [refresh]);
 
   useEffect(() => window.texeris.jobs.onEvent((event) => {
-    if (event.op !== 'archive-import') return;
+    if (event.op !== 'archive-import' && event.op !== 'archive-reindex') return;
     if (event.status === 'progress' && event.progress) {
       setProgress(`Adding writing… ${event.progress.done}/${event.progress.total}`);
     } else if (event.status === 'started') {
-      setProgress('Adding writing…');
+      setProgress(event.op === 'archive-reindex' ? 'Rebuilding search index…' : 'Adding writing…');
     } else {
       setProgress(null);
     }
@@ -137,6 +137,26 @@ export default function ArchivePanel({
     }
   };
 
+  const reindexArchive = async () => {
+    setBusy('reindex');
+    setError(null);
+    setReport(null);
+    try {
+      const result = await window.texeris.archive.reindex();
+      setQuery('');
+      setResults([]);
+      setReport(
+        `Search index rebuilt from ${result.passages} passage(s) in ${result.sources} work(s).`,
+      );
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(null);
+      setProgress(null);
+    }
+  };
+
   if (preview) {
     return (
       <aside className="archive-panel" style={{ width }}>
@@ -184,6 +204,14 @@ export default function ArchivePanel({
     <aside className="archive-panel" style={{ width }}>
       <header className="archive-header">
         <span className="nav-title">Writing archive</span>
+        <button
+          className="nav-action"
+          title="Rebuild archive search index"
+          disabled={busy !== null}
+          onClick={() => void reindexArchive()}
+        >
+          ↻
+        </button>
         <span className="archive-add-wrap">
           <button
             className="nav-action"

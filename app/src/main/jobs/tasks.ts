@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { referencedAssets } from '../services/assets';
 import { extractPdfTextInProcess, type PdfTextExtraction } from '../services/pdf';
 import { renderPrintDocument, sanitizePrintHtml } from '../services/pdfExportHtml';
@@ -56,6 +57,10 @@ export interface PdfPrepareHtmlPayload {
 
 export interface PdfExtractPayload {
   bytes: Buffer;
+}
+
+export interface ArchiveReindexPayload {
+  databasePath: string;
 }
 
 /** execFile as a promise, with optional stdin (execFile has no `input` option). */
@@ -223,6 +228,39 @@ async function pdfExtract(payload: PdfExtractPayload): Promise<PdfTextExtraction
   return extractPdfTextInProcess(payload.bytes);
 }
 
+function archiveReindex(
+  payload: ArchiveReindexPayload,
+): { sources: number; passages: number } {
+  const db = new DatabaseSync(payload.databasePath);
+  try {
+    db.exec('PRAGMA busy_timeout = 5000');
+    const sources = (
+      db.prepare('SELECT COUNT(*) AS count FROM archive_sources').get() as { count: number }
+    ).count;
+    const passages = (
+      db.prepare('SELECT COUNT(*) AS count FROM archive_passages').get() as { count: number }
+    ).count;
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.exec(`
+        DELETE FROM archive_fts;
+        INSERT INTO archive_fts (passage_id, source_id, title, heading, text)
+        SELECT p.id, p.source_id, s.title, COALESCE(p.heading, ''), p.text
+        FROM archive_passages p
+        JOIN archive_sources s ON s.id = p.source_id
+        ORDER BY s.rowid, p.ordinal
+      `);
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+    return { sources, passages };
+  } finally {
+    db.close();
+  }
+}
+
 /** Dispatch table shared by the worker entry and in-process test runs. */
 export async function runTask(
   kind: string,
@@ -243,6 +281,8 @@ export async function runTask(
       return pdfPrepareHtml(payload as PdfPrepareHtmlPayload);
     case 'pdf-extract':
       return pdfExtract(payload as PdfExtractPayload);
+    case 'archive-reindex':
+      return archiveReindex(payload as ArchiveReindexPayload);
     default:
       throw new Error(`unknown job task: ${kind}`);
   }
