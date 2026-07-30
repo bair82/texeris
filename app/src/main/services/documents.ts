@@ -221,6 +221,7 @@ export async function exportDocumentFile(
   outputPath: string,
   renderPdf?: PdfRenderer,
   signal?: AbortSignal,
+  citationStylePath?: string,
 ): Promise<DocumentExportResult> {
   const row = docRow(ctx, documentId);
   assertLive(row);
@@ -248,6 +249,7 @@ export async function exportDocumentFile(
       const prepared = await buildPdfPrintHtml(text, row.title, ctx.root, {
         signal,
         bibliographyPath,
+        citationStylePath,
       });
       const bytes = await renderPdf(prepared.html);
       if (!bytes.subarray(0, 5).equals(Buffer.from('%PDF-'))) {
@@ -263,6 +265,7 @@ export async function exportDocumentFile(
         ctx.root,
         signal,
         bibliographyPath,
+        citationStylePath,
       );
     }
     fs.renameSync(tempPath, outputPath);

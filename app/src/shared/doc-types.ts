@@ -149,6 +149,8 @@ export const DocChannels = {
   duplicate: 'texeris:doc-duplicate',
   addImage: 'texeris:doc-add-image',
   importDialog: 'texeris:doc-import-dialog',
+  exportSettings: 'texeris:doc-export-settings',
+  chooseCitationStyle: 'texeris:doc-choose-citation-style',
   exportDialog: 'texeris:doc-export-dialog',
   setMain: 'texeris:doc-set-main',
   reveal: 'texeris:doc-reveal',

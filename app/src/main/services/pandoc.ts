@@ -106,6 +106,7 @@ export async function writePandocExport(
   resourceRoot?: string,
   signal?: AbortSignal,
   bibliographyPath?: string,
+  citationStylePath?: string,
 ): Promise<string[]> {
   const pandoc = requirePandoc();
   await jobRunner().run(
@@ -117,6 +118,7 @@ export async function writePandocExport(
       format,
       resourceRoot,
       bibliographyPath,
+      citationStylePath,
     },
     { signal },
   );
@@ -130,11 +132,12 @@ export async function writePandocHtml(
   markdown: string,
   signal?: AbortSignal,
   bibliographyPath?: string,
+  citationStylePath?: string,
 ): Promise<{ html: string; warnings: string[] }> {
   const pandoc = requirePandoc();
   const { html } = await jobRunner().run<{ html: string }>(
     'pandoc-html',
-    { pandocPath: pandoc.path, markdown, bibliographyPath },
+    { pandocPath: pandoc.path, markdown, bibliographyPath, citationStylePath },
     { signal },
   );
   return {

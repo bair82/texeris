@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { DocumentInfo } from '../../../shared/domain-types';
 import type { JobEvent } from '../../../shared/job-types';
+import type { CitationStyleId } from '../../../shared/citation-style-types';
 import type { UiState, UiStateDoc } from '../../../shared/ui-types';
 import ChatPanel from '../ChatPanel';
 import PatchReview from '../PatchReview';
@@ -17,6 +18,7 @@ import CommandPalette from './CommandPalette';
 import ProjectNav from './ProjectNav';
 import ShortcutsOverlay from './ShortcutsOverlay';
 import TrashDialog from './TrashDialog';
+import ExportDialog from './ExportDialog';
 import { describeContextAt, dispatchContextAction } from '../contextMenuBridge';
 
 const DEFAULT_NAV_WIDTH = 232;
@@ -67,6 +69,7 @@ export default function AppShell({
   const [trashOpen, setTrashOpen] = useState(false);
   const [newDocRequested, setNewDocRequested] = useState(0);
   const [profileSourceOpen, setProfileSourceOpen] = useState(false);
+  const [exportTargetId, setExportTargetId] = useState<string | null>(null);
   const [operationNotice, setOperationNotice] = useState<WorkspaceStatus | null>(null);
   const uiRef = useRef<UiState>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -301,12 +304,20 @@ export default function AppShell({
   const onExportDoc = useCallback(async (documentId?: string) => {
     const targetId = documentId ?? openDocId;
     if (!targetId || exportingRef.current) return;
+    if (targetId === openDocId) await getEditorCommands()?.flush();
+    setExportTargetId(targetId);
+  }, [openDocId]);
+
+  const performExport = useCallback(async (
+    targetId: string,
+    citationStyle: CitationStyleId,
+  ) => {
+    if (exportingRef.current) return;
     exportingRef.current = true;
     activeJobRef.current = { op: 'export', jobId: null };
     try {
-      if (targetId === openDocId) await getEditorCommands()?.flush();
       setOperationNotice(jobProgressNotice('export'));
-      const exported = await window.texeris.doc.exportDialog(targetId);
+      const exported = await window.texeris.doc.exportDialog(targetId, citationStyle);
       if (exported) {
         setOperationNotice({
           message: exported.warnings.length
@@ -327,8 +338,9 @@ export default function AppShell({
     } finally {
       exportingRef.current = false;
       activeJobRef.current = null;
+      setExportTargetId(null);
     }
-  }, [openDocId, jobProgressNotice]);
+  }, [jobProgressNotice]);
 
   const onSetMainDoc = useCallback(async (documentId: string) => {
     const info = await window.texeris.doc.setMain(documentId);
@@ -578,6 +590,13 @@ export default function AppShell({
       {shortcutsOpen && <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />}
       {trashOpen && (
         <TrashDialog onClose={() => setTrashOpen(false)} onRestored={onRestoredDoc} />
+      )}
+      {exportTargetId && (
+        <ExportDialog
+          documentTitle={docs.find((doc) => doc.id === exportTargetId)?.title ?? 'document'}
+          onExport={(style) => performExport(exportTargetId, style)}
+          onClose={() => setExportTargetId(null)}
+        />
       )}
       {profileSourceOpen && (
         <div className="settings-overlay" onClick={() => setProfileSourceOpen(false)}>

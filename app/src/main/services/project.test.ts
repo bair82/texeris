@@ -90,6 +90,15 @@ describe('openProject', () => {
     expect(() => openProject(root)).toThrow(/format version 99/);
   });
 
+  it('rejects an unknown project citation style', () => {
+    create();
+    const file = path.join(root, '.texeris', 'project.json');
+    const json = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
+    json.citationStyle = '../../outside.csl';
+    fs.writeFileSync(file, JSON.stringify(json));
+    expect(() => openProject(root)).toThrow(/invalid project\.json/);
+  });
+
   it('cleans orphan tmp files and never chooses them as content', () => {
     const ctx = create();
     const docId = ensureDocument(ctx, 'manuscript.md');

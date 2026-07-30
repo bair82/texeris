@@ -1094,6 +1094,15 @@ Citation validation should be deterministic:
 
 Use Pandoc with citeproc and a chosen CSL style during export. The application can provide a preview, but the canonical manuscript need not contain formatted citation text.
 
+Implemented export settings are deliberately narrow: `.texeris/project.json`
+stores the selected style ID, four common CSL styles ship as offline resources,
+and a user-selected journal style is validated then copied to
+`.texeris/citation-style.csl`. The worker receives only the resolved
+application-owned style path and passes it to Pandoc with `--csl`; the
+unprivileged renderer never receives filesystem paths. Custom files must be
+independent styles containing their formatting rules; dependent CSL aliases
+are rejected with a focused message rather than failing later inside Pandoc.
+
 ## 16.6 Deferred evidence verification
 
 Do not mix reference resolution with claim verification in the first implementation. Evidence verification requires source acquisition, text extraction, page mapping, and uncertain model judgement. Preserve architecture room for source links later, but do not block the citation-marker feature on it.

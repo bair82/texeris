@@ -119,6 +119,29 @@ describe('job tasks', () => {
     }
   });
 
+  it.skipIf(!pandoc)('applies an explicit CSL style during citeproc HTML conversion', async () => {
+    const bibliography = path.join(root, 'references.json');
+    fs.writeFileSync(
+      bibliography,
+      JSON.stringify([{
+        id: 'smith2024',
+        type: 'article-journal',
+        title: 'Styled Evidence',
+        author: [{ family: 'Smith', given: 'Ada' }],
+        issued: { 'date-parts': [[2024]] },
+      }]),
+    );
+    const style = path.resolve(import.meta.dirname, '../../../resources/csl/ieee.csl');
+    const result = (await runTask('pandoc-html', {
+      pandocPath: pandoc!,
+      markdown: 'A claim [@smith2024].',
+      bibliographyPath: bibliography,
+      citationStylePath: style,
+    })) as { html: string };
+    expect(result.html).toMatch(/A claim \[1\]/);
+    expect(result.html).toContain('Styled Evidence');
+  });
+
   it.skipIf(!pandoc)('prepares sanitized print HTML with inlined images via pdf-prepare-html', async () => {
     const relative = 'assets/paper/media/figure.png';
     fs.mkdirSync(path.dirname(path.join(root, relative)), { recursive: true });

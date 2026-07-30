@@ -29,12 +29,14 @@ export interface PandocExportPayload {
   format: 'docx' | 'odt' | 'rtf';
   resourceRoot?: string;
   bibliographyPath?: string;
+  citationStylePath?: string;
 }
 
 export interface PandocHtmlPayload {
   pandocPath: string;
   markdown: string;
   bibliographyPath?: string;
+  citationStylePath?: string;
 }
 
 export interface PandocReferenceImportPayload {
@@ -49,6 +51,7 @@ export interface PdfPrepareHtmlPayload {
   title: string;
   resourceRoot: string;
   bibliographyPath?: string;
+  citationStylePath?: string;
 }
 
 export interface PdfExtractPayload {
@@ -109,7 +112,11 @@ async function pandocExport(payload: PandocExportPayload): Promise<{ warnings: s
         '--sandbox',
         ...(payload.resourceRoot ? [`--resource-path=${payload.resourceRoot}`] : []),
         ...(payload.bibliographyPath
-          ? ['--citeproc', `--bibliography=${payload.bibliographyPath}`]
+          ? [
+              '--citeproc',
+              `--bibliography=${payload.bibliographyPath}`,
+              ...(payload.citationStylePath ? [`--csl=${payload.citationStylePath}`] : []),
+            ]
           : []),
       ],
       { input: payload.markdown, cwd: payload.resourceRoot },
@@ -130,7 +137,11 @@ async function pandocHtml(payload: PandocHtmlPayload): Promise<{ html: string; w
         '--wrap=none',
         '--sandbox',
         ...(payload.bibliographyPath
-          ? ['--citeproc', `--bibliography=${payload.bibliographyPath}`]
+          ? [
+              '--citeproc',
+              `--bibliography=${payload.bibliographyPath}`,
+              ...(payload.citationStylePath ? [`--csl=${payload.citationStylePath}`] : []),
+            ]
           : []),
       ],
       { input: payload.markdown },
@@ -195,6 +206,7 @@ async function pdfPrepareHtml(payload: PdfPrepareHtmlPayload): Promise<{ html: s
     pandocPath: payload.pandocPath,
     markdown: inlined.markdown,
     bibliographyPath: payload.bibliographyPath,
+    citationStylePath: payload.citationStylePath,
   });
   if (/<img\b[^>]*\bsrc=["']https?:\/\//i.test(converted.html)
     && !inlined.warnings.some((warning) => warning.startsWith('Remote images'))) {

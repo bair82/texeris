@@ -30,6 +30,7 @@ import {
   DocRevisionsRequestSchema,
   HistoryChannels,
 } from '../shared/doc-types';
+import { DocExportRequestSchema } from '../shared/citation-style-types';
 import {
   PatchAcceptRequestSchema,
   PatchChannels,
@@ -68,6 +69,12 @@ import type { ProjectContext } from './services/project';
 import type { ProjectManager } from './services/projectManager';
 import type { WorkspaceConfig } from './services/settings';
 import { saveWorkspaceConfig } from './services/settings';
+import {
+  citationStyleSettings,
+  importCustomCitationStyle,
+  resolveCitationStylePath,
+  setCitationStyle,
+} from './services/citationStyles';
 import { extractHeadings } from './agent/markdown';
 import {
   deleteTrashedDocument,
@@ -538,9 +545,25 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     );
   });
 
+  ipcMain.handle(DocChannels.exportSettings, () =>
+    citationStyleSettings(deps.requireProject()),
+  );
+
+  ipcMain.handle(DocChannels.chooseCitationStyle, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Choose a citation style',
+      filters: [{ name: 'Citation Style Language', extensions: ['csl'] }],
+      properties: ['openFile'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return importCustomCitationStyle(deps.requireProject(), result.filePaths[0]);
+  });
+
   ipcMain.handle(DocChannels.exportDialog, async (event, raw: unknown) => {
-    const req = Value.Decode(DocIdRequestSchema, raw);
+    const req = Value.Decode(DocExportRequestSchema, raw);
     const project = deps.requireProject();
+    setCitationStyle(project, req.citationStyle);
     const row = project.db.prepare('SELECT path, title FROM documents WHERE id = ?').get(req.documentId) as
       | { path: string; title: string }
       | undefined;
@@ -565,8 +588,23 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       if (result.canceled || !result.filePath) return null;
       outputPath = result.filePath;
     }
+    const styleResources = app.isPackaged
+      ? path.join(process.resourcesPath, 'csl')
+      : path.join(app.getAppPath(), 'resources', 'csl');
+    const citationStylePath = resolveCitationStylePath(
+      project,
+      styleResources,
+      req.citationStyle,
+    );
     return await runJob(event.sender, 'export', (signal) =>
-      exportDocumentFile(project, req.documentId, outputPath!, printHtmlToPdf, signal),
+      exportDocumentFile(
+        project,
+        req.documentId,
+        outputPath!,
+        printHtmlToPdf,
+        signal,
+        citationStylePath,
+      ),
     );
   });
 

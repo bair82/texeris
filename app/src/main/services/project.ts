@@ -12,6 +12,7 @@ import { RevisionService } from './revision';
 import { UiStateService } from './uiState';
 import { seedWelcomeDocument } from './welcome';
 import { reconcileImageAssetsBestEffort } from './assets';
+import type { CitationStyleId } from '../../shared/citation-style-types';
 
 /**
  * Project service (plan §4.8, §7.1): a project is a user folder with a
@@ -28,6 +29,8 @@ export interface ProjectJson {
   formatVersion: number;
   projectId: string;
   mainDocument: string;
+  citationStyle?: CitationStyleId;
+  customCitationStyleName?: string;
 }
 
 export interface ProjectContext {
@@ -41,7 +44,7 @@ function texerisDir(root: string): string {
   return path.join(root, PROJECT_DIR);
 }
 
-function writeProjectJson(root: string, project: ProjectJson): void {
+export function writeProjectJson(root: string, project: ProjectJson): void {
   atomicWriteText(
     path.join(texerisDir(root), PROJECT_FILE),
     JSON.stringify(project, null, 2) + '\n',
@@ -54,7 +57,13 @@ function readProjectJson(root: string): ProjectJson {
   if (
     typeof parsed.formatVersion !== 'number' ||
     typeof parsed.projectId !== 'string' ||
-    typeof parsed.mainDocument !== 'string'
+    typeof parsed.mainDocument !== 'string' ||
+    (parsed.citationStyle !== undefined &&
+      !['chicago-author-date', 'apa', 'ieee', 'vancouver', 'custom'].includes(
+        parsed.citationStyle,
+      )) ||
+    (parsed.customCitationStyleName !== undefined &&
+      typeof parsed.customCitationStyleName !== 'string')
   ) {
     throw new Error(`invalid ${PROJECT_FILE} in ${root}`);
   }

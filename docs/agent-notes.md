@@ -274,3 +274,10 @@ through custom agent workflows. Such workflows must propose reviewable
 structured reference/document changes through application-owned validation and
 apply paths; they do not get raw filesystem access or mutate
 `references.csl.json` directly.
+
+**codex, 2026-07-30** — added a compact export preflight for citation styles.
+Projects remember Chicago author-date, APA 7, IEEE, or Elsevier Vancouver;
+journal-specific requirements use a validated custom CSL file copied into
+`.texeris/` for portable repeat exports. Citeproc receives the explicit style
+for PDF/DOCX/ODT/RTF while canonical Markdown remains unchanged. The renderer
+never receives a style path, and the permanent workspace gains no new panel.
