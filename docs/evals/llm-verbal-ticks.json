@@ -1,0 +1,44 @@
+[
+  {
+    "id": "empty-emphasis",
+    "input": "It is important to note that the estimate remains uncertain.",
+    "disposition": "finding",
+    "required": ["empty emphasis", "estimate remains uncertain"],
+    "forbidden": ["AI-generated", "remove uncertain"]
+  },
+  {
+    "id": "phrase-is-not-a-blacklist",
+    "input": "In this assay, p53 plays a crucial role: deleting it eliminates the observed response.",
+    "disposition": "no-finding",
+    "required": ["context and evidence outweigh phrase match"],
+    "forbidden": ["flag solely because of crucial role"]
+  },
+  {
+    "id": "legitimate-contrast",
+    "input": "The distinction is not merely terminological but jurisdictional: it determines which court may hear the claim.",
+    "disposition": "no-finding",
+    "required": ["contrast changes the legal consequence"],
+    "forbidden": ["flag solely because of not merely"]
+  },
+  {
+    "id": "preserve-qualification-and-citation",
+    "input": "It is worth noting that the intervention may have a limited effect [@rao2024].",
+    "disposition": "finding",
+    "required": ["may", "limited", "[@rao2024]"],
+    "forbidden": ["intervention has an effect", "remove citation"]
+  },
+  {
+    "id": "repeated-transition",
+    "input": "Moreover, the first result is mixed. Moreover, the second result is inconclusive. Moreover, the third result is negative.",
+    "disposition": "finding",
+    "required": ["group repeated instances", "mechanical transition"],
+    "forbidden": ["three unrelated findings"]
+  },
+  {
+    "id": "prefer-no-findings",
+    "input": "We distinguish the descriptive claim from its normative consequence.",
+    "disposition": "no-finding",
+    "required": ["no worthwhile findings"],
+    "forbidden": ["manufactured style complaint"]
+  }
+]

@@ -398,9 +398,9 @@ export default function AppShell({
 
   // ------------------------------------------------------- command registry
 
-  const openConservativeRewrite = useCallback(async () => {
+  const openSkillLauncher = useCallback(async (skillId: string) => {
     if (!openDocId) {
-      setOperationNotice({ message: 'Open a document before starting a rewrite.', tone: 'warning' });
+      setOperationNotice({ message: 'Open a document before starting this review.', tone: 'warning' });
       return;
     }
     try {
@@ -408,8 +408,8 @@ export default function AppShell({
         window.texeris.skills.list(),
         window.texeris.doc.outline(openDocId),
       ]);
-      const skill = skills.find((item) => item.id === 'conservative-rewrite');
-      if (!skill) throw new Error('Conservative rewrite is unavailable');
+      const skill = skills.find((item) => item.id === skillId);
+      if (!skill) throw new Error('This skill is unavailable');
       setSkillLaunch({
         skill,
         documentId: openDocId,
@@ -418,7 +418,7 @@ export default function AppShell({
       });
     } catch (error) {
       setOperationNotice({
-        message: `Could not open Conservative rewrite: ${
+        message: `Could not open skill: ${
           error instanceof Error ? error.message : String(error)
         }`,
         tone: 'error',
@@ -492,7 +492,10 @@ export default function AppShell({
           setProfileSourceOpen(true);
           break;
         case 'chat:conservative-rewrite':
-          void openConservativeRewrite();
+          void openSkillLauncher('conservative-rewrite');
+          break;
+        case 'chat:audit-verbal-ticks':
+          void openSkillLauncher('llm-verbal-ticks');
           break;
         case 'help:shortcuts':
           setShortcutsOpen((v) => !v);
@@ -502,7 +505,7 @@ export default function AppShell({
     [
       onExportDoc,
       onImportDoc,
-      openConservativeRewrite,
+      openSkillLauncher,
       openProjectPickerSafely,
       patchUi,
       toggleNav,

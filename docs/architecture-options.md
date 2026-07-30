@@ -1009,6 +1009,14 @@ Possible stages:
 
 A pure phrase blacklist will have too many false positives. A pure model pass will be inconsistent and harder to evaluate.
 
+The initial product slice starts with contextual model review and a balanced
+fixture set rather than shipping a brittle phrase blacklist. Findings are
+numbered, structured conversational output in the persisted skill
+conversation; users can request selected rewrites in ordinary language.
+`propose_patch` remains the only prose mutation path. A dedicated findings
+table/card and deterministic candidate pass are deferred until observed
+misses, inconsistency, or scale justify them.
+
 ## 15.2 Findings schema
 
 ```ts

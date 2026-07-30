@@ -337,3 +337,16 @@ reviewable patches. Prompt and JSON fixtures protect qualifications, citations,
 specialist terms, no-op behaviour, and scope boundaries. Unit coverage checks
 tool/version failures; the offline patch smoke now covers command discovery,
 launcher Escape/launch, review, apply, and undo.
+
+**codex, 2026-07-30** — added the second G4 product skill, an audit-first LLM
+verbal-tick review. The shared launcher offers Audit first (numbered findings,
+no initial patch) and Audit + rewrite clear cases for selection, section, or
+whole-document scope. The prompt judges repetition and function in context,
+never infers AI authorship, and explicitly protects legitimate disciplinary
+language, qualifications, citations, negation, and logical structure. Users
+can request selected numbered findings in the persisted conversation; all
+changes remain ordinary reviewable patches. Balanced fixtures include three
+real findings and three false-positive/no-finding cases. A dedicated findings
+database/UI and deterministic phrase scanner remain deferred. Typecheck, 257
+tests (6 skipped), production build, and the combined skill/patch desktop smoke
+pass.

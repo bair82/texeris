@@ -1,5 +1,6 @@
 import profilePrompt from '../../../../docs/prompts/author-voice-profile-extraction.md?raw';
 import conservativeRewritePrompt from '../../../../docs/prompts/conservative-rewrite.md?raw';
+import verbalTicksPrompt from '../../../../docs/prompts/llm-verbal-ticks.md?raw';
 import patchCriticPrompt from '../../../../docs/prompts/patch-style-critic.md?raw';
 import type {
   SkillLaunchOption,
@@ -111,6 +112,44 @@ export const BUILTIN_SKILLS: readonly SkillDefinition[] = [
       const instruction = focus[optionId];
       if (!instruction) throw new Error(`unsupported Conservative rewrite focus: ${optionId}`);
       return `Run Conservative rewrite on the application-selected scope. ${instruction} Use a reviewable patch for every proposed textual change.`;
+    },
+  },
+  {
+    id: 'llm-verbal-ticks',
+    version: 1,
+    name: 'LLM verbal-tick audit',
+    description: 'Find formulaic or mechanically repeated phrasing without flattening legitimate academic prose.',
+    defaultMode: 'fast',
+    supportsScopes: ['selection', 'section', 'document'],
+    options: [
+      {
+        id: 'audit',
+        label: 'Audit first',
+        description: 'Return numbered findings only; choose any rewrites in the conversation.',
+      },
+      {
+        id: 'audit-rewrite',
+        label: 'Audit + rewrite clear cases',
+        description: 'Report findings and propose minimal patches only for high-confidence cases.',
+      },
+    ],
+    allowedTools: [
+      'read_document',
+      'read_document_range',
+      'read_project_instructions',
+      'read_writing_profile',
+      'propose_patch',
+    ],
+    resultTypes: ['comments', 'patch'],
+    instructions: verbalTicksPrompt,
+    launchPrompt(optionId) {
+      if (optionId === 'audit') {
+        return 'Audit the application-selected scope for LLM verbal ticks. Return numbered findings only. Do not call propose_patch during this initial audit.';
+      }
+      if (optionId === 'audit-rewrite') {
+        return 'Audit the application-selected scope for LLM verbal ticks. Return numbered findings, then propose minimal patches only for high-confidence cases.';
+      }
+      throw new Error(`unsupported LLM verbal-tick mode: ${optionId}`);
     },
   },
 ];

@@ -39,6 +39,7 @@ export const COMMANDS: readonly CommandSpec[] = [
 
   { id: 'chat:new', section: 'Chat', title: 'New Conversation' },
   { id: 'chat:conservative-rewrite', section: 'Chat', title: 'Conservative Rewrite…' },
+  { id: 'chat:audit-verbal-ticks', section: 'Chat', title: 'Audit LLM Verbal Ticks…' },
   { id: 'chat:build-writing-profile', section: 'Chat', title: 'Build or Update Writing Profile…' },
 
   { id: 'help:shortcuts', section: 'Help', title: 'Keyboard Shortcuts', accelerator: 'CmdOrCtrl+/' },
