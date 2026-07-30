@@ -1098,6 +1098,14 @@ Use Pandoc with citeproc and a chosen CSL style during export. The application c
 
 Do not mix reference resolution with claim verification in the first implementation. Evidence verification requires source acquisition, text extraction, page mapping, and uncertain model judgement. Preserve architecture room for source links later, but do not block the citation-marker feature on it.
 
+Complex citation maintenance is also not a reason to grow the core reference UI
+into a full reference manager. Batch reconciliation, metadata repair, and
+cross-document normalization can be packaged later as custom agent workflows.
+They should operate through domain-specific reference audit/proposal tools and
+produce reviewable structured changes against the canonical CSL JSON and
+document revisions. The application remains responsible for validation and
+apply; an agent never mutates either file directly.
+
 ---
 
 ## 17. Markdown and Pandoc

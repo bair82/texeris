@@ -351,6 +351,17 @@ missing/unused-key audit, and bibliography-aware PDF/DOCX/ODT/RTF export. The
 remaining G2 work is editing existing reference details, explicit missing-key
 resolution, export-time CSL style selection, and broader golden fixtures.
 
+Product boundary:
+
+- Keep the built-in citation surface focused on deterministic everyday work:
+  add/import records, search, insert or replace markers, inspect missing keys,
+  and export.
+- Defer complex reference reconciliation, batch metadata cleanup, citation
+  normalization across documents, and similar open-ended work to custom agent
+  workflows. Those workflows must propose structured reference/document
+  changes for review and use the existing validation/apply boundary; they do
+  not receive raw filesystem access or silently rewrite the canonical library.
+
 Work:
 
 - Reference service with stable citation keys, validation, duplicate detection,
