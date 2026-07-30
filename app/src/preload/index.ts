@@ -90,6 +90,7 @@ const api: TexerisApi = {
     preview: (sourceId, offset) =>
       ipcRenderer.invoke(ArchiveChannels.preview, { sourceId, offset }),
     delete: (sourceId) => ipcRenderer.invoke(ArchiveChannels.delete, { sourceId }),
+    reindex: () => ipcRenderer.invoke(ArchiveChannels.reindex),
     passages: (passageIds) =>
       ipcRenderer.invoke(ArchiveChannels.passages, { passageIds }),
     buildProfile: (sourceIds) =>

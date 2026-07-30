@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ArchiveService } from './archive';
 import { CorpusService } from './corpus';
@@ -80,6 +81,35 @@ describe('ArchiveService', () => {
     expect(service.list()).toEqual([]);
     expect(service.search('identical')).toEqual([]);
     expect(fs.existsSync(managed)).toBe(false);
+  });
+
+  it('rebuilds a corrupted search projection without changing passage ids', async () => {
+    const source = path.join(root, 'repair-me.md');
+    fs.writeFileSync(source, '# Repair Me\n\nThe orrery makes attention geometry visible.\n');
+    await service.importPaths([source]);
+    const [before] = service.search('orrery');
+
+    const db = new DatabaseSync(path.join(workspace, 'archive', 'archive.sqlite'));
+    try {
+      db.exec('DELETE FROM archive_fts');
+      db.prepare(
+        `INSERT INTO archive_fts
+         (passage_id, source_id, title, heading, text) VALUES (?, ?, ?, ?, ?)`,
+      ).run(before.passageId, before.sourceId, 'Wrong title', '', 'phantom index text');
+    } finally {
+      db.close();
+    }
+
+    expect(service.search('orrery')).toEqual([]);
+    expect(service.search('phantom')).toHaveLength(1);
+
+    await expect(service.reindex()).resolves.toEqual({ sources: 1, passages: 1 });
+    expect(service.search('phantom')).toEqual([]);
+    expect(service.search('orrery')[0]).toMatchObject({
+      passageId: before.passageId,
+      sourceId: before.sourceId,
+      title: 'Repair Me',
+    });
   });
 
   it('reuses selected archived snapshots for a project writing-profile grant', async () => {
