@@ -69,7 +69,8 @@ when product or architecture decisions change, update them.
   `pnpm --filter @texeris/app test` / `pnpm --filter @texeris/app build`
 - App e2e smoke suite (CDP, offline): `pnpm --filter @texeris/app smoke`
 - Package (Linux AppImage): `pnpm --filter @texeris/app dist:linux`
-  (macOS dmg/zip configured in `app/electron-builder.yml`, needs a Mac)
+  (macOS DMG/ZIP builds run natively on Apple Silicon and Intel through the
+  manual `Package macOS` GitHub Actions workflow)
 - App e2e smoke (CDP, offline faux provider): after `pnpm --filter
   @texeris/app build`, run `node app/scripts/smoke.mjs`
 - Editor e2e smoke (typing, mode switch, restart survival):

@@ -350,3 +350,11 @@ real findings and three false-positive/no-finding cases. A dedicated findings
 database/UI and deterministic phrase scanner remain deferred. Typecheck, 257
 tests (6 skipped), production build, and the combined skill/patch desktop smoke
 pass.
+
+**codex, 2026-07-30** — made the configured macOS packaging path real. Pinned
+Pandoc 3.10 preparation now supports checksum-verified Apple Silicon and Intel
+archives as well as Linux, and packaged-resource inspection resolves the
+native `.app` layout. A manual GitHub Actions matrix builds unsigned DMG and
+ZIP artifacts on native arm64 and x64 macOS runners, inspects bundled Pandoc
+and CSL resources, emits SHA-256 manifests, and uploads both architecture
+sets. Linux x64 AppImage packaging and resource verification remain green.

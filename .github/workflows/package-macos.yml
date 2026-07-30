@@ -1,0 +1,51 @@
+name: Package macOS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: macOS ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.1
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm --filter @texeris/app typecheck
+      - name: Package DMG and ZIP
+        run: pnpm --filter @texeris/app dist
+      - name: Inspect packaged resources
+        run: node app/scripts/verify-packaged.mjs --resources-only
+      - name: Checksums
+        working-directory: app/dist
+        run: shasum -a 256 texeris-*.dmg texeris-*.zip > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: texeris-macos-${{ matrix.arch }}
+          path: |
+            app/dist/texeris-*.dmg
+            app/dist/texeris-*.zip
+            app/dist/SHA256SUMS.txt
+          if-no-files-found: error

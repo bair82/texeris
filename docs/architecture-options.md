@@ -1212,8 +1212,9 @@ A typical export job:
 - GUI applications on macOS and Linux may not inherit the user's shell PATH as expected.
 
 A personal prototype can use a configured system Pandoc. Texeris now uses that
-only as a development convenience; Linux distributions bundle the pinned
-converter so release behaviour is independent of the user's PATH.
+only as a development convenience; Linux and macOS distributions bundle the
+pinned converter for their exact platform and architecture so release
+behaviour is independent of the user's PATH.
 
 ### Current PDF derivative path
 
@@ -1642,6 +1643,11 @@ Potential deliverables:
 - Notarisation if distribution extends beyond personal use.
 
 For personal use, signing and notarisation can be deferred, but the build process should not assume that forever.
+
+Texeris builds separate unsigned Apple Silicon and Intel DMG/ZIP artifacts on
+native GitHub-hosted macOS runners. Each build checksum-verifies and bundles
+the matching Pandoc executable, inspects the unpacked resources, and publishes
+SHA-256 checksums with the workflow artifact.
 
 ## 25.2 Linux
 
