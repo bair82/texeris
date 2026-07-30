@@ -85,7 +85,7 @@ export default function SkillLaunchDialog({
         </header>
 
         <label className="skill-launch-field">
-          Rewrite
+          Review
           <select
             value={target}
             onChange={(event) => setTarget(event.target.value as ContextScope['kind'])}
@@ -122,7 +122,7 @@ export default function SkillLaunchDialog({
         )}
 
         <fieldset className="skill-focus-options" disabled={busy}>
-          <legend>Focus</legend>
+          <legend>Approach</legend>
           {skill.options.map((option) => (
             <label key={option.id}>
               <input
@@ -153,7 +153,8 @@ export default function SkillLaunchDialog({
         </label>
 
         <p className="skill-launch-hint">
-          Texeris will propose a reviewable patch. Your document is not changed automatically.
+          Texeris starts a dedicated conversation. Any suggested changes remain reviewable and
+          are never applied automatically.
         </p>
         {error && <p className="skill-launch-error" role="alert">{error}</p>}
 
@@ -165,7 +166,7 @@ export default function SkillLaunchDialog({
             onClick={() => void submit()}
             disabled={busy || !optionId || (target === 'section' && !heading)}
           >
-            {busy ? 'Starting…' : 'Start rewrite'}
+            {busy ? 'Starting…' : 'Start review'}
           </button>
         </footer>
       </section>

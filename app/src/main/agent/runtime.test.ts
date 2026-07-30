@@ -324,6 +324,47 @@ describe('PiAgentRuntime', () => {
     expect(patches.list()).toHaveLength(1);
   });
 
+  it('runs the verbal-tick skill as a bounded, audit-first conversation', async () => {
+    const skillConversationId = conversations.startNewConversation({
+      id: 'llm-verbal-ticks',
+      version: 1,
+    });
+    let seenTools: string[] = [];
+    let seenSystemPrompt = '';
+    faux.setResponses([
+      (context) => {
+        seenTools = (context.tools ?? []).map((tool) => tool.name);
+        seenSystemPrompt = context.systemPrompt ?? '';
+        return fauxAssistantMessage(
+          '1. “It is important to note” — empty emphasis — high confidence — delete.',
+        );
+      },
+    ]);
+
+    const { runId } = await runtime.startTurn({
+      conversationId: skillConversationId,
+      text: 'Audit the selected scope. Return numbered findings only. Do not call propose_patch.',
+      mode: 'fast',
+      scope: { kind: 'document' },
+    });
+    await drain(runId);
+
+    expect(seenTools.sort()).toEqual([
+      'propose_patch',
+      'read_document',
+      'read_document_range',
+      'read_project_instructions',
+      'read_writing_profile',
+    ]);
+    expect(seenSystemPrompt).toContain("Texeris's LLM verbal-tick audit");
+    expect(seenSystemPrompt).toContain('Do not infer that text was AI-generated');
+    expect(conversations.listRuns(skillConversationId)[0]).toMatchObject({
+      skillId: 'llm-verbal-ticks',
+      skillVersion: 1,
+    });
+    expect(patches.list()).toHaveLength(0);
+  });
+
   it('fails closed when a persisted skill version is unavailable', async () => {
     const oldConversationId = conversations.startNewConversation({
       id: 'conservative-rewrite',

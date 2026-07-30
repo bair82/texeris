@@ -904,6 +904,17 @@ footnotes, links, code, and controlled HTML.
 - The user's own recurring expressions that should normally be preserved.
 - Text where removing a phrase would alter caution or argumentative structure.
 
+**Current implementation:** Version 1 is audit-first and uses the shared skill
+launcher for selection, section, or whole-document scope. The default Audit
+first path returns compact numbered conversational findings with excerpt,
+category, confidence, explanation, and recommendation, but no initial patch.
+The user can naturally request selected findings later. Audit + rewrite clear
+cases may immediately propose minimal patches for high-confidence findings.
+Neither path infers AI authorship, and every textual change remains subject to
+ordinary patch review. A dedicated findings database and deterministic phrase
+scanner are deferred until real use demonstrates that they improve consistency
+enough to justify another product surface.
+
 ## 12.3 Structure and argument review
 
 **Purpose:** Evaluate whether the text has a coherent purpose, progression, and argument.
