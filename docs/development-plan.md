@@ -33,7 +33,7 @@ This plan is ordered around that thesis and the application that exists now.
 | Skills and writing profile | A versioned application registry now exposes Conservative Rewrite through the command palette with explicit selection/section/document scope, focus, model mode, enforced tool allow-list, and patch-only mutation. The profile skill retains scoped corpus grants, delegated analysis, reviewable artifacts, explicit activation, and an optional patch-style critic. |
 | Interchange | Markdown, DOCX, ODT, and RTF import/export; image preservation; text-bearing PDF import; fixed-layout A4 PDF export. |
 | Recovery and security boundaries | Atomic canonical-file writes, startup reconciliation, append-oriented revision history, sandboxed renderer, narrow preload bridge, main-owned filesystem and credentials, and no agent shell/filesystem tools. |
-| Packaging | Linux AppImage builds and launches; pinned Pandoc is bundled and verified. macOS targets are configured but unbuilt. |
+| Packaging | Linux x64 AppImage and native macOS Apple Silicon/Intel DMG+ZIP targets build with pinned, checksum-verified Pandoc resources. Linux packaged launch is tested; macOS artifacts are unsigned and not notarised. |
 
 The local verification baseline is strong but narrower than the documentation
 has sometimes implied: TypeScript passes; Vitest reports 257 passing tests and
@@ -49,7 +49,7 @@ packaged-app verifier pass.
 | Skills | Conservative Rewrite and the audit-first LLM verbal-tick review have bounded launchers, prompt contracts, tool enforcement, versioned run records, reviewable patch output, and failure-oriented fixtures. A model-evaluation runner remains. |
 | PDF/source research | Text extraction exists; OCR, a source library, PDF viewing, page-linked reading, annotations, and question-answering over saved sources do not. |
 | Spellcheck | Chromium spellcheck remains unreliable in rendered mode and structurally unsuitable for CodeMirror decorations. The app-level replacement is undecided. |
-| Release engineering | Linux CI typechecks, tests, builds, packages, and inspects the AppImage. Automated macOS artifacts, signing/notarisation, an application icon, Linux `desktopName`, a release/versioning procedure, and a dependency-update policy remain. |
+| Release engineering | Linux CI typechecks, tests, builds, packages, and inspects the AppImage. A manual native macOS matrix produces inspected Apple Silicon and Intel artifacts. Signing/notarisation, an application icon, Linux `desktopName`, a release/versioning procedure, and a dependency-update policy remain. |
 
 ## 3. Audit findings
 
@@ -502,8 +502,8 @@ Work:
 
 - App icon, Linux desktop identity, licence and third-party notices, semantic
   versioning, changelog, checksums, and reproducible release notes.
-- Automated Linux artifacts and a real macOS build/test lane; signing and
-  notarisation when distribution extends beyond personal use.
+- Promote the manual native macOS packaging matrix into the release process;
+  add signing and notarisation when distribution extends beyond personal use.
 - Migration compatibility tests from every released project schema.
 - Accessibility pass for keyboard, focus, semantics, contrast, and reduced
   motion; performance budgets for large manuscripts and archives.
