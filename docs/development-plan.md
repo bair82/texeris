@@ -30,13 +30,13 @@ This plan is ordered around that thesis and the application that exists now.
 | Editor | Tiptap rendered mode and CodeMirror raw mode over one canonical Markdown file; autosave, revisions, checkpoints, find/replace, outline, tables, footnotes, images, and appearance settings. |
 | Agent loop | Fast/Deep chat, explicit selection/section/document scope, context manifest, edit awareness between turns, structured patch proposal/review, partial acceptance, conflicts, retry, cancel, and usage records. |
 | Conversations | Multiple named conversations with persistence, reopening, deletion, and native context menus. |
-| Writing profile | One built-in profile skill, scoped corpus grants, deterministic conversion, bounded corpus reads, delegated analysis, reviewable artifacts, explicit activation, and an optional patch-style critic. |
+| Skills and writing profile | A versioned application registry now exposes Conservative Rewrite through the command palette with explicit selection/section/document scope, focus, model mode, enforced tool allow-list, and patch-only mutation. The profile skill retains scoped corpus grants, delegated analysis, reviewable artifacts, explicit activation, and an optional patch-style critic. |
 | Interchange | Markdown, DOCX, ODT, and RTF import/export; image preservation; text-bearing PDF import; fixed-layout A4 PDF export. |
 | Recovery and security boundaries | Atomic canonical-file writes, startup reconciliation, append-oriented revision history, sandboxed renderer, narrow preload bridge, main-owned filesystem and credentials, and no agent shell/filesystem tools. |
 | Packaging | Linux AppImage builds and launches; pinned Pandoc is bundled and verified. macOS targets are configured but unbuilt. |
 
 The local verification baseline is strong but narrower than the documentation
-has sometimes implied: TypeScript passes; Vitest reports 238 passing tests and
+has sometimes implied: TypeScript passes; Vitest reports 254 passing tests and
 6 conditional tests skipped; focused Electron smokes and the
 packaged-app verifier pass.
 
@@ -45,11 +45,11 @@ packaged-app verifier pass.
 | Area | Status |
 |---|---|
 | References and citations | The everyday G2 workflow is operational: canonical project CSL JSON with a rebuildable SQLite index, import/manual add with DOI autofill, search-first insert/replace UI, unresolved-key audit, and citeproc PDF/office export with a remembered built-in or custom CSL style. Reference-detail editing remains. |
-| Writing archive | The first G3 slice is operational: workspace-local immutable snapshots, provenance and change status, conversion, passage-level FTS5 search/preview, explicit chat attachments, deletion, and archive-selected writing-profile builds. Re-index/repair commands and evaluated retrieval tuning remain. |
-| Skills | The runtime boundary exists, but the registry is hard-coded and only the writing-profile workflow is user-facing. Conservative rewrite and verbal-tick cleanup are not packaged skills with evaluations. |
+| Writing archive | The first G3 slice is operational: workspace-local immutable snapshots, provenance and change status, conversion, passage-level FTS5 search/preview and repair, explicit chat attachments, deletion, and archive-selected writing-profile builds. Evaluated retrieval tuning remains. |
+| Skills | The first G4 slice is operational: Conservative Rewrite has a bounded launcher, prompt contract, tool enforcement, versioned run records, reviewable patch output, and initial failure-oriented fixtures. Verbal-tick cleanup and a model-evaluation runner remain. |
 | PDF/source research | Text extraction exists; OCR, a source library, PDF viewing, page-linked reading, annotations, and question-answering over saved sources do not. |
 | Spellcheck | Chromium spellcheck remains unreliable in rendered mode and structurally unsuitable for CodeMirror decorations. The app-level replacement is undecided. |
-| Release engineering | No CI, no automated macOS artifact, no signing/notarisation, no application icon, no Linux `desktopName`, no release/versioning procedure, and no dependency-update policy. |
+| Release engineering | Linux CI typechecks, tests, builds, packages, and inspects the AppImage. Automated macOS artifacts, signing/notarisation, an application icon, Linux `desktopName`, a release/versioning procedure, and a dependency-update policy remain. |
 
 ## 3. Audit findings
 
@@ -456,11 +456,14 @@ collection of prompts hidden in code.
 Work:
 
 - Small application-owned skill registry and launcher with explicit scope,
-  mode, allowed tools, output type, and version.
+  mode, allowed tools, output type, and version. The first launcher and runtime
+  allow-list enforcement are implemented for Conservative Rewrite.
 - Ship conservative rewrite and verbal-tick audit/rewrite as the next two
   skills; preserve patch review as the only prose mutation route.
+  Conservative Rewrite is implemented; verbal-tick cleanup remains.
 - Add compact deterministic/model-assisted evaluation fixtures before adding
-  more skills.
+  more skills. Initial preservation, no-op, terminology, and scope-boundary
+  cases now ship with Conservative Rewrite; a model runner remains.
 - Finish profile lifecycle: update/rebuild, provenance, genre variants,
   activation history, disable/delete, and clear distinction between observed
   habits and desired rules.

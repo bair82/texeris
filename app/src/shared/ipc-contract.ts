@@ -51,6 +51,11 @@ import type {
   ArchiveSearchResult,
   ArchiveSourceView,
 } from './archive-types';
+import type {
+  SkillLaunchRequest,
+  SkillLaunchResult,
+  SkillSummary,
+} from './skill-types';
 
 /**
  * IPC contract shared by main, preload, and renderer.
@@ -118,6 +123,10 @@ export interface TexerisApi {
       sourceCount: number;
       warnings: string[];
     }>;
+  };
+  skills: {
+    list(): Promise<SkillSummary[]>;
+    launch(request: SkillLaunchRequest): Promise<SkillLaunchResult>;
   };
   chat: {
     getOrCreateConversation(): Promise<{ conversationId: string }>;

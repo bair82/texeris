@@ -326,3 +326,14 @@ identity; the archive desktop smoke covers the renderer/preload/main/worker
 path. Also recorded the later searchable Help system as shipped Markdown with
 contextual entry points, keeping `welcome.md` brief. Typecheck, 248 tests
 (6 skipped), production build, and archive smoke pass.
+
+**codex, 2026-07-30** — implemented the first G4 product skill: Conservative
+Rewrite v1. Ctrl+K exposes a compact launcher for selection, section, or whole-
+document scope; users choose Light copy-edit, Shorten, Improve flow, or Reduce
+repetition and may override Fast with Deep. Skill conversations persist an
+exact version and fail closed when it is unavailable. The runtime now filters
+the actual Pi tool set to each skill's allow-list, while prose mutations remain
+reviewable patches. Prompt and JSON fixtures protect qualifications, citations,
+specialist terms, no-op behaviour, and scope boundaries. Unit coverage checks
+tool/version failures; the offline patch smoke now covers command discovery,
+launcher Escape/launch, review, apply, and undo.

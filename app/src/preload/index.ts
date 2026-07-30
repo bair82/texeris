@@ -29,6 +29,7 @@ import {
   LifecycleChannels,
   RendererFlushRequestSchema,
 } from '../shared/lifecycle-types';
+import { SkillChannels } from '../shared/skill-types';
 
 const api: TexerisApi = {
   async getAppInfo() {
@@ -95,6 +96,10 @@ const api: TexerisApi = {
       ipcRenderer.invoke(ArchiveChannels.passages, { passageIds }),
     buildProfile: (sourceIds) =>
       ipcRenderer.invoke(ArchiveChannels.buildProfile, { sourceIds }),
+  },
+  skills: {
+    list: () => ipcRenderer.invoke(SkillChannels.list),
+    launch: (request) => ipcRenderer.invoke(SkillChannels.launch, request),
   },
   chat: {
     getOrCreateConversation: () =>
