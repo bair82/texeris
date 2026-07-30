@@ -141,6 +141,14 @@ A skill should be more than a prompt file. Even when implemented through Pi skil
 
 This makes skills easier to present, test, and constrain.
 
+The first implementation keeps this metadata in the application-owned
+registry. Launchable skills are exposed over a narrow validated IPC contract;
+the renderer supplies explicit document scope, option, and model mode. At run
+creation, the runtime resolves the persisted skill ID and exact version and
+filters the application tool set to the skill's allow-list. Unknown skills or
+versions fail closed. This is intentionally a small built-in registry rather
+than a general third-party package loader.
+
 ---
 
 ## 4. Recommended starting architecture
@@ -961,6 +969,12 @@ Each skill should have:
 - Regression examples from actual failures.
 
 Do not require a large evaluation platform initially. A directory of cases and a command that runs them against Fast and Deep models is enough.
+
+Conservative Rewrite v1 establishes the initial test shape: unit tests protect
+registry metadata, prompt constraints, exact version handling, and effective
+tool filtering; an offline Electron smoke covers command discovery, launcher
+escape/launch, patch review, acceptance, and undo. JSON fixtures record
+meaning-preservation failures for a later Fast/Deep model-evaluation runner.
 
 ---
 

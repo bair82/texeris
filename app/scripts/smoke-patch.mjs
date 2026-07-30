@@ -1,7 +1,7 @@
 /**
- * WP4 end-to-end smoke (deterministic, offline): the faux provider scripts a
- * propose_patch call; the review UI shows it; accept-all applies it as an
- * agent revision; Undo restores. Verifies the patch pipeline incl. UI.
+ * Patch + Conservative rewrite end-to-end smoke (deterministic, offline):
+ * the command palette opens the bounded skill launcher, the faux provider
+ * scripts a propose_patch call, and review/accept/undo complete through UI.
  *
  * Usage: pnpm build first, then: node scripts/smoke-patch.mjs
  */
@@ -122,27 +122,101 @@ try {
   const ws = await connectPage(app.wsUrl);
   const cdp = new Cdp(ws);
   await waitFor(cdp, `!!window.texeris`, 'preload API never attached');
+  await waitFor(cdp, `!!document.querySelector('.tiptap-rendered')`, 'editor never mounted');
 
   const boot = await evaluate(cdp, 'window.texeris.doc.getText()');
   const baseRevision = boot.revision;
 
-  // ask the agent → faux scripts a propose_patch call
+  // Open the product skill through the same command entry point a user sees.
   await evaluate(
     cdp,
-    `
-    (async () => {
-      const { conversationId } = await window.texeris.chat.getOrCreateConversation();
-      const done = new Promise((resolve) => {
-        const unsub = window.texeris.chat.onEvent((ev) => {
-          if (ev.type === 'run_end') { unsub(); resolve(); }
-        });
-      });
-      await window.texeris.chat.startTurn({
-        conversationId, text: 'sharpen the terminology', mode: 'fast', scope: { kind: 'document' },
-      });
-      await done;
-    })()
-    `,
+    `document.body.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'k', ctrlKey: true, bubbles: true, cancelable: true,
+    })); true`,
+  );
+  await waitFor(cdp, `!!document.querySelector('.palette-input')`, 'command palette never opened');
+  await evaluate(
+    cdp,
+    `(() => {
+      const input = document.querySelector('.palette-input');
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      set.call(input, 'conservative rewrite');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    })()`,
+  );
+  await waitFor(
+    cdp,
+    `[...document.querySelectorAll('.palette-row')].some(
+      (row) => row.textContent.includes('Conservative Rewrite'),
+    )`,
+    'skill command was not discoverable',
+  );
+  await evaluate(
+    cdp,
+    `document.querySelector('.palette-input').dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter', bubbles: true, cancelable: true,
+    })); true`,
+  );
+  await waitFor(cdp, `!!document.querySelector('.skill-launch-dialog')`, 'skill launcher never opened');
+  const launcherText = await evaluate(cdp, `document.querySelector('.skill-launch-dialog').textContent`);
+  check(
+    'launcher exposes scope, focus and review boundary',
+    launcherText.includes('Whole document') &&
+      launcherText.includes('Light copy-edit') &&
+      launcherText.includes('not changed automatically'),
+  );
+
+  // Escape is a reliable way out of the launcher.
+  await evaluate(
+    cdp,
+    `document.body.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Escape', bubbles: true, cancelable: true,
+    })); true`,
+  );
+  await waitFor(
+    cdp,
+    `!document.querySelector('.skill-launch-dialog')`,
+    'Escape did not close skill launcher',
+  );
+  check('Escape closes the skill launcher', true);
+
+  // Reopen and launch; the faux provider scripts a valid patch call.
+  await evaluate(
+    cdp,
+    `document.body.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'k', ctrlKey: true, bubbles: true, cancelable: true,
+    })); true`,
+  );
+  await waitFor(cdp, `!!document.querySelector('.palette-input')`, 'command palette did not reopen');
+  await evaluate(
+    cdp,
+    `(() => {
+      const input = document.querySelector('.palette-input');
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      set.call(input, 'conservative rewrite');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    })()`,
+  );
+  await waitFor(
+    cdp,
+    `[...document.querySelectorAll('.palette-row')].some(
+      (row) => row.textContent.includes('Conservative Rewrite'),
+    )`,
+    'skill command was not discoverable after reopening',
+  );
+  await evaluate(
+    cdp,
+    `document.querySelector('.palette-input').dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter', bubbles: true, cancelable: true,
+    })); true`,
+  );
+  await waitFor(cdp, `!!document.querySelector('.skill-launch-dialog')`, 'skill launcher did not reopen');
+  await evaluate(
+    cdp,
+    `[...document.querySelectorAll('.skill-launch-dialog button')]
+      .find((button) => button.textContent === 'Start rewrite').click(); true`,
   );
 
   // review card appears

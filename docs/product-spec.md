@@ -472,6 +472,13 @@ Examples:
 
 A skill may ask for scope or use the current selection/document context. It should produce a predictable type of result: report, comments, patch, reference changes, or exported file.
 
+The first productised launcher is deliberately compact: the command palette
+opens Conservative Rewrite, preselects an active editor selection when one
+exists, otherwise defaults to the whole document, and lets the user choose a
+section, focus, or Deep override. The resulting conversation and run retain
+the skill/version boundary, and prose changes still enter the ordinary patch
+review flow.
+
 ## 10.10 Create a named checkpoint
 
 The user can name a stable document state. Checkpoints should be easy to compare and restore.
@@ -844,6 +851,14 @@ The initial catalogue should be small enough to test and refine thoroughly.
 - Improve flow.
 - Reduce repetition.
 - Preserve sentence structure where possible.
+
+**Current implementation:** Version 1 supports selection, section, and whole-
+document scope with Light copy-edit, Shorten, Improve flow, and Reduce
+repetition focuses. It may read only the scoped document, project instructions,
+and active writing profile, and may return prose changes only through
+`propose_patch`. The prompt explicitly prefers no patch over an ornamental
+rewrite and preserves qualifications, specialist terms, Pandoc citations,
+footnotes, links, code, and controlled HTML.
 
 ## 12.2 Remove typical LLM verbal ticks
 

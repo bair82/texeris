@@ -4,6 +4,8 @@ import type { DocumentInfo } from '../../../shared/domain-types';
 import type { JobEvent } from '../../../shared/job-types';
 import type { CitationStyleId } from '../../../shared/citation-style-types';
 import type { ArchiveAttachment } from '../../../shared/archive-types';
+import type { HeadingInfo } from '../../../shared/doc-types';
+import type { SkillSummary } from '../../../shared/skill-types';
 import type { UiState, UiStateDoc } from '../../../shared/ui-types';
 import ChatPanel from '../ChatPanel';
 import PatchReview from '../PatchReview';
@@ -11,6 +13,7 @@ import EditorRegion, { type WorkspaceStatus } from '../editor/EditorRegion';
 import {
   getChatCommands,
   getEditorCommands,
+  getEditorSelection,
   navigateToHeading,
 } from '../editor/editorBridge';
 import type { EditorMode } from '../editor/session';
@@ -21,6 +24,7 @@ import ShortcutsOverlay from './ShortcutsOverlay';
 import TrashDialog from './TrashDialog';
 import ExportDialog from './ExportDialog';
 import ArchivePanel from './ArchivePanel';
+import SkillLaunchDialog from './SkillLaunchDialog';
 import { describeContextAt, dispatchContextAction } from '../contextMenuBridge';
 
 const DEFAULT_NAV_WIDTH = 232;
@@ -71,6 +75,12 @@ export default function AppShell({
   const [trashOpen, setTrashOpen] = useState(false);
   const [newDocRequested, setNewDocRequested] = useState(0);
   const [profileSourceOpen, setProfileSourceOpen] = useState(false);
+  const [skillLaunch, setSkillLaunch] = useState<{
+    skill: SkillSummary;
+    documentId: string;
+    selection: { from: number; to: number } | null;
+    headings: HeadingInfo[];
+  } | null>(null);
   const [exportTargetId, setExportTargetId] = useState<string | null>(null);
   const [archiveAttachments, setArchiveAttachments] = useState<ArchiveAttachment[]>([]);
   const [operationNotice, setOperationNotice] = useState<WorkspaceStatus | null>(null);
@@ -388,6 +398,34 @@ export default function AppShell({
 
   // ------------------------------------------------------- command registry
 
+  const openConservativeRewrite = useCallback(async () => {
+    if (!openDocId) {
+      setOperationNotice({ message: 'Open a document before starting a rewrite.', tone: 'warning' });
+      return;
+    }
+    try {
+      const [skills, headings] = await Promise.all([
+        window.texeris.skills.list(),
+        window.texeris.doc.outline(openDocId),
+      ]);
+      const skill = skills.find((item) => item.id === 'conservative-rewrite');
+      if (!skill) throw new Error('Conservative rewrite is unavailable');
+      setSkillLaunch({
+        skill,
+        documentId: openDocId,
+        selection: getEditorSelection(),
+        headings,
+      });
+    } catch (error) {
+      setOperationNotice({
+        message: `Could not open Conservative rewrite: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        tone: 'error',
+      });
+    }
+  }, [openDocId]);
+
   /** Every app-menu / palette command (M1.5 EU5) routes through here. */
   const runCommand = useCallback(
     (id: string) => {
@@ -453,12 +491,24 @@ export default function AppShell({
         case 'chat:build-writing-profile':
           setProfileSourceOpen(true);
           break;
+        case 'chat:conservative-rewrite':
+          void openConservativeRewrite();
+          break;
         case 'help:shortcuts':
           setShortcutsOpen((v) => !v);
           break;
       }
     },
-    [onExportDoc, onImportDoc, openProjectPickerSafely, patchUi, toggleNav, toggleSide, toggleFocus],
+    [
+      onExportDoc,
+      onImportDoc,
+      openConservativeRewrite,
+      openProjectPickerSafely,
+      patchUi,
+      toggleNav,
+      toggleSide,
+      toggleFocus,
+    ],
   );
 
   // App-menu commands from main.
@@ -656,6 +706,31 @@ export default function AppShell({
             </div>
           </div>
         </div>
+      )}
+      {skillLaunch && (
+        <SkillLaunchDialog
+          {...skillLaunch}
+          onClose={() => setSkillLaunch(null)}
+          onLaunch={async ({ mode, optionId, scope }) => {
+            await getEditorCommands()?.flush();
+            const result = await window.texeris.skills.launch({
+              skillId: skillLaunch.skill.id,
+              mode,
+              optionId,
+              scope,
+            });
+            setSkillLaunch(null);
+            patchUi(
+              {
+                focusMode: false,
+                sideVisible: true,
+                openConversationId: result.conversationId,
+              },
+              true,
+            );
+            getChatCommands()?.openConversation(result.conversationId);
+          }}
+        />
       )}
     </div>
   );

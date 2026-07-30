@@ -272,6 +272,72 @@ describe('PiAgentRuntime', () => {
     expect(agentRev?.source).toMatchObject({ kind: 'patch', patchId: proposed[0].id });
   });
 
+  it('enforces a Conservative rewrite conversation tool boundary', async () => {
+    const skillConversationId = conversations.startNewConversation({
+      id: 'conservative-rewrite',
+      version: 1,
+    });
+    let seenTools: string[] = [];
+    let seenSystemPrompt = '';
+    faux.setResponses([
+      (context) => {
+        seenTools = (context.tools ?? []).map((tool) => tool.name);
+        seenSystemPrompt = context.systemPrompt ?? '';
+        return fauxAssistantMessage([
+          fauxToolCall('propose_patch', {
+            baseRevision: 1,
+            title: 'Conservative copy-edit',
+            summary: 'Remove one unnecessary word.',
+            groups: [
+              {
+                explanation: 'concision',
+                changes: [{ from: 13, to: 18, expectedText: 'quick', insert: 'swift' }],
+              },
+            ],
+          }),
+        ]);
+      },
+      fauxAssistantMessage('I proposed one bounded change for review.'),
+    ]);
+
+    const { runId } = await runtime.startTurn({
+      conversationId: skillConversationId,
+      text: 'Run Conservative rewrite on the selected scope.',
+      mode: 'fast',
+      scope: { kind: 'selection', from: 13, to: 18 },
+    });
+    await drain(runId);
+
+    expect(seenTools.sort()).toEqual([
+      'propose_patch',
+      'read_document',
+      'read_document_range',
+      'read_project_instructions',
+      'read_writing_profile',
+    ]);
+    expect(seenSystemPrompt).toContain("Texeris's Conservative rewrite skill");
+    expect(seenSystemPrompt).toContain('Stay inside the supplied selection');
+    expect(conversations.listRuns(skillConversationId)[0]).toMatchObject({
+      skillId: 'conservative-rewrite',
+      skillVersion: 1,
+    });
+    expect(patches.list()).toHaveLength(1);
+  });
+
+  it('fails closed when a persisted skill version is unavailable', async () => {
+    const oldConversationId = conversations.startNewConversation({
+      id: 'conservative-rewrite',
+      version: 99,
+    });
+    await expect(runtime.startTurn({
+      conversationId: oldConversationId,
+      text: 'rewrite',
+      mode: 'fast',
+      scope: { kind: 'document' },
+    })).rejects.toThrow(/unsupported Conservative rewrite version: 99/);
+    expect(conversations.listRuns(oldConversationId)).toHaveLength(0);
+  });
+
   it('injects a compact change summary between turns (last-seen revision)', async () => {
     const seenPrompts: string[] = [];
     faux.setResponses([

@@ -119,6 +119,15 @@ import {
 } from '../shared/archive-types';
 import type { ArchiveService } from './services/archive';
 import { requestRendererFlush } from './rendererFlush';
+import {
+  SkillChannels,
+  SkillLaunchRequestSchema,
+} from '../shared/skill-types';
+import {
+  launchableSkills,
+  skillById,
+  skillSummary,
+} from './agent/skills';
 
 export interface IpcDeps {
   requireProject(): ProjectContext;
@@ -395,6 +404,55 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const req = Value.Decode(CancelRequestSchema, raw);
     await deps.requireRuntime().cancel(req.runId);
     return { cancelled: true };
+  });
+
+  // --------------------------------------------------------------- skills
+
+  ipcMain.handle(SkillChannels.list, () => launchableSkills());
+
+  ipcMain.handle(SkillChannels.launch, async (event, raw: unknown) => {
+    const req = Value.Decode(SkillLaunchRequestSchema, raw);
+    const skill = skillById(req.skillId);
+    if (!skill?.launchPrompt) throw new Error(`skill is not launchable: ${req.skillId}`);
+    if (!skill.supportsScopes.includes(req.scope.kind)) {
+      throw new Error(`${skill.name} does not support ${req.scope.kind} scope`);
+    }
+    if (!req.scope.documentId) {
+      throw new Error('a skill launch requires an explicit document');
+    }
+    if (req.scope.kind === 'selection' && req.scope.to <= req.scope.from) {
+      throw new Error('select some text before launching this skill');
+    }
+    if (req.scope.kind === 'section' && !req.scope.heading.trim()) {
+      throw new Error('choose a section before launching this skill');
+    }
+
+    const runtime = deps.requireRuntime();
+    runtime.assertIdle();
+    const conversations = deps.requireConversations();
+    const conversationId = conversations.startNewConversation({
+      id: skill.id,
+      version: skill.version,
+    });
+    try {
+      const { runId } = await runtime.startTurn({
+        conversationId,
+        text: skill.launchPrompt(req.optionId),
+        mode: req.mode,
+        scope: req.scope,
+      });
+      void (async () => {
+        for await (const agentEvent of runtime.events(runId)) {
+          if (!event.sender.isDestroyed()) {
+            event.sender.send(ChatChannels.event, agentEvent);
+          }
+        }
+      })();
+      return { conversationId, runId, skill: skillSummary(skill) };
+    } catch (error) {
+      conversations.deleteConversation(conversationId);
+      throw error;
+    }
   });
 
   // --------------------------------------------------------- writing archive
