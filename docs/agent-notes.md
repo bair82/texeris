@@ -306,3 +306,12 @@ tampered paths, upload/typing composition, and manager handoff; real Electron
 smokes cover immediate close and picker-mediated immediate project switch.
 Typecheck, 247 tests (6 skipped), production build, both targeted desktop
 smokes, and an independent post-fix review pass.
+
+**codex, 2026-07-30** — rewrote the seeded `welcome.md` around a first real
+writing session instead of a feature inventory. It now leads from
+`manuscript.md` through autosave and the two editor views, scoped assistant
+work and reviewable patches, conversation branching, history/checkpoints,
+citations, and explicit local archive attachments, ending with only the
+essential controls. Existing user-owned `welcome.md` files remain untouched.
+Typecheck, 247 tests (6 skipped), production build, and the EU7 new-project
+onboarding smoke pass.
