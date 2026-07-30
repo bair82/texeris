@@ -12,49 +12,79 @@ export const WELCOME_DOCUMENT = 'welcome.md';
 
 export const WELCOME_CONTENT = `# Welcome to Texeris
 
-Texeris is a writing workspace with a revision-aware editorial assistant.
-This short note tours the essentials. When you are done with it, move it to
-the trash — it can be restored from there if you ever want it back.
+Texeris is a local workspace for serious writing: your documents stay ordinary
+Markdown files, while revisions, conversations, references, and research
+context stay connected around them.
 
-## Writing
+You can edit or delete this note. It is here only to help you begin.
 
-Everything saves automatically as you type. There is no save button and no
-unsaved state: every change lands on disk and in the project's revision
-history on its own.
+## Start with something real
 
-Two modes show the *same* document, never two copies. **Rendered** (the
-default) is a typeset view you edit directly, much like a word processor.
-**Raw** is the underlying Markdown. Switch with the buttons in the status
-bar or Ctrl+E — the toolbar's formatting commands work in both.
+Open **manuscript.md** in the file list and paste in a paragraph you are
+actually working on. Use the **+** button when you need another document.
 
-## The assistant
+Texeris saves as you type. Closing the app or changing projects waits for recent
+edits to reach the document, so there is no save button to remember.
 
-The panel on the right is your editorial collaborator. It can read the
-document you are working on and answer questions about it, but it never
-edits the text itself. Instead it *proposes patches* — structured edits
-that appear above the chat for your review. Accept the parts you like and
-reject the rest; nothing changes without your say.
+**Rendered** mode is the comfortable writing view. **Raw** mode shows the same
+document as Pandoc-oriented Markdown—not a second copy. Switch modes in the
+status bar or with Ctrl+E.
 
-## Revisions and checkpoints
+## Work with the assistant
 
-The **History** button in the status bar lists every revision of the open
-document. Typing is grouped automatically, and each accepted patch is its
-own revision, so you can always see what happened and restore an earlier
-state.
+The right-hand panel is an editorial collaborator that understands the current
+document and its revision.
 
-A **checkpoint** is a named bookmark — "before restructuring", "submitted
-draft". Create one from the History panel before anything drastic, and you
-can return to it in one click.
+Before sending, choose what it should see:
 
-## Housekeeping
+- **Document** for structure, argument, or whole-draft questions.
+- **Section** for focused work on one part.
+- **Selection** when you want help with a particular passage.
 
-- Ctrl+K opens the command palette; Ctrl+/ lists every shortcut.
-- Deleted documents move to the trash (the icon at the top of the file
-  list), where they can be restored with their history intact.
-- Settings (the gear at the bottom left) holds the assistant's model
-  credentials, spellcheck, and appearance.
+Use **Fast** for routine editing and **Deep** for work that benefits from more
+deliberation. If a request should change the manuscript, the assistant proposes
+a patch. You review the exact changes and decide what to accept; it never
+silently rewrites the document.
 
-Happy writing.
+Try a concrete first request:
+
+> Read this draft and identify the single most important revision I should make
+> next. Explain why before proposing any edits.
+
+If you want to change an earlier instruction, hover over your message and choose
+**Edit**. To ask for another answer to the latest turn, choose **Regenerate**.
+Both create a new branch; the original conversation and document history remain
+available.
+
+## Keep your bearings
+
+Open **History** in the status bar to inspect revisions or restore an earlier
+state. Typing is grouped into useful revisions, while accepted patches remain
+distinct. Add a named checkpoint before a major restructure or submission.
+
+Your Markdown file is canonical and readable without Texeris. The local history
+database supplies the richer undo and audit trail.
+
+## Citations and previous writing
+
+Use **Cite** in the editor toolbar to import a CSL JSON, BibTeX, or RIS library,
+or add a reference from a few details. A DOI can fill the rest when metadata is
+available. Citation markers stay standard Pandoc Markdown, and bibliography-aware
+PDF or word-processor export is available from the project commands.
+
+The **Archive** in the left activity rail is for previous writing you may want
+to reuse or consult. Import files or a folder, search locally, preview a result,
+then choose **Use in chat** to give a saved passage to the assistant explicitly.
+
+## Useful controls
+
+- Ctrl+K opens the command palette.
+- Ctrl+/ shows all keyboard shortcuts.
+- The trash keeps deleted documents restorable until you remove them permanently.
+- Settings holds model credentials, appearance, and writing-profile controls.
+
+That is enough to begin. Open **manuscript.md**, write a little, and ask one
+specific question about the text in front of you.
 `;
 
 /**

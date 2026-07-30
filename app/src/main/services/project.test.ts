@@ -56,7 +56,11 @@ describe('createProject', () => {
       .prepare('SELECT id FROM documents WHERE path = ?')
       .get(WELCOME_DOCUMENT) as { id: string } | undefined;
     expect(row?.id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(ctx.revisions.getCurrentText(row!.id)).toContain('# Welcome to Texeris');
+    const welcome = ctx.revisions.getCurrentText(row!.id);
+    expect(welcome).toContain('# Welcome to Texeris');
+    expect(welcome).toContain('Open **manuscript.md**');
+    expect(welcome).toContain('Use **Cite**');
+    expect(welcome).toContain('The **Archive**');
     expect(new UiStateService(ctx.db).get().openDocumentId).toBe(row!.id);
   });
 
