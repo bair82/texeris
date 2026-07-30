@@ -266,3 +266,11 @@ failure falls back to the same offline form. Exact duplicate DOIs reuse the
 existing project record. The citation smoke now starts from an empty library,
 manually creates/cites a record, then combines it with imported references and
 verifies the shared exported bibliography.
+
+**owner/codex, 2026-07-30** — set a boundary for later citation work: keep the
+built-in reference UI simple and deterministic, and handle complex batch
+reconciliation, metadata repair, and cross-document citation normalization
+through custom agent workflows. Such workflows must propose reviewable
+structured reference/document changes through application-owned validation and
+apply paths; they do not get raw filesystem access or mutate
+`references.csl.json` directly.

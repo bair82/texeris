@@ -984,9 +984,9 @@ hypotheses rather than implementation status.
 ### 13.2 Can wait until the core loop is proven
 
 - Semantic archive search.
-- DOI resolution.
 - Zotero integration.
-- Complex batch reference repair.
+- Complex batch reference repair, handled by reviewable custom agent workflows
+  rather than expanding the core UI into a full reference manager.
 - Multi-document agent planning.
 - Extensive source/PDF research.
 - Collaboration.
