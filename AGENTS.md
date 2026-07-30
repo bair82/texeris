@@ -80,8 +80,8 @@ when product or architecture decisions change, update them.
   `node app/scripts/smoke-ui.mjs`
 - Find & outline e2e smoke (search, cycle, replace one, outline click):
   `node app/scripts/smoke-find.mjs`
-- References/citations e2e smoke (BibTeX import, search, insert/replace,
-  rendered/raw canonicality, citeproc PDF): `node
+- References/citations e2e smoke (manual add, BibTeX import, search,
+  insert/replace, rendered/raw canonicality, citeproc PDF): `node
   app/scripts/smoke-citations.mjs`
 - Doc & conversation management e2e smoke (rename, set-main, duplicate,
   trash, reopen renamed conversation): `node app/scripts/smoke-eu3.mjs`

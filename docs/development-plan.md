@@ -345,10 +345,11 @@ automatically when the document cites records in the library.
 
 **Implemented first slice (2026-07-30):** stable-key validation, duplicate/key
 conflict reporting, external-file index repair, CSL JSON/BibTeX/RIS import,
+compact manual creation with generated keys and optional Crossref DOI autofill,
 author/title/year/key search, rendered and raw insertion, rendered replacement,
 missing/unused-key audit, and bibliography-aware PDF/DOCX/ODT/RTF export. The
-remaining G2 work is reference-detail editing, explicit missing-key resolution,
-export-time CSL style selection, and broader golden fixtures.
+remaining G2 work is editing existing reference details, explicit missing-key
+resolution, export-time CSL style selection, and broader golden fixtures.
 
 Work:
 

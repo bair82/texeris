@@ -34,6 +34,8 @@ import type { PatchStyleMode } from './settings-types';
 import type { ContextActionEvent, ContextDescribeRequest, ContextDescriptor } from './context-menu-types';
 import type {
   CitationAudit,
+  ReferenceCreateResult,
+  ReferenceDraft,
   ReferenceImportReport,
   ReferenceListItem,
 } from './reference-types';
@@ -75,6 +77,8 @@ export interface TexerisApi {
     list(): Promise<ReferenceListItem[]>;
     search(query: string, limit?: number): Promise<ReferenceListItem[]>;
     importDialog(): Promise<ReferenceImportReport | null>;
+    lookupDoi(doi: string): Promise<ReferenceDraft>;
+    create(draft: ReferenceDraft): Promise<ReferenceCreateResult>;
     audit(markdown: string): Promise<CitationAudit>;
   };
   chat: {

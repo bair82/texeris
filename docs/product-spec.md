@@ -973,8 +973,9 @@ The first usable release should prioritise the complete writing loop over featur
 projects, checkpoints, and deterministic Markdown/office/PDF interchange work
 on the current development branch. The first structured-reference workflow also
 works end to end: CSL JSON/BibTeX/RIS import, search-first citation
-insert/replace, unresolved-key audit, and citeproc bibliography export. Reference
-detail editing and style selection, macOS distribution, the reusable writing
+insert/replace, compact manual creation, optional Crossref DOI autofill,
+unresolved-key audit, and citeproc bibliography export. Editing existing
+reference details and style selection, macOS distribution, the reusable writing
 archive, the full editable profile lifecycle, and packaged rewrite/tick skills
 remain incomplete. The active ordering and exit gates are maintained in
 [`development-plan.md`](development-plan.md); phase labels below remain product

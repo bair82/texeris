@@ -1073,6 +1073,13 @@ reads. Imports preserve complete CSL records in the canonical file. This keeps
 Pandoc interoperability and recovery independent of Texeris while retaining
 fast local search.
 
+Manual creation requires only a title; authors, year, type, DOI, URL, and the
+generated citation key remain editable. DOI enrichment is an explicit user
+action against Crossref’s public single-work endpoint. Only the DOI is sent;
+document text and project metadata stay local. A failed or missing lookup never
+blocks manual creation, and successful metadata is copied into the canonical
+CSL record rather than becoming a live external dependency.
+
 ## 16.4 Parsing and validation
 
 Citation validation should be deterministic:

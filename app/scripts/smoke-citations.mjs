@@ -146,17 +146,61 @@ try {
   await evaluate("document.querySelector('.citation-insert').click(); true");
   await waitFor("!!document.querySelector('.citation-picker')", 'citation picker never opened');
   check(
-    'empty library offers import in the same picker',
-    await evaluate("document.querySelector('.citation-empty')?.textContent.includes('Import a bibliography')"),
+    'empty library offers add and import in the same picker',
+    await evaluate("document.querySelector('.citation-empty')?.textContent.includes('Add a reference') && document.querySelector('.citation-empty')?.textContent.includes('Import a bibliography')"),
   );
+  await evaluate("[...document.querySelectorAll('.citation-empty button')].find(button => button.textContent === 'Add a reference').click(); true");
+  await waitFor("!!document.querySelector('.reference-form')", 'manual reference form did not open');
+  if (process.env.TEXERIS_LIVE_DOI_SMOKE) {
+    await evaluate(setInput('.reference-form input[placeholder=\"10.1000/example\"]', process.env.TEXERIS_LIVE_DOI_SMOKE));
+    await evaluate("[...document.querySelectorAll('.reference-form button')].find(button => button.textContent === 'Find details').click(); true");
+    await waitFor(
+      "document.querySelector('.reference-form .citation-report')?.textContent.includes('Details found')",
+      'live DOI metadata did not populate',
+    );
+    check(
+      'live DOI lookup fills the editable core fields',
+      await evaluate("document.querySelector('.reference-form input[placeholder=\"Title of the work\"]')?.value.length > 0 && document.querySelector('.reference-form input[placeholder=\"Ada Smith; Lin Jones\"]')?.value.length > 0 && document.querySelector('.reference-form input[placeholder=\"2026\"]')?.value.length > 0"),
+    );
+    await evaluate(setInput('.reference-form input[placeholder=\"10.1000/example\"]', ''));
+    await evaluate(setInput('.reference-form input[placeholder=\"https://…\"]', ''));
+    await evaluate(setInput('.reference-form-more label:last-child input', ''));
+  }
+  await evaluate(setInput('.reference-form input[placeholder=\"Title of the work\"]', 'Manually Added Source'));
+  await evaluate(setInput('.reference-form input[placeholder=\"Ada Smith; Lin Jones\"]', 'Morgan Reed'));
+  await evaluate(setInput('.reference-form input[placeholder=\"2026\"]', '2023'));
+  check(
+    'manual details generate a citation key',
+    await evaluate("document.querySelector('.reference-key-preview')?.textContent.includes('@reed2023')"),
+  );
+  if (process.env.TEXERIS_REFERENCE_FORM_SCREENSHOT) {
+    const screenshot = await send('Page.captureScreenshot', { format: 'png' });
+    fs.writeFileSync(
+      process.env.TEXERIS_REFERENCE_FORM_SCREENSHOT,
+      Buffer.from(screenshot.data, 'base64'),
+    );
+  }
+  await evaluate("[...document.querySelectorAll('.reference-form button')].find(button => button.textContent === 'Add and cite').click(); true");
+  await waitFor(
+    "window.texeris.doc.getText().then(result => result.text.includes('[@reed2023]'))",
+    'manual reference was not saved and cited',
+  );
+  check(
+    'manual entry created the canonical project library',
+    fs.existsSync(path.join(projectDir, 'references.csl.json')),
+  );
+
+  await focusEnd();
+  await evaluate("document.querySelector('.citation-insert').click(); true");
+  await waitFor("!!document.querySelector('.citation-picker')", 'citation picker did not reopen');
   await evaluate("[...document.querySelectorAll('.citation-picker button')].find(button => button.textContent === 'Import…').click(); true");
   await waitFor(
     "document.querySelector('.citation-report')?.textContent.includes('Imported 2')",
     'reference import did not complete',
   );
   check(
-    'canonical project library was created',
-    fs.existsSync(path.join(projectDir, 'references.csl.json')),
+    'manual and imported records share one project library',
+    JSON.parse(fs.readFileSync(path.join(projectDir, 'references.csl.json'), 'utf8')).length === 3,
   );
 
   await evaluate(setInput('.citation-search-row input', 'geometry'));
@@ -247,7 +291,8 @@ try {
     'export resolved citations and emitted bibliography entries',
     importedText?.text?.includes('Smith and Jones 2024') &&
       importedText.text.includes('The Geometry of Attention') &&
-      importedText.text.includes('Writing with Evidence'),
+      importedText.text.includes('Writing with Evidence') &&
+      importedText.text.includes('Manually Added Source'),
     importedText?.text?.slice(-600),
   );
 } finally {
