@@ -25,6 +25,8 @@ export default function CitationPicker({
   const [unresolved, setUnresolved] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   const refresh = async (value: string) => {
     setItems(await window.texeris.references.search(value, 40));
@@ -43,6 +45,17 @@ export default function CitationPicker({
   useEffect(() => {
     if (!adding) inputRef.current?.focus();
   }, [adding]);
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      onCloseRef.current();
+    };
+    window.addEventListener('keydown', closeOnEscape, true);
+    return () => window.removeEventListener('keydown', closeOnEscape, true);
+  }, []);
 
   useEffect(() => {
     void window.texeris.references
@@ -82,10 +95,7 @@ export default function CitationPicker({
         aria-label={adding ? 'Add reference' : 'Insert citation'}
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
-          if (event.key === 'Escape') {
-            event.preventDefault();
-            onClose();
-          } else if (!adding && event.key === 'ArrowDown') {
+          if (!adding && event.key === 'ArrowDown') {
             event.preventDefault();
             setSelected((index) => Math.min(items.length - 1, index + 1));
           } else if (!adding && event.key === 'ArrowUp') {
