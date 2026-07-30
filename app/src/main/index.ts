@@ -1,4 +1,13 @@
-import { app, BrowserWindow, Menu, net, protocol, safeStorage, session } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  Menu,
+  net,
+  protocol,
+  safeStorage,
+  session,
+} from 'electron';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
@@ -25,6 +34,10 @@ import { attachContextMenu, registerContextMenuHandlers } from './contextMenu';
 import { bindJobRunner } from './jobs/current';
 import { JobRunner } from './jobs/runner';
 import { ArchiveService } from './services/archive';
+import {
+  registerRendererFlushHandler,
+  requestRendererFlush,
+} from './rendererFlush';
 
 /** Pi requires Node >= 22.19; assert the Electron-bundled Node at startup. */
 const MIN_NODE_VERSION = [22, 19, 0] as const;
@@ -104,6 +117,34 @@ function createWindow(): void {
       spellcheck: true,
     },
   });
+  let closeApproved = false;
+  let closePending = false;
+  win.on('close', (event) => {
+    if (closeApproved || win.webContents.isDestroyed()) return;
+    event.preventDefault();
+    if (closePending) return;
+    closePending = true;
+    void requestRendererFlush(win.webContents, 'close').then(() => {
+      closeApproved = true;
+      win.close();
+    }).catch(async (error: unknown) => {
+      const result = await dialog.showMessageBox(win, {
+        type: 'error',
+        title: 'Document could not be saved',
+        message: 'Texeris could not save the latest document changes.',
+        detail: error instanceof Error ? error.message : String(error),
+        buttons: ['Keep open', 'Close without saving'],
+        defaultId: 0,
+        cancelId: 0,
+      });
+      if (result.response === 1) {
+        closeApproved = true;
+        win.close();
+      }
+    }).finally(() => {
+      closePending = false;
+    });
+  });
   attachContextMenu(win);
 
   if (process.env.TEXERIS_SPELLCHECK_DIAGNOSTIC) {
@@ -141,6 +182,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
   assertNodeVersion();
   registerContextMenuHandlers();
+  registerRendererFlushHandler();
 
   // Faux runs are deliberately disposable.  They must never inherit a
   // person's workspace config or recents merely because a smoke command
@@ -187,7 +229,7 @@ app.whenReady().then(() => {
   const corpus = new CorpusService();
   const profiles = new WritingProfileService(config);
   const archive = new ArchiveService();
-  app.once('before-quit', () => archive.close());
+  app.once('will-quit', () => archive.close());
 
   // Spellcheck preference (M1.5 EU4). Chromium downloads the language
   // dictionary lazily on first enable (into <userData>/Dictionaries).
@@ -226,29 +268,40 @@ app.whenReady().then(() => {
 
   /** Bind a project context: (re)build per-project services and watchers. */
   const adoptProject = (ctx: ProjectContext): void => {
-    conversations = new ConversationService(ctx.db, () => corpus.gc(ctx));
-    patches = new PatchService(ctx.db, ctx.revisions, (patchId, title) => {
+    const nextConversations = new ConversationService(ctx.db, () => corpus.gc(ctx));
+    const nextPatches = new PatchService(ctx.db, ctx.revisions, (patchId, title) => {
       broadcast(PatchChannels.event, { type: 'patch-proposed', patchId, title });
     });
-    if (runtime) {
-      runtime.setProject(ctx, conversations, patches);
-    } else {
-      runtime = new PiAgentRuntime({
-        models,
-        config,
-        conversations,
-        project: ctx,
-        patches,
-        corpus,
-        profiles,
-        archive,
-        credentials,
-      });
-    }
-    stopWatcher?.();
-    stopWatcher = watchProjectFiles(ctx, (docEvent) => {
+    const nextStopWatcher = watchProjectFiles(ctx, (docEvent) => {
       broadcast(DocChannels.event, docEvent);
     });
+    try {
+      manager.adoptContext(ctx, () => {
+        if (runtime) {
+          // The previous database remains open while active runs are aborted.
+          runtime.setProject(ctx, nextConversations, nextPatches);
+        } else {
+          runtime = new PiAgentRuntime({
+            models,
+            config,
+            conversations: nextConversations,
+            project: ctx,
+            patches: nextPatches,
+            corpus,
+            profiles,
+            archive,
+            credentials,
+          });
+        }
+      });
+    } catch (error) {
+      nextStopWatcher();
+      throw error;
+    }
+    conversations = nextConversations;
+    patches = nextPatches;
+    stopWatcher?.();
+    stopWatcher = nextStopWatcher;
     broadcast(ProjectChannels.changed, projectInfo(ctx));
   };
 
@@ -295,12 +348,12 @@ app.whenReady().then(() => {
 
   // Boot project: smoke/dev override → most recent project → picker.
   if (process.env.TEXERIS_PROJECT_DIR) {
-    adoptProject(manager.adoptContext(openDevProject()));
+    adoptProject(openDevProject());
   } else {
     const [recent] = manager.recents();
     if (recent) {
       try {
-        adoptProject(manager.open(recent));
+        adoptProject(manager.prepareOpen(recent));
       } catch (err) {
         console.error('failed to open recent project, showing picker', err);
       }

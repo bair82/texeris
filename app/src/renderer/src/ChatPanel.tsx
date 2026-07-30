@@ -475,20 +475,26 @@ export default function ChatPanel({
       targetDocumentId = documentId,
     ) => {
       if (!targetConversationId || streaming) {
-        return;
+        return false;
       }
+      const optimisticSeq = -Date.now();
       try {
         setHeadings(await window.texeris.doc.outline(targetDocumentId ?? undefined));
         // Echo the user's message immediately — the run may take a while.
-        setMessages((m) => [...m, { seq: -Date.now(), role: 'user', text: turn.text }]);
+        setMessages((m) => [...m, { seq: optimisticSeq, role: 'user', text: turn.text }]);
         await window.texeris.chat.startTurn({
           conversationId: targetConversationId,
           ...turn,
         });
         setLastTurn(turn);
         if (turn.archivePassageIds?.length) onArchiveAttachmentsUsed?.();
+        return true;
       } catch (err) {
+        setMessages((current) =>
+          current.filter((message) => message.seq !== optimisticSeq),
+        );
         setError(err instanceof Error ? err.message : String(err));
+        return false;
       }
     },
     [conversationId, documentId, onArchiveAttachmentsUsed, streaming],
@@ -598,13 +604,13 @@ export default function ChatPanel({
       effectiveScope = { kind: 'selection', documentId: documentId ?? undefined, ...selection };
     }
     const text = input.trim();
-    setInput('');
-    await startTurn({
+    const started = await startTurn({
       text,
       mode,
       scope: { ...effectiveScope, documentId: documentId ?? undefined },
       archivePassageIds: archiveAttachments.map((item) => item.passageId),
     });
+    if (started) setInput('');
   }, [archiveAttachments, documentId, input, mode, scope, startTurn]);
 
   const cancel = useCallback(() => {

@@ -58,7 +58,7 @@ export default function AppShell({
 }: {
   onOpenSettings: () => void;
   /** Return to the project picker to open or create a project. */
-  onOpenProjectPicker: () => void;
+  onOpenProjectPicker: () => Promise<void>;
   mainDocument: string;
 }) {
   const [ui, setUi] = useState<UiState | null>(null);
@@ -225,6 +225,18 @@ export default function AppShell({
     () => patchUi({ focusMode: !(uiRef.current.focusMode ?? false) }, true),
     [patchUi],
   );
+  const openProjectPickerSafely = useCallback(async () => {
+    try {
+      await onOpenProjectPicker();
+    } catch (error) {
+      setOperationNotice({
+        message: `Could not save before switching projects: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        tone: 'error',
+      });
+    }
+  }, [onOpenProjectPicker]);
 
   const openDoc = useCallback(
     (documentId: string) => {
@@ -394,7 +406,7 @@ export default function AppShell({
           break;
         }
         case 'file:new-project':
-          onOpenProjectPicker();
+          void openProjectPickerSafely();
           break;
         case 'file:import-document':
           void onImportDoc();
@@ -403,9 +415,7 @@ export default function AppShell({
           void onExportDoc();
           break;
         case 'file:switch-project':
-          void window.texeris.project.openDialog().catch(() => {
-            /* cancelled */
-          });
+          void openProjectPickerSafely();
           break;
         case 'edit:undo':
           editor?.undo();
@@ -448,7 +458,7 @@ export default function AppShell({
           break;
       }
     },
-    [onExportDoc, onImportDoc, onOpenProjectPicker, patchUi, toggleNav, toggleSide, toggleFocus],
+    [onExportDoc, onImportDoc, openProjectPickerSafely, patchUi, toggleNav, toggleSide, toggleFocus],
   );
 
   // App-menu commands from main.

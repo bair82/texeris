@@ -99,6 +99,45 @@ describe('openProject', () => {
     expect(() => openProject(root)).toThrow(/invalid project\.json/);
   });
 
+  it('rejects a main document path that escapes the project', () => {
+    create();
+    const file = path.join(root, '.texeris', 'project.json');
+    const json = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
+    json.mainDocument = '../outside.md';
+    fs.writeFileSync(file, JSON.stringify(json));
+    expect(() => openProject(root)).toThrow(/invalid project document path|escapes/);
+  });
+
+  it('rejects a persisted document path that escapes the project', () => {
+    const ctx = create();
+    const outside = path.join(path.dirname(root), `${path.basename(root)}-outside.md`);
+    fs.writeFileSync(outside, 'must stay untouched\n');
+    try {
+      ctx.db
+        .prepare("UPDATE documents SET path = ? WHERE path = 'manuscript.md'")
+        .run(path.relative(root, outside));
+      ctx.db.close();
+      created.length = 0;
+
+      expect(() => openProject(root)).toThrow(/invalid project document path|escapes/);
+      expect(fs.readFileSync(outside, 'utf8')).toBe('must stay untouched\n');
+    } finally {
+      fs.rmSync(outside, { force: true });
+    }
+  });
+
+  it('rejects a document symlink that resolves outside the project', () => {
+    const ctx = create();
+    const outside = path.join(path.dirname(root), `${path.basename(root)}-linked.md`);
+    fs.writeFileSync(outside, 'outside\n');
+    try {
+      fs.symlinkSync(outside, path.join(root, 'linked.md'));
+      expect(() => ensureDocument(ctx, 'linked.md')).toThrow(/symlink|escapes/);
+    } finally {
+      fs.rmSync(outside, { force: true });
+    }
+  });
+
   it('cleans orphan tmp files and never chooses them as content', () => {
     const ctx = create();
     const docId = ensureDocument(ctx, 'manuscript.md');

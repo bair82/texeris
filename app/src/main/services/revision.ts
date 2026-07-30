@@ -1,5 +1,4 @@
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import type {
   Actor,
@@ -14,6 +13,7 @@ import {
 } from '../../shared/text-splice';
 import { atomicWriteText, hashText } from './document';
 import { reconcileImageAssetsBestEffort } from './assets';
+import { resolveProjectDocumentPath } from './projectPath';
 
 /** Full-text snapshot is stored on every SNAPSHOT_EVERY-th revision (§7.2). */
 export const SNAPSHOT_EVERY = 25;
@@ -527,6 +527,6 @@ export class RevisionService {
   }
 
   private filePath(doc: DocumentRow): string {
-    return path.join(this.projectRoot, doc.path);
+    return resolveProjectDocumentPath(this.projectRoot, doc.path);
   }
 }

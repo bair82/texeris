@@ -1165,6 +1165,9 @@ When the document changed after a patch was generated:
 If the model call fails:
 
 - Preserve the prompt and context selection.
+- Persist the submitted prompt before contacting the provider; after a restart,
+  show interrupted work as aborted and retryable rather than silently dropping
+  it or leaving it indefinitely running.
 - Allow retry with the same or other model mode.
 - Do not lose document changes.
 
@@ -1176,19 +1179,28 @@ If a job partially succeeds:
 - Keep generated artifacts or patches that are independently valid.
 - Avoid applying incomplete document changes automatically.
 
-### 16.4 Invalid citation marker
+### 16.4 Close and project-switch failure
+
+- Flush pending editor input and await its canonical commit before closing the
+  window or replacing the active project.
+- If saving fails, keep the current window/project open and explain the error;
+  closing without saving requires an explicit user choice.
+- A project switch must abort and record active foreground work while the old
+  project database is still available.
+
+### 16.5 Invalid citation marker
 
 - Highlight the marker.
 - Explain the syntax problem.
 - Do not silently rewrite a citation key unless the match is unambiguous.
 
-### 16.5 Missing reference
+### 16.6 Missing reference
 
 - Mark the citation as unresolved.
 - Allow the user or a future resolver to attach a record.
 - Preserve the textual key during editing and export attempts.
 
-### 16.6 External file changes
+### 16.7 External file changes
 
 If project files can be edited outside the application:
 
@@ -1197,7 +1209,7 @@ If project files can be edited outside the application:
 - Avoid overwriting external edits.
 - Show a conflict if both versions changed incompatibly.
 
-### 16.7 Very large context
+### 16.8 Very large context
 
 When requested context exceeds a model's practical limit:
 

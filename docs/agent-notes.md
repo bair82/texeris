@@ -291,3 +291,18 @@ explicit “Use in chat” attachments, and archive-selected writing-profile
 builds. Chat manifests persist passage IDs through edit/regenerate rewind; raw
 saved passages, not highlighted snippets, enter model context. Embeddings, OCR,
 tags, folder watching, and automatic retrieval remain deliberately deferred.
+
+**codex, 2026-07-30** — closed the lifecycle-integrity audit findings. Window
+close and every project-picker/switch route now await editor typing, image
+uploads, and canonical commits; failures preserve the current window/project.
+Project candidates, watchers, runtime cancellation, and database ownership are
+handed off in a safe order. Canonical Markdown paths are confined against
+traversal and symlink escape across document/revision/export/asset services.
+Submitted prompts and running-run boundaries persist transactionally before
+provider work, with interrupted runs marked aborted on restart. New asset
+leases protect upload-before-reference races and startup removes abandoned
+uploads. Failure-mode tests cover provider rejection, restart interruption,
+tampered paths, upload/typing composition, and manager handoff; real Electron
+smokes cover immediate close and picker-mediated immediate project switch.
+Typecheck, 247 tests (6 skipped), production build, both targeted desktop
+smokes, and an independent post-fix review pass.

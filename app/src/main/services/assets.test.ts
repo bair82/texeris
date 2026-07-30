@@ -66,10 +66,19 @@ describe('image assets', () => {
     })).toThrow(/empty|invalid/);
   });
 
-  it('deletes an upload that was never referenced', () => {
+  it('keeps a new upload across the typing commit that precedes its image paste', () => {
+    const asset = add();
+    commit('Typed first', 'typing');
+    expect(fs.existsSync(path.join(root, asset.path))).toBe(true);
+
+    commit(`Typed first\n\n![Figure](${asset.path})\n`, 'paste');
+    expect(fs.existsSync(path.join(root, asset.path))).toBe(true);
+  });
+
+  it('cleans an abandoned upload during startup reconciliation', () => {
     const asset = add();
     expect(fs.existsSync(path.join(root, asset.path))).toBe(true);
-    reconcileImageAssets(root, ctx.db);
+    reconcileImageAssets(root, ctx.db, { discardPending: true });
     expect(fs.existsSync(path.join(root, asset.path))).toBe(false);
   });
 

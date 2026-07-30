@@ -118,6 +118,7 @@ import {
   ArchiveSourceRequestSchema,
 } from '../shared/archive-types';
 import type { ArchiveService } from './services/archive';
+import { requestRendererFlush } from './rendererFlush';
 
 export interface IpcDeps {
   requireProject(): ProjectContext;
@@ -232,22 +233,40 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     if (result.canceled) {
       return null;
     }
-    const ctx = deps.manager.open(result.filePaths[0]);
-    deps.adoptProject(ctx);
+    await requestRendererFlush(event.sender, 'project-switch');
+    const ctx = deps.manager.prepareOpen(result.filePaths[0]);
+    try {
+      deps.adoptProject(ctx);
+    } catch (error) {
+      if (deps.manager.current !== ctx) ctx.db.close();
+      throw error;
+    }
     return projectInfo(ctx);
   });
 
-  ipcMain.handle(ProjectChannels.openPath, (_event, raw: unknown) => {
+  ipcMain.handle(ProjectChannels.openPath, async (event, raw: unknown) => {
     const req = Value.Decode(ProjectOpenPathRequestSchema, raw);
-    const ctx = deps.manager.open(req.path);
-    deps.adoptProject(ctx);
+    await requestRendererFlush(event.sender, 'project-switch');
+    const ctx = deps.manager.prepareOpen(req.path);
+    try {
+      deps.adoptProject(ctx);
+    } catch (error) {
+      if (deps.manager.current !== ctx) ctx.db.close();
+      throw error;
+    }
     return projectInfo(ctx);
   });
 
-  ipcMain.handle(ProjectChannels.create, (_event, raw: unknown) => {
+  ipcMain.handle(ProjectChannels.create, async (event, raw: unknown) => {
     const req = Value.Decode(ProjectCreateRequestSchema, raw);
-    const ctx = deps.manager.create(req.parentDir, req.name);
-    deps.adoptProject(ctx);
+    await requestRendererFlush(event.sender, 'project-switch');
+    const ctx = deps.manager.prepareCreate(req.parentDir, req.name);
+    try {
+      deps.adoptProject(ctx);
+    } catch (error) {
+      if (deps.manager.current !== ctx) ctx.db.close();
+      throw error;
+    }
     return projectInfo(ctx);
   });
 

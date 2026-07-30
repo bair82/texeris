@@ -183,7 +183,7 @@ export class PiAgentRuntime implements AgentRuntime {
     agent.state.systemPrompt = this.systemPrompt(assembled, changeSummary, skill?.instructions);
     agent.state.model = model;
 
-    const runId = this.options.conversations.startRun({
+    const runId = this.options.conversations.startTurn({
       conversationId: input.conversationId,
       modelMode: input.mode,
       provider: modeConfig.provider,
@@ -191,7 +191,7 @@ export class PiAgentRuntime implements AgentRuntime {
       manifest: assembled.manifest,
       skillId: skill?.id,
       skillVersion: skill?.version,
-    });
+    }, input.text);
     this.activeRunContext = {
       conversationId: input.conversationId,
       runId,
@@ -334,11 +334,11 @@ export class PiAgentRuntime implements AgentRuntime {
 
   private finishRun(run: ActiveRun, newMessages: AgentMessage[]): void {
     const { conversations } = this.options;
-    conversations.appendMessages(run.conversationId, newMessages, {
-      runId: run.runId,
-      mode: run.mode,
-      manifest: run.manifest,
-    });
+    const remaining =
+      newMessages[0]?.role === 'user' ? newMessages.slice(1) : newMessages;
+    if (remaining.length > 0) {
+      conversations.appendMessages(run.conversationId, remaining);
+    }
 
     const assistant = newMessages.filter((m) => m.role === 'assistant');
     const usage = sumUsage(assistant);

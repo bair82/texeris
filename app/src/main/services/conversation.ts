@@ -82,7 +82,9 @@ export class ConversationService {
   constructor(
     private readonly db: DatabaseSync,
     private readonly afterDelete?: () => void,
-  ) {}
+  ) {
+    this.reconcileInterruptedRuns();
+  }
 
   /** The active conversation = the most recent one (one per project at a time). */
   getOrCreateConversation(): string {
@@ -388,6 +390,57 @@ export class ConversationService {
     skillVersion?: number | null;
   }): string {
     const id = randomUUID();
+    this.insertRun(id, input);
+    return id;
+  }
+
+  /** Persist the submitted prompt and its run boundary before provider work. */
+  startTurn(
+    input: {
+      conversationId: string;
+      modelMode: ModelMode;
+      provider: string;
+      model: string;
+      manifest: ContextManifest;
+      skillId?: string | null;
+      skillVersion?: number | null;
+    },
+    text: string,
+  ): string {
+    const id = randomUUID();
+    const message: AgentMessage = {
+      role: 'user',
+      content: text,
+      timestamp: Date.now(),
+    };
+    this.db.exec('BEGIN');
+    try {
+      this.appendMessages(input.conversationId, [message], {
+        runId: id,
+        mode: input.modelMode,
+        manifest: input.manifest,
+      });
+      this.insertRun(id, input);
+      this.db.exec('COMMIT');
+      return id;
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  private insertRun(
+    id: string,
+    input: {
+      conversationId: string;
+      modelMode: ModelMode;
+      provider: string;
+      model: string;
+      manifest: ContextManifest;
+      skillId?: string | null;
+      skillVersion?: number | null;
+    },
+  ): void {
     this.db
       .prepare(
         `INSERT INTO agent_runs
@@ -406,7 +459,21 @@ export class ConversationService {
         input.skillId ?? null,
         input.skillVersion ?? null,
       );
-    return id;
+  }
+
+  private reconcileInterruptedRuns(): void {
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        `UPDATE agent_runs
+         SET status = 'aborted', ended_at = ?,
+             error_json = ?
+         WHERE status = 'running'`,
+      )
+      .run(
+        now,
+        JSON.stringify({ message: 'application closed before the run completed' }),
+      );
   }
 
   finishRun(

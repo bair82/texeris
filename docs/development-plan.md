@@ -152,6 +152,36 @@ rapidly turning a prototype into a real application.
    reconciliation can recover after a crash, but an injected DB failure can
    leave the running process temporarily inconsistent. This needs explicit
    fault tests and a defined immediate-recovery path.
+7. **Recent editor input can be lost on close or project switch.** The editor
+   groups typing for five seconds, while teardown previously destroyed that
+   accumulator without awaiting the resulting IPC commit. The editor smoke
+   itself hid the gap with a 6.5-second wait. **Resolved 2026-07-30:** every
+   picker entry point, window close, and project adoption now requires a
+   renderer flush acknowledgement; the flush also awaits in-progress image
+   uploads and their reference commit. Save failures keep the window/project
+   open. Immediate-close and picker-mediated immediate-switch desktop checks
+   exercise the real timing path.
+8. **Persisted document paths can escape a project root.** A tampered/shared
+   project database could supply traversal or symlinked paths to ordinary
+   document services. **Resolved 2026-07-30:** every canonical Markdown path is
+   resolved through one project-confinement guard before reads, writes,
+   imports, revision commits, or asset reconciliation.
+9. **Project adoption can split service ownership during an active run.**
+   Closing the old database before runtime cancellation lets abort persistence
+   hit a closed handle. **Resolved 2026-07-30:** candidates are prepared
+   without disturbing the current context; runtime handoff runs while the old
+   database is open, and only then does the manager close and replace it.
+10. **A submitted prompt is not durable until provider completion.** A crash or
+    early provider failure can lose the user message while leaving a run marked
+    running. **Resolved 2026-07-30:** prompt, immutable turn context, and
+    running-run row commit transactionally before provider work. Startup marks
+    interrupted runs aborted while retaining their prompts.
+11. **Image ingest and editor commits race.** Uploading an image before flushing
+    earlier typing can make asset reconciliation delete the upload before its
+    reference commit arrives. **Resolved 2026-07-30:** newly uploaded assets
+    receive a short in-process lease until a canonical revision references
+    them; startup discards abandoned leases. A composed upload → unrelated
+    typing commit → image-reference commit test guards the sequence.
 
 ### 3.3 P1 — privacy, permission, and contract gaps
 
@@ -315,6 +345,12 @@ Work packages, in order:
    also offers Regenerate through the same branch/restore path. General
    checkpoint-linked conversation rewind is deferred rather than inferred from
    legacy data.
+9. **Lifecycle integrity audit:** require awaited editor flushes for close and
+   project replacement; confine persisted document paths; make project/runtime
+   handoff ordered; persist prompts before provider work; and protect
+   just-uploaded assets across intervening commits.
+   **Resolved 2026-07-30:** all five paths have focused failure-mode tests, with
+   real Electron checks for immediate close and immediate project switch.
 
 Exit gate:
 

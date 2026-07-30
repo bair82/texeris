@@ -482,6 +482,21 @@ Prefer a hybrid, file-centric model:
 - The application writes files atomically.
 - The database stores file hashes and known versions.
 - External changes are detected and imported as revisions.
+- Every persisted Markdown path is treated as untrusted project data and
+  passes one confinement resolver before filesystem access. Traversal,
+  absolute/drive paths, non-Markdown targets, and existing symlink escapes are
+  rejected.
+
+Closing a window or replacing a project is an awaited lifecycle operation:
+main requests a renderer flush, the renderer drains the editor accumulator and
+all pending image uploads and document commits, and main proceeds only after
+acknowledgement. Opening the project picker itself uses the same flush before
+unmounting the editor. Project candidates are opened first; runtime
+cancellation/handoff happens while the previous database is still valid, then
+the manager closes and replaces the old context. The incoming file watcher is
+also established before adoption, so a watcher setup failure cannot leave main
+and renderer on different projects. A failed flush leaves the current
+window/project intact.
 
 This is a default, not an irreversible commitment. A prototype may initially keep everything in SQLite if that accelerates the revision loop. Before real projects accumulate, choose and document the canonical source of truth.
 
@@ -793,6 +808,13 @@ Normalising events prevents UI code from becoming tightly coupled to one provide
 ## 12.4 Session persistence
 
 Persist application-level conversations independently of Pi's native session format. Pi-specific session data may be retained for continuity or debugging, but the product should be able to reconstruct a conversation and relevant context from its own records.
+
+Submission durability starts before provider work. The user `AgentMessage`, its
+turn context, and the `running` agent-run row are inserted in one SQLite
+transaction. Provider completion appends only the remaining assistant/tool
+messages, avoiding a duplicate user turn. On project open, any run still marked
+`running` is classified as `aborted` with an interruption reason; its submitted
+prompt remains available for retry.
 
 User-message editing is the first conversation/document rewind surface. Each
 persisted user message stores a compact, application-owned turn context: model
@@ -1368,7 +1390,11 @@ Pandoc the project root as its resource path so those images are re-embedded.
 Paste and drag/drop use the same layout: the renderer sends validated image
 bytes over the narrow preload bridge, the main process writes a content-hashed
 asset, and the editor inserts only its project-relative reference. Alt text and
-captions are image-node attributes serialized into controlled HTML. Asset
+captions are image-node attributes serialized into controlled HTML. A new
+upload is leased in process until a canonical document revision references it,
+so flushing earlier typing cannot make reconciliation delete the file between
+upload and paste. Project-open reconciliation treats any leftover lease as an
+interrupted upload and removes it if no revision references it. Asset
 reconciliation runs after canonical revisions and at project open: current
 references stay public, files needed only by an older revision move to hidden
 `.texeris/asset-trash/`, and files referenced by no actual revision are
