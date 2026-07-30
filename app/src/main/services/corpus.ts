@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { CorpusGrantView, CorpusSourceView } from '../../shared/profile-types';
+import type { ArchiveCorpusSource } from './archive';
 import type { ProjectContext } from './project';
 import { atomicWriteBytes, atomicWriteText, hashText } from './document';
 import { convertToMarkdown, PANDOC_VERSION } from './pandoc';
@@ -56,6 +57,9 @@ interface WalkedFile {
   path: string;
   size: number;
   mtime: string;
+  originalPath?: string;
+  canonicalPath?: string;
+  format?: string;
 }
 
 /**
@@ -82,6 +86,49 @@ export class CorpusService {
   ): Promise<{ grantId: string; sources: CorpusSourceView[]; warnings: string[] }> {
     const { files, warnings } = this.walk(selectedPaths);
     if (files.length === 0) throw new Error('no supported writing files were selected');
+    return this.createGrantFromFiles(
+      project,
+      conversationId,
+      files,
+      sourceKind,
+      warnings,
+      jobOptions,
+    );
+  }
+
+  async createGrantFromArchive(
+    project: ProjectContext,
+    conversationId: string,
+    sources: readonly ArchiveCorpusSource[],
+    jobOptions: CorpusGrantJobOptions = {},
+  ): Promise<{ grantId: string; sources: CorpusSourceView[]; warnings: string[] }> {
+    if (sources.length === 0) throw new Error('select at least one archived work');
+    const files: WalkedFile[] = sources.map((source) => ({
+      path: source.snapshotPath,
+      originalPath: source.originalPath,
+      canonicalPath: source.canonicalPath,
+      format: source.format,
+      size: source.size,
+      mtime: source.modifiedAt,
+    }));
+    return this.createGrantFromFiles(
+      project,
+      conversationId,
+      files,
+      'files',
+      [],
+      jobOptions,
+    );
+  }
+
+  private async createGrantFromFiles(
+    project: ProjectContext,
+    conversationId: string,
+    files: readonly WalkedFile[],
+    sourceKind: 'files' | 'folder',
+    warnings: string[],
+    jobOptions: CorpusGrantJobOptions,
+  ): Promise<{ grantId: string; sources: CorpusSourceView[]; warnings: string[] }> {
     const store = this.storeDir(project);
     const snapshotsDir = path.join(store, 'snapshots');
     const derivativesDir = path.join(store, 'derivatives');
@@ -110,7 +157,7 @@ export class CorpusService {
       if (!fs.existsSync(snapshotPath)) {
         atomicWriteBytes(snapshotPath, bytes);
       }
-      const converted = await convert(file.path, bytes, jobOptions.signal);
+      const converted = await convert(file.originalPath ?? file.path, bytes, jobOptions.signal);
       throwIfCancelled(jobOptions.signal);
       const derivativeDir = path.join(derivativesDir, sourceHash);
       fs.mkdirSync(derivativeDir, { recursive: true });
@@ -124,10 +171,14 @@ export class CorpusService {
         markdownPath,
         markdownHash: hashText(converted.markdown),
         converter: converted.converter,
-        detected: detectDate(converted.markdown, path.basename(file.path)),
+        detected: detectDate(converted.markdown, path.basename(file.originalPath ?? file.path)),
         conversionWarnings: converted.warnings,
       });
-      jobOptions.onProgress?.({ done: pending.length, total: files.length, file: path.basename(file.path) });
+      jobOptions.onProgress?.({
+        done: pending.length,
+        total: files.length,
+        file: path.basename(file.originalPath ?? file.path),
+      });
     }
 
     const grantId = randomUUID();
@@ -147,12 +198,12 @@ export class CorpusService {
         insert.run(
           row.id,
           grantId,
-          row.file.path,
-          fs.realpathSync(row.file.path),
+          row.file.originalPath ?? row.file.path,
+          row.file.canonicalPath ?? fs.realpathSync(row.file.path),
           row.sourceHash,
           row.file.size,
           row.file.mtime,
-          path.extname(row.file.path).slice(1).toLowerCase(),
+          row.file.format ?? path.extname(row.file.path).slice(1).toLowerCase(),
           row.markdownPath,
           row.markdownHash,
           row.converter,
@@ -176,8 +227,8 @@ export class CorpusService {
       warnings,
       sources: pending.map((row) => ({
         id: row.id,
-        originalPath: row.file.path,
-        format: path.extname(row.file.path).slice(1).toLowerCase(),
+        originalPath: row.file.originalPath ?? row.file.path,
+        format: row.file.format ?? path.extname(row.file.path).slice(1).toLowerCase(),
         size: row.file.size,
         modifiedAt: row.file.mtime,
         detectedDate: row.detected?.date ?? null,

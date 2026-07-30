@@ -16,7 +16,7 @@ import type { ProjectContext } from '../services/project';
 import type { WorkspaceConfig } from '../services/settings';
 import type { ChangeSummary } from './changes';
 import { summarizeChangesSince } from './changes';
-import { assembleContext, buildSystemPrompt } from './context';
+import { assembleContext, buildSystemPrompt, DOC_BUDGET_CHARS } from './context';
 import { createAgentTools } from './tools';
 import type { CorpusService } from '../services/corpus';
 import { CorpusService as DefaultCorpusService } from '../services/corpus';
@@ -24,6 +24,7 @@ import { WritingProfileService } from '../services/profile';
 import { AgentCoordinator } from './coordinator';
 import { PatchStyleGate } from './styleCritic';
 import { skillById } from './skills';
+import type { ArchiveService } from '../services/archive';
 
 /**
  * The AgentRuntime adapter (plan §10.1): one Pi Agent per conversation,
@@ -103,6 +104,7 @@ export class PiAgentRuntime implements AgentRuntime {
   private styleGate: PatchStyleGate;
   private corpus: CorpusService;
   private profiles: WritingProfileService;
+  private archive: Pick<ArchiveService, 'passages'>;
 
   constructor(
     private readonly options: {
@@ -113,12 +115,14 @@ export class PiAgentRuntime implements AgentRuntime {
       patches: PatchService;
       corpus?: CorpusService;
       profiles?: WritingProfileService;
+      archive?: ArchiveService;
       /** Per-provider key lookup (stored keychain key wins over env). */
       credentials?: { getApiKey(provider: string): string | undefined };
     },
   ) {
     this.corpus = options.corpus ?? new DefaultCorpusService();
     this.profiles = options.profiles ?? new WritingProfileService(options.config);
+    this.archive = options.archive ?? { passages: () => [] };
     this.coordinator = this.makeCoordinator(options.project);
     this.styleGate = new PatchStyleGate({
       models: options.models,
@@ -132,7 +136,17 @@ export class PiAgentRuntime implements AgentRuntime {
   async startTurn(input: StartTurnRequest): Promise<{ runId: string }> {
     this.assertIdle();
     const { project } = this.options;
-    const assembled = assembleContext(project, input.scope);
+    const requestedArchiveIds = [...new Set(input.archivePassageIds ?? [])];
+    const archivePassages = this.archive.passages(requestedArchiveIds);
+    if (archivePassages.length !== requestedArchiveIds.length) {
+      throw new Error('one or more attached archive passages are no longer available');
+    }
+    const assembled = assembleContext(
+      project,
+      input.scope,
+      DOC_BUDGET_CHARS,
+      archivePassages,
+    );
     const modeConfig = this.options.config.modes[input.mode];
     const model = this.options.models.getModel(modeConfig.provider, modeConfig.model);
     if (!model) {

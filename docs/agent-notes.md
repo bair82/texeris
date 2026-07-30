@@ -281,3 +281,13 @@ journal-specific requirements use a validated custom CSL file copied into
 `.texeris/` for portable repeat exports. Citeproc receives the explicit style
 for PDF/DOCX/ODT/RTF while canonical Markdown remains unchanged. The renderer
 never receives a style path, and the permanent workspace gains no new panel.
+
+**codex, 2026-07-30** — implemented the first G3 local writing archive slice.
+The workspace-global archive keeps immutable imported bytes and Markdown/text
+derivatives with original-path provenance, change/missing status, hashes,
+duplicate detection, passage segmentation, and SQLite FTS5. A compact activity-
+rail panel supports import, search, source preview, predictable deletion,
+explicit “Use in chat” attachments, and archive-selected writing-profile
+builds. Chat manifests persist passage IDs through edit/regenerate rewind; raw
+saved passages, not highlighted snippets, enter model context. Embeddings, OCR,
+tags, folder watching, and automatic retrieval remain deliberately deferred.

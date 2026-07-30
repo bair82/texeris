@@ -24,6 +24,7 @@ import {
   ContextMenuChannels,
 } from '../shared/context-menu-types';
 import { ReferenceChannels } from '../shared/reference-types';
+import { ArchiveChannels } from '../shared/archive-types';
 
 const api: TexerisApi = {
   async getAppInfo() {
@@ -67,6 +68,18 @@ const api: TexerisApi = {
       ipcRenderer.invoke(ReferenceChannels.create, draft),
     audit: (markdown) =>
       ipcRenderer.invoke(ReferenceChannels.audit, { markdown }),
+  },
+  archive: {
+    list: () => ipcRenderer.invoke(ArchiveChannels.list),
+    importDialog: (source) => ipcRenderer.invoke(ArchiveChannels.importDialog, { source }),
+    search: (query, limit) => ipcRenderer.invoke(ArchiveChannels.search, { query, limit }),
+    preview: (sourceId, offset) =>
+      ipcRenderer.invoke(ArchiveChannels.preview, { sourceId, offset }),
+    delete: (sourceId) => ipcRenderer.invoke(ArchiveChannels.delete, { sourceId }),
+    passages: (passageIds) =>
+      ipcRenderer.invoke(ArchiveChannels.passages, { passageIds }),
+    buildProfile: (sourceIds) =>
+      ipcRenderer.invoke(ArchiveChannels.buildProfile, { sourceIds }),
   },
   chat: {
     getOrCreateConversation: () =>

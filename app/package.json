@@ -18,6 +18,7 @@
     "smoke:offline": "node scripts/smoke-all.mjs",
     "smoke:main": "node scripts/smoke.mjs",
     "smoke:citations": "node scripts/smoke-citations.mjs",
+    "smoke:archive": "node scripts/smoke-archive.mjs",
     "smoke:platform": "node scripts/smoke-settings.mjs"
   },
   "dependencies": {

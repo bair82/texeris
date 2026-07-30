@@ -48,6 +48,7 @@ export const ContextManifestSchema = Type.Object({
   baseChangeCount: Type.Optional(Type.Integer({ minimum: 0 })),
   truncated: Type.Boolean(),
   notices: Type.Array(Type.String()),
+  archivePassageIds: Type.Optional(Type.Array(Type.String(), { maxItems: 12 })),
 });
 export type ContextManifest = Static<typeof ContextManifestSchema>;
 
@@ -150,6 +151,7 @@ export interface EditMessagePreview {
   pendingPatchCount: number;
   currentText: string;
   targetText: string;
+  archivePassageIds?: string[];
 }
 
 export interface ForkMessageResult {
@@ -159,6 +161,7 @@ export interface ForkMessageResult {
   restoredRevision: number;
   mode: ModelMode;
   scope: ContextScope;
+  archivePassageIds?: string[];
 }
 
 export const StartTurnRequestSchema = Type.Object({
@@ -166,6 +169,7 @@ export const StartTurnRequestSchema = Type.Object({
   text: Type.String({ minLength: 1 }),
   mode: Type.Union([Type.Literal('fast'), Type.Literal('deep')]),
   scope: ContextScopeSchema,
+  archivePassageIds: Type.Optional(Type.Array(Type.String(), { maxItems: 12 })),
 });
 export type StartTurnRequest = Static<typeof StartTurnRequestSchema>;
 

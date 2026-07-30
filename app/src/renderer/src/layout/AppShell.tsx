@@ -3,6 +3,7 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { DocumentInfo } from '../../../shared/domain-types';
 import type { JobEvent } from '../../../shared/job-types';
 import type { CitationStyleId } from '../../../shared/citation-style-types';
+import type { ArchiveAttachment } from '../../../shared/archive-types';
 import type { UiState, UiStateDoc } from '../../../shared/ui-types';
 import ChatPanel from '../ChatPanel';
 import PatchReview from '../PatchReview';
@@ -19,6 +20,7 @@ import ProjectNav from './ProjectNav';
 import ShortcutsOverlay from './ShortcutsOverlay';
 import TrashDialog from './TrashDialog';
 import ExportDialog from './ExportDialog';
+import ArchivePanel from './ArchivePanel';
 import { describeContextAt, dispatchContextAction } from '../contextMenuBridge';
 
 const DEFAULT_NAV_WIDTH = 232;
@@ -70,6 +72,7 @@ export default function AppShell({
   const [newDocRequested, setNewDocRequested] = useState(0);
   const [profileSourceOpen, setProfileSourceOpen] = useState(false);
   const [exportTargetId, setExportTargetId] = useState<string | null>(null);
+  const [archiveAttachments, setArchiveAttachments] = useState<ArchiveAttachment[]>([]);
   const [operationNotice, setOperationNotice] = useState<WorkspaceStatus | null>(null);
   const uiRef = useRef<UiState>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -193,6 +196,7 @@ export default function AppShell({
 
   const focusMode = ui?.focusMode ?? false;
   const navVisible = !focusMode && (ui?.navVisible ?? true);
+  const navMode = ui?.navMode ?? 'files';
   const sideVisible = !focusMode && (ui?.sideVisible ?? true);
   const navWidth = ui?.navWidth ?? DEFAULT_NAV_WIDTH;
   const sideWidth = ui?.sideWidth ?? DEFAULT_SIDE_WIDTH;
@@ -201,6 +205,16 @@ export default function AppShell({
     const focus = uiRef.current.focusMode ?? false;
     const nav = !focus && (uiRef.current.navVisible ?? true);
     patchUi(focus ? { focusMode: false, navVisible: true } : { navVisible: !nav }, true);
+  }, [patchUi]);
+  const toggleNavMode = useCallback((mode: 'files' | 'archive') => {
+    const focus = uiRef.current.focusMode ?? false;
+    const visible = !focus && (uiRef.current.navVisible ?? true);
+    const currentMode = uiRef.current.navMode ?? 'files';
+    if (visible && currentMode === mode) {
+      patchUi({ navVisible: false }, true);
+    } else {
+      patchUi({ focusMode: false, navVisible: true, navMode: mode }, true);
+    }
   }, [patchUi]);
   const toggleSide = useCallback(() => {
     const focus = uiRef.current.focusMode ?? false;
@@ -372,7 +386,9 @@ export default function AppShell({
           const focus = uiRef.current.focusMode ?? false;
           const nav = !focus && (uiRef.current.navVisible ?? true);
           if (!nav) {
-            patchUi({ focusMode: false, navVisible: true }, true);
+            patchUi({ focusMode: false, navVisible: true, navMode: 'files' }, true);
+          } else if ((uiRef.current.navMode ?? 'files') !== 'files') {
+            patchUi({ navMode: 'files' }, true);
           }
           setNewDocRequested((n) => n + 1);
           break;
@@ -516,17 +532,19 @@ export default function AppShell({
   return (
     <div className="app-columns">
       <ActivityBar
-        navActive={navVisible}
+        filesActive={navVisible && navMode === 'files'}
+        archiveActive={navVisible && navMode === 'archive'}
         sideActive={sideVisible}
         focusMode={focusMode}
-        onToggleNav={toggleNav}
+        onToggleFiles={() => toggleNavMode('files')}
+        onToggleArchive={() => toggleNavMode('archive')}
         onToggleSide={toggleSide}
         onToggleFocus={toggleFocus}
         onOpenSettings={onOpenSettings}
       />
       {navVisible && (
         <>
-          <ProjectNav
+          {navMode === 'files' ? <ProjectNav
             width={navWidth}
             docs={docs}
             openDocId={openDocId}
@@ -544,7 +562,18 @@ export default function AppShell({
             onRevealDoc={onRevealDoc}
             onOpenTrash={() => setTrashOpen(true)}
             onNavigate={navigateToHeading}
-          />
+          /> : <ArchivePanel
+            width={navWidth}
+            attachedPassageIds={new Set(archiveAttachments.map((item) => item.passageId))}
+            onAttach={(result) =>
+              setArchiveAttachments((current) =>
+                current.some((item) => item.passageId === result.passageId)
+                  ? current
+                  : [...current, result].slice(0, 12),
+              )
+            }
+            onProfileStarted={openProfileResult}
+          />}
           <div
             className="split-handle"
             role="separator"
@@ -580,6 +609,13 @@ export default function AppShell({
               }}
               initialConversationId={ui.openConversationId ?? null}
               onConversationChange={(id) => patchUi({ openConversationId: id })}
+              archiveAttachments={archiveAttachments}
+              onRemoveArchiveAttachment={(passageId) =>
+                setArchiveAttachments((current) =>
+                  current.filter((item) => item.passageId !== passageId),
+                )
+              }
+              onArchiveAttachmentsUsed={() => setArchiveAttachments([])}
             />
           </div>
         </>
@@ -623,17 +659,7 @@ export default function AppShell({
         setOperationNotice(null);
         return;
       }
-      setProfileSourceOpen(false);
-      patchUi({ focusMode: false, sideVisible: true, openConversationId: result.conversationId }, true);
-      getChatCommands()?.openConversation(result.conversationId);
-      if (result.warnings.length) {
-        setOperationNotice({
-          message: `Corpus grant created with warnings. ${result.warnings.join(' ')}`,
-          tone: 'warning',
-        });
-      } else {
-        setOperationNotice(null);
-      }
+      openProfileResult(result);
     } catch (error) {
       if (isJobCancellation(error)) {
         setOperationNotice({ message: 'Corpus grant cancelled.', tone: 'warning' });
@@ -644,5 +670,29 @@ export default function AppShell({
     } finally {
       activeJobRef.current = null;
     }
+  }
+
+  function openProfileResult(result: {
+    conversationId: string;
+    warnings: string[];
+  }): void {
+    setProfileSourceOpen(false);
+    patchUi(
+      {
+        focusMode: false,
+        sideVisible: true,
+        openConversationId: result.conversationId,
+      },
+      true,
+    );
+    getChatCommands()?.openConversation(result.conversationId);
+    setOperationNotice(
+      result.warnings.length
+        ? {
+            message: `Corpus grant created with warnings. ${result.warnings.join(' ')}`,
+            tone: 'warning',
+          }
+        : null,
+    );
   }
 }
