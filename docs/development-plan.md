@@ -44,7 +44,7 @@ packaged-app verifier pass.
 
 | Area | Status |
 |---|---|
-| References and citations | The first G2 slice is operational: canonical project CSL JSON with a rebuildable SQLite index, CSL JSON/BibTeX/RIS import, search-first insert/replace UI, unresolved-key audit, and automatic citeproc PDF/office export. Reference-detail editing and export-time CSL style selection remain. |
+| References and citations | The everyday G2 workflow is operational: canonical project CSL JSON with a rebuildable SQLite index, import/manual add with DOI autofill, search-first insert/replace UI, unresolved-key audit, and citeproc PDF/office export with a remembered built-in or custom CSL style. Reference-detail editing remains. |
 | Writing archive | Profile corpus grants are private, conversation-scoped inputs—not a browsable, searchable archive. There is no FTS5 archive UI or reusable attachment workflow. |
 | Skills | The runtime boundary exists, but the registry is hard-coded and only the writing-profile workflow is user-facing. Conservative rewrite and verbal-tick cleanup are not packaged skills with evaluations. |
 | PDF/source research | Text extraction exists; OCR, a source library, PDF viewing, page-linked reading, annotations, and question-answering over saved sources do not. |
@@ -349,7 +349,7 @@ compact manual creation with generated keys and optional Crossref DOI autofill,
 author/title/year/key search, rendered and raw insertion, rendered replacement,
 missing/unused-key audit, and bibliography-aware PDF/DOCX/ODT/RTF export. The
 remaining G2 work is editing existing reference details, explicit missing-key
-resolution, export-time CSL style selection, and broader golden fixtures.
+resolution, and broader golden fixtures.
 
 Product boundary:
 

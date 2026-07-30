@@ -39,6 +39,10 @@ import type {
   ReferenceImportReport,
   ReferenceListItem,
 } from './reference-types';
+import type {
+  CitationStyleId,
+  CitationStyleSettings,
+} from './citation-style-types';
 
 /**
  * IPC contract shared by main, preload, and renderer.
@@ -136,7 +140,12 @@ export interface TexerisApi {
       dataBase64: string;
     }): Promise<AddedImageAsset>;
     importDialog(): Promise<DocumentImportResult | null>;
-    exportDialog(documentId: string): Promise<DocumentExportResult | null>;
+    exportSettings(): Promise<CitationStyleSettings>;
+    chooseCitationStyle(): Promise<CitationStyleSettings | null>;
+    exportDialog(
+      documentId: string,
+      citationStyle: CitationStyleId,
+    ): Promise<DocumentExportResult | null>;
     setMain(documentId: string): Promise<ProjectInfo>;
     reveal(documentId: string): Promise<{ revealed: boolean }>;
     trashList(): Promise<TrashedDocumentInfo[]>;

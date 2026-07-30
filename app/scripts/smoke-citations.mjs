@@ -294,8 +294,46 @@ try {
 
   await runPaletteCommand('export document');
   await waitFor(
+    "!!document.querySelector('.export-dialog')",
+    'export preflight did not open',
+  );
+  check(
+    'export preflight offers the focused built-in style set',
+    await evaluate("document.querySelectorAll('.export-style-field option').length === 4 && document.querySelector('.export-hint')?.textContent.includes('Remembered for this project')"),
+  );
+  if (process.env.TEXERIS_EXPORT_SMOKE_SCREENSHOT) {
+    const screenshot = await send('Page.captureScreenshot', { format: 'png' });
+    fs.writeFileSync(
+      process.env.TEXERIS_EXPORT_SMOKE_SCREENSHOT,
+      Buffer.from(screenshot.data, 'base64'),
+    );
+  }
+  await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
+  await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' });
+  await waitFor("!document.querySelector('.export-dialog')", 'Escape did not close export preflight');
+  check('Escape closes export preflight', await evaluate("!document.querySelector('.export-dialog')"));
+
+  await runPaletteCommand('export document');
+  await waitFor("!!document.querySelector('.export-dialog')", 'export preflight did not reopen');
+  await waitFor(
+    "[...document.querySelectorAll('.export-dialog footer button')].some(button => button.textContent === 'Continue…' && !button.disabled)",
+    'export preflight did not become ready',
+  );
+  await evaluate(`(() => {
+    const select = document.querySelector('.export-style-field select');
+    const set = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+    set.call(select, 'apa');
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`);
+  await evaluate("[...document.querySelectorAll('.export-dialog footer button')].find(button => button.textContent === 'Continue…').click(); true");
+  await waitFor(
     "document.querySelector('.workspace-status-message')?.textContent.includes('Exported to')",
     'citation export did not complete',
+  );
+  check(
+    'citation style is remembered in project metadata',
+    JSON.parse(fs.readFileSync(path.join(projectDir, '.texeris', 'project.json'), 'utf8')).citationStyle === 'apa',
   );
   const pdfBytes = fs.readFileSync(outputPath);
   check(
@@ -315,7 +353,8 @@ try {
   const importedText = await evaluate(`window.texeris.doc.getText(${JSON.stringify(imported?.id)})`);
   check(
     'export resolved citations and emitted bibliography entries',
-    importedText?.text?.includes('Smith and Jones 2024') &&
+    importedText?.text?.includes('Smith') &&
+      importedText.text.includes('2024') &&
       importedText.text.includes('The Geometry of Attention') &&
       importedText.text.includes('Writing with Evidence') &&
       importedText.text.includes('Manually Added Source'),

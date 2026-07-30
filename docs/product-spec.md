@@ -796,7 +796,9 @@ renderer. Exports are derived artifacts and never replace the canonical project
 Markdown. When a document uses records from the project’s canonical
 `references.csl.json`, Pandoc citeproc now renders in-text citations and the
 bibliography automatically; unresolved keys are reported as export warnings.
-Export-time CSL style selection remains to be added.
+A compact export preflight remembers a project-level choice among Chicago
+author-date, APA, IEEE, and Elsevier Vancouver, or accepts a custom journal CSL file.
+The style affects PDF and office derivatives; canonical Markdown is unchanged.
 
 ### Exploratory
 

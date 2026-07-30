@@ -135,7 +135,10 @@ const api: TexerisApi = {
     duplicate: (documentId) => ipcRenderer.invoke(DocChannels.duplicate, { documentId }),
     addImage: (request) => ipcRenderer.invoke(DocChannels.addImage, request),
     importDialog: () => ipcRenderer.invoke(DocChannels.importDialog),
-    exportDialog: (documentId) => ipcRenderer.invoke(DocChannels.exportDialog, { documentId }),
+    exportSettings: () => ipcRenderer.invoke(DocChannels.exportSettings),
+    chooseCitationStyle: () => ipcRenderer.invoke(DocChannels.chooseCitationStyle),
+    exportDialog: (documentId, citationStyle) =>
+      ipcRenderer.invoke(DocChannels.exportDialog, { documentId, citationStyle }),
     setMain: (documentId) => ipcRenderer.invoke(DocChannels.setMain, { documentId }),
     reveal: (documentId) => ipcRenderer.invoke(DocChannels.reveal, { documentId }),
     trashList: () => ipcRenderer.invoke(DocChannels.trashList),

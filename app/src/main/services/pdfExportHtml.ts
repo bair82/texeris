@@ -114,7 +114,11 @@ export async function buildPdfPrintHtml(
   markdown: string,
   title: string,
   resourceRoot: string,
-  options: { signal?: AbortSignal; bibliographyPath?: string } = {},
+  options: {
+    signal?: AbortSignal;
+    bibliographyPath?: string;
+    citationStylePath?: string;
+  } = {},
 ): Promise<{ html: string; warnings: string[] }> {
   const pandoc = requirePandoc();
   const result = await jobRunner().run<{ html: string; warnings: string[] }>(
@@ -125,6 +129,7 @@ export async function buildPdfPrintHtml(
       title,
       resourceRoot,
       bibliographyPath: options.bibliographyPath,
+      citationStylePath: options.citationStylePath,
     },
     { signal: options.signal },
   );

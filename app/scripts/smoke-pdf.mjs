@@ -126,6 +126,12 @@ try {
   const phrase = 'The Geometry of Attention';
   await waitFor("!!document.querySelector('.tiptap-rendered')", 'editor never mounted');
   await runPaletteCommand('export document');
+  await waitFor("!!document.querySelector('.export-dialog')", 'export preflight did not open');
+  await waitFor(
+    "[...document.querySelectorAll('.export-dialog footer button')].some(button => button.textContent === 'Continue…' && !button.disabled)",
+    'export preflight did not become ready',
+  );
+  await evaluate("[...document.querySelectorAll('.export-dialog footer button')].find(button => button.textContent === 'Continue…').click(); true");
   await waitFor(`document.querySelector('.workspace-status-message')?.textContent.includes('Exported to')`, 'export completion did not reach the status bar');
   check(
     'export completion uses the status bar',
