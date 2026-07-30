@@ -29,6 +29,14 @@ if (resourcesOnly) {
   const pandoc = path.join(UNPACKED, 'pandoc', 'linux-amd64', 'pandoc');
   check('packaged app.asar exists', fs.existsSync(appAsar));
   check('bundled Pandoc exists and is executable', fs.existsSync(pandoc) && (fs.statSync(pandoc).mode & 0o111) !== 0);
+  const cslDir = path.join(UNPACKED, 'csl');
+  for (const file of ['chicago-author-date.csl', 'apa.csl', 'ieee.csl', 'vancouver.csl']) {
+    const csl = path.join(cslDir, file);
+    const valid =
+      fs.existsSync(csl) &&
+      fs.readFileSync(csl, 'utf8').includes('http://purl.org/net/xbiblio/csl');
+    check(`bundled citation style ${file}`, valid);
+  }
   try {
     const version = execFileSync(pandoc, ['--version'], { encoding: 'utf8' });
     check('bundled Pandoc launches', version.startsWith('pandoc '), version.split('\n')[0]);
