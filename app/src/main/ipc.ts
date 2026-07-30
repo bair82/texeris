@@ -89,7 +89,13 @@ import {
 } from './services/documents';
 import { addImageAsset } from './services/assets';
 import { createDocument, ensureDocument } from './services/project';
-import { CorpusChannels, CorpusDeleteRequestSchema, ProfileBeginRequestSchema, ProfileChannels } from '../shared/profile-types';
+import {
+  CorpusChannels,
+  CorpusDeleteRequestSchema,
+  ProfileBeginRequestSchema,
+  ProfileChannels,
+  type CorpusSourceView,
+} from '../shared/profile-types';
 import { JobCancelRequestSchema, JobChannels, type JobEvent } from '../shared/job-types';
 import {
   ReferenceAuditRequestSchema,
@@ -103,6 +109,15 @@ import type { WritingProfileService } from './services/profile';
 import { printHtmlToPdf } from './pdfExport';
 import { isCancellation } from './jobs/runner';
 import { ReferenceService } from './services/references';
+import {
+  ArchiveChannels,
+  ArchiveImportRequestSchema,
+  ArchivePassagesRequestSchema,
+  ArchiveProfileRequestSchema,
+  ArchiveSearchRequestSchema,
+  ArchiveSourceRequestSchema,
+} from '../shared/archive-types';
+import type { ArchiveService } from './services/archive';
 
 export interface IpcDeps {
   requireProject(): ProjectContext;
@@ -114,6 +129,7 @@ export interface IpcDeps {
   manager: ProjectManager;
   corpus: CorpusService;
   profiles: WritingProfileService;
+  archive: ArchiveService;
   adoptProject(ctx: ProjectContext): void;
 }
 
@@ -362,11 +378,101 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return { cancelled: true };
   });
 
+  // --------------------------------------------------------- writing archive
+
+  ipcMain.handle(ArchiveChannels.list, () => deps.archive.list());
+
+  ipcMain.handle(ArchiveChannels.importDialog, async (event, raw: unknown) => {
+    const req = Value.Decode(ArchiveImportRequestSchema, raw);
+    let selected =
+      process.env.TEXERIS_SMOKE === '1' && process.env.TEXERIS_ARCHIVE_IMPORT_PATH
+        ? [process.env.TEXERIS_ARCHIVE_IMPORT_PATH]
+        : null;
+    if (!selected) {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      const result = await dialog.showOpenDialog(win!, {
+        title: req.source === 'folder' ? 'Add writing folder' : 'Add previous writing',
+        properties:
+          req.source === 'folder'
+            ? ['openDirectory']
+            : ['openFile', 'multiSelections'],
+        filters:
+          req.source === 'files'
+            ? [{
+                name: 'Writing documents',
+                extensions: ['md', 'markdown', 'mdown', 'txt', 'html', 'htm', 'docx', 'odt', 'rtf', 'pdf'],
+              }]
+            : undefined,
+      });
+      if (result.canceled || result.filePaths.length === 0) return null;
+      selected = result.filePaths;
+    }
+    return runJob(event.sender, 'archive-import', (signal, reportProgress) =>
+      deps.archive.importPaths(selected, signal, (done, total, file) =>
+        reportProgress({ done, total }, file),
+      ),
+    );
+  });
+
+  ipcMain.handle(ArchiveChannels.search, (_event, raw: unknown) => {
+    const req = Value.Decode(ArchiveSearchRequestSchema, raw);
+    return deps.archive.search(req.query, req.limit);
+  });
+
+  ipcMain.handle(ArchiveChannels.preview, (_event, raw: unknown) => {
+    const req = Value.Decode(ArchiveSourceRequestSchema, raw);
+    return deps.archive.preview(req.sourceId, req.offset);
+  });
+
+  ipcMain.handle(ArchiveChannels.passages, (_event, raw: unknown) => {
+    const req = Value.Decode(ArchivePassagesRequestSchema, raw);
+    return deps.archive.passages(req.passageIds);
+  });
+
+  ipcMain.handle(ArchiveChannels.delete, (_event, raw: unknown) => {
+    const req = Value.Decode(ArchiveSourceRequestSchema, raw);
+    deps.archive.delete(req.sourceId);
+    return { deleted: true };
+  });
+
   // --------------------------------------------------------- writing profile
+
+  const launchProfile = async (
+    event: Electron.IpcMainInvokeEvent,
+    createGrant: (
+      conversationId: string,
+    ) => Promise<{ sources: CorpusSourceView[]; warnings: string[] }>,
+  ) => {
+    deps.requireRuntime().assertIdle();
+    const conversations = deps.requireConversations();
+    const conversationId = conversations.startNewConversation({ id: 'writing-profile', version: 1 });
+    try {
+      const grant = await createGrant(conversationId);
+      const { runId } = await deps.requireRuntime().startTurn({
+        conversationId,
+        text: 'Analyze the selected corpus and build my writing profile. Begin by reviewing the corpus inventory and conversion warnings. Delegate bounded corpus-analysis and metadata tasks where useful. Ask me before any lookup involving an ambiguous or apparently private work.',
+        mode: 'deep',
+        scope: { kind: 'document', documentId: mainDocId(deps.requireProject()) },
+      });
+      void (async () => {
+        for await (const agentEvent of deps.requireRuntime().events(runId)) {
+          if (!event.sender.isDestroyed()) event.sender.send(ChatChannels.event, agentEvent);
+        }
+      })();
+      return {
+        conversationId,
+        runId,
+        sourceCount: grant.sources.length,
+        warnings: grant.warnings,
+      };
+    } catch (error) {
+      conversations.deleteConversation(conversationId);
+      throw error;
+    }
+  };
 
   ipcMain.handle(ProfileChannels.begin, async (event, raw: unknown) => {
     const req = Value.Decode(ProfileBeginRequestSchema, raw);
-    deps.requireRuntime().assertIdle();
     const win = BrowserWindow.fromWebContents(event.sender);
     const result = await dialog.showOpenDialog(win!, {
       title: req.source === 'folder' ? 'Choose writing corpus folder' : 'Choose writing files',
@@ -376,26 +482,36 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         : undefined,
     });
     if (result.canceled || result.filePaths.length === 0) return null;
-    const conversations = deps.requireConversations();
-    const conversationId = conversations.startNewConversation({ id: 'writing-profile', version: 1 });
-    const grant = await runJob(event.sender, 'corpus-grant', (signal, reportProgress) =>
-      deps.corpus.createGrant(deps.requireProject(), conversationId, result.filePaths, req.source, {
-        signal,
-        onProgress: (progress) => reportProgress({ done: progress.done, total: progress.total }, progress.file),
-      }),
+    return launchProfile(event, (conversationId) =>
+      runJob(event.sender, 'corpus-grant', (signal, reportProgress) =>
+        deps.corpus.createGrant(deps.requireProject(), conversationId, result.filePaths, req.source, {
+          signal,
+          onProgress: (progress) => reportProgress({ done: progress.done, total: progress.total }, progress.file),
+        }),
+      ),
     );
-    const { runId } = await deps.requireRuntime().startTurn({
-      conversationId,
-      text: 'Analyze the selected corpus and build my writing profile. Begin by reviewing the corpus inventory and conversion warnings. Delegate bounded corpus-analysis and metadata tasks where useful. Ask me before any lookup involving an ambiguous or apparently private work.',
-      mode: 'deep',
-      scope: { kind: 'document', documentId: mainDocId(deps.requireProject()) },
-    });
-    void (async () => {
-      for await (const agentEvent of deps.requireRuntime().events(runId)) {
-        if (!event.sender.isDestroyed()) event.sender.send(ChatChannels.event, agentEvent);
-      }
-    })();
-    return { conversationId, runId, sourceCount: grant.sources.length, warnings: grant.warnings };
+  });
+
+  ipcMain.handle(ArchiveChannels.buildProfile, async (event, raw: unknown) => {
+    const req = Value.Decode(ArchiveProfileRequestSchema, raw);
+    const sources = deps.archive.corpusSources(req.sourceIds);
+    if (sources.length !== new Set(req.sourceIds).size) {
+      throw new Error('one or more selected archive sources are unavailable');
+    }
+    return launchProfile(event, (conversationId) =>
+      runJob(event.sender, 'corpus-grant', (signal, reportProgress) =>
+        deps.corpus.createGrantFromArchive(
+          deps.requireProject(),
+          conversationId,
+          sources,
+          {
+            signal,
+            onProgress: (progress) =>
+              reportProgress({ done: progress.done, total: progress.total }, progress.file),
+          },
+        ),
+      ),
+    );
   });
 
   // ------------------------------------------------------------------ corpus

@@ -66,6 +66,7 @@ export function previewMessageEdit(
     pendingPatchCount,
     currentText,
     targetText,
+    archivePassageIds: manifest.archivePassageIds,
   };
 }
 
@@ -106,6 +107,7 @@ export function forkMessage(
       restoredRevision,
       mode: preview.mode,
       scope: preview.scope,
+      archivePassageIds: preview.archivePassageIds,
     };
   } catch (error) {
     conversations.deleteConversation(forkId);

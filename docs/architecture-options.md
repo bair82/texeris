@@ -1247,6 +1247,28 @@ Add semantic search when full-text search demonstrably misses important use case
 
 Keep them logically separate. Searching “the project” and searching “all previous writing” should be distinct operations with visible scope.
 
+## 18.5 Implemented local archive boundary
+
+The G3 first slice stores workspace-global archive state under the application
+workspace directory, separate from project databases and bibliographic
+references:
+
+```text
+archive/
+  archive.sqlite       # source metadata, passages, FTS5 projection
+  snapshots/           # immutable imported bytes
+  markdown/            # integrity-checked searchable derivatives
+```
+
+The Electron main process owns import, conversion, indexing, preview,
+retrieval, and deletion. The sandboxed renderer receives only typed archive
+records through the preload bridge. Search never adds model context by itself:
+the user attaches stable passage IDs, main resolves those IDs to raw saved
+passages for the turn, and the context manifest records the IDs. Profile builds
+reuse archived snapshots through the existing conversation-scoped corpus grant
+path. This intentionally leaves embeddings, live-folder watching, OCR, tags,
+and automatic retrieval outside the first slice.
+
 ---
 
 ## 19. Context construction and token management

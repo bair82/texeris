@@ -49,6 +49,7 @@ describe('edit-message conversation rewind', () => {
         baseChangeCount: 1,
         truncated: false,
         notices: [],
+        archivePassageIds: ['passage-1'],
       },
     };
     const originalId = conversations.startNewConversation();
@@ -95,6 +96,7 @@ describe('edit-message conversation rewind', () => {
       pendingPatchCount: 1,
       targetText: 'hello',
       currentText: 'hello future',
+      archivePassageIds: ['passage-1'],
     });
 
     const result = forkMessage(project, conversations, originalId, 2);
@@ -102,6 +104,7 @@ describe('edit-message conversation rewind', () => {
       originalConversationId: originalId,
       documentId,
       mode: 'deep',
+      archivePassageIds: ['passage-1'],
     });
     expect(result.conversationId).not.toBe(originalId);
     expect(project.revisions.getCurrentText(documentId)).toBe('hello');

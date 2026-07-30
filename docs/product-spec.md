@@ -642,6 +642,14 @@ The actual content sent to the model may be reduced to fit model limits, but the
 
 ## 11.6 Writing archive
 
+The first implementation is a workspace-local Writing archive reached from
+the activity rail. Imports create private immutable snapshots while retaining
+the original path for provenance and changed/missing status. Users search
+passages, inspect the saved text and source location, and explicitly choose
+“Use in chat”; visible composer chips and the turn manifest show exactly what
+is sent. Archived works may also be selected as inputs to Build writing
+profile. The archive is not searched silently.
+
 ### Core
 
 - Import previous works in at least Markdown and plain-text form.

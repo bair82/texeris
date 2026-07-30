@@ -24,6 +24,7 @@ import { WritingProfileService } from './services/profile';
 import { attachContextMenu, registerContextMenuHandlers } from './contextMenu';
 import { bindJobRunner } from './jobs/current';
 import { JobRunner } from './jobs/runner';
+import { ArchiveService } from './services/archive';
 
 /** Pi requires Node >= 22.19; assert the Electron-bundled Node at startup. */
 const MIN_NODE_VERSION = [22, 19, 0] as const;
@@ -185,6 +186,8 @@ app.whenReady().then(() => {
   });
   const corpus = new CorpusService();
   const profiles = new WritingProfileService(config);
+  const archive = new ArchiveService();
+  app.once('before-quit', () => archive.close());
 
   // Spellcheck preference (M1.5 EU4). Chromium downloads the language
   // dictionary lazily on first enable (into <userData>/Dictionaries).
@@ -238,6 +241,7 @@ app.whenReady().then(() => {
         patches,
         corpus,
         profiles,
+        archive,
         credentials,
       });
     }
@@ -283,6 +287,7 @@ app.whenReady().then(() => {
     manager,
     corpus,
     profiles,
+    archive,
     adoptProject,
   });
 

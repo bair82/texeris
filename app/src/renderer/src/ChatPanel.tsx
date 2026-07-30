@@ -12,6 +12,7 @@ import type {
   DelegationRecord,
 } from '../../shared/chat-types';
 import type { HeadingInfo } from '../../shared/doc-types';
+import type { ArchiveAttachment } from '../../shared/archive-types';
 import {
   getEditorCommands,
   getEditorSelection,
@@ -34,6 +35,7 @@ interface LastTurn {
   text: string;
   mode: ModelMode;
   scope: ContextScope;
+  archivePassageIds?: string[];
 }
 
 interface MessageEditState {
@@ -150,6 +152,9 @@ interface ChatPanelProps {
   /** The document currently shown in the editor is the default chat target. */
   documentId: string | null;
   onOpenDocument?(documentId: string): void;
+  archiveAttachments?: ArchiveAttachment[];
+  onRemoveArchiveAttachment?(passageId: string): void;
+  onArchiveAttachmentsUsed?(): void;
 }
 
 export default function ChatPanel({
@@ -157,6 +162,9 @@ export default function ChatPanel({
   onConversationChange,
   documentId,
   onOpenDocument,
+  archiveAttachments = [],
+  onRemoveArchiveAttachment,
+  onArchiveAttachmentsUsed,
 }: ChatPanelProps) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationListItem[]>([]);
@@ -478,11 +486,12 @@ export default function ChatPanel({
           ...turn,
         });
         setLastTurn(turn);
+        if (turn.archivePassageIds?.length) onArchiveAttachmentsUsed?.();
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       }
     },
-    [conversationId, documentId, streaming],
+    [conversationId, documentId, onArchiveAttachmentsUsed, streaming],
   );
 
   const continueFromFork = useCallback(
@@ -505,7 +514,12 @@ export default function ChatPanel({
       }
       await refreshConversations();
       await startTurn(
-        { text, mode: result.mode, scope: result.scope },
+        {
+          text,
+          mode: result.mode,
+          scope: result.scope,
+          archivePassageIds: result.archivePassageIds,
+        },
         result.conversationId,
         result.documentId,
       );
@@ -589,8 +603,9 @@ export default function ChatPanel({
       text,
       mode,
       scope: { ...effectiveScope, documentId: documentId ?? undefined },
+      archivePassageIds: archiveAttachments.map((item) => item.passageId),
     });
-  }, [documentId, input, mode, scope, startTurn]);
+  }, [archiveAttachments, documentId, input, mode, scope, startTurn]);
 
   const cancel = useCallback(() => {
     if (streaming) {
@@ -746,6 +761,9 @@ export default function ChatPanel({
           <span className="manifest-chip" title={manifest.notices.join('\n')}>
             {manifest.scope.kind} · rev {manifest.baseRevision} ·{' '}
             {manifest.items.reduce((n, i) => n + i.chars, 0)} chars
+            {manifest.archivePassageIds?.length
+              ? ` · ${manifest.archivePassageIds.length} archive`
+              : ''}
             {manifest.truncated ? ' · truncated' : ''}
           </span>
         )}
@@ -1063,6 +1081,23 @@ export default function ChatPanel({
       )}
 
       <footer className="chat-input">
+        {archiveAttachments.length > 0 && (
+          <div className="archive-context-chips" aria-label="Attached archive passages">
+            {archiveAttachments.map((item) => (
+              <span key={item.passageId} title={item.excerpt}>
+                {item.title}
+                {item.heading ? ` · ${item.heading}` : ''}
+                <button
+                  type="button"
+                  aria-label={`Remove ${item.title}`}
+                  onClick={() => onRemoveArchiveAttachment?.(item.passageId)}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         <textarea
           value={input}
           placeholder="Ask about the manuscript…"

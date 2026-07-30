@@ -36,8 +36,8 @@ This plan is ordered around that thesis and the application that exists now.
 | Packaging | Linux AppImage builds and launches; pinned Pandoc is bundled and verified. macOS targets are configured but unbuilt. |
 
 The local verification baseline is strong but narrower than the documentation
-has sometimes implied: TypeScript passes; Vitest reports 185 passing tests and
-2 conditional compatibility tests skipped; focused Electron smokes and the
+has sometimes implied: TypeScript passes; Vitest reports 238 passing tests and
+6 conditional tests skipped; focused Electron smokes and the
 packaged-app verifier pass.
 
 ### 2.2 What is partial or absent
@@ -45,7 +45,7 @@ packaged-app verifier pass.
 | Area | Status |
 |---|---|
 | References and citations | The everyday G2 workflow is operational: canonical project CSL JSON with a rebuildable SQLite index, import/manual add with DOI autofill, search-first insert/replace UI, unresolved-key audit, and citeproc PDF/office export with a remembered built-in or custom CSL style. Reference-detail editing remains. |
-| Writing archive | Profile corpus grants are private, conversation-scoped inputs—not a browsable, searchable archive. There is no FTS5 archive UI or reusable attachment workflow. |
+| Writing archive | The first G3 slice is operational: workspace-local immutable snapshots, provenance and change status, conversion, passage-level FTS5 search/preview, explicit chat attachments, deletion, and archive-selected writing-profile builds. Re-index/repair commands and evaluated retrieval tuning remain. |
 | Skills | The runtime boundary exists, but the registry is hard-coded and only the writing-profile workflow is user-facing. Conservative rewrite and verbal-tick cleanup are not packaged skills with evaluations. |
 | PDF/source research | Text extraction exists; OCR, a source library, PDF viewing, page-linked reading, annotations, and question-answering over saved sources do not. |
 | Spellcheck | Chromium spellcheck remains unreliable in rendered mode and structurally unsuitable for CodeMirror decorations. The app-level replacement is undecided. |
@@ -385,14 +385,21 @@ Exit gate:
 **Goal:** turn one-off profile corpora into a reusable local writing archive
 without conflating sources with bibliographic references.
 
-Work:
+Implemented first slice (2026-07-30):
 
-- Workspace archive with immutable source snapshots, provenance, metadata,
-  content hashes, duplicate detection, delete/retention controls, and FTS5.
-- Import status UI and conversion warnings for Markdown, text, office formats,
-  and text-bearing PDFs; retain PDF page markers.
-- Search results with excerpts and source/page locations; attach selected
-  results explicitly to a conversation or skill run.
+- Workspace-global archive with immutable source snapshots, original-path
+  provenance/change status, content hashes, duplicate detection, predictable
+  deletion, and a separate SQLite/FTS5 projection.
+- Import progress and conversion warnings for Markdown, text, office formats,
+  and text-bearing PDFs; PDF derivatives retain page markers.
+- Passage search with excerpts and heading/page locations, source preview, and
+  visible explicit attachments to chat turns. Attachment IDs are persisted in
+  turn manifests and survive edit/regenerate rewind.
+- Selected archived works can feed the existing writing-profile workflow
+  without reselecting their original files.
+
+Remaining work:
+
 - Re-index and integrity repair commands.
 - Evaluate actual FTS misses before selecting embeddings or a vector store.
 

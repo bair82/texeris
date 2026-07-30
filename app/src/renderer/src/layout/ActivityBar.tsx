@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react';
 
 interface ActivityBarProps {
-  navActive: boolean;
+  filesActive: boolean;
+  archiveActive: boolean;
   sideActive: boolean;
   focusMode: boolean;
-  onToggleNav(): void;
+  onToggleFiles(): void;
+  onToggleArchive(): void;
   onToggleSide(): void;
   onToggleFocus(): void;
   onOpenSettings(): void;
@@ -33,10 +35,12 @@ function Icon({ children }: { children: ReactNode }) {
  * to the bottom. Always visible so a hidden region is one click away.
  */
 export default function ActivityBar({
-  navActive,
+  filesActive,
+  archiveActive,
   sideActive,
   focusMode,
-  onToggleNav,
+  onToggleFiles,
+  onToggleArchive,
   onToggleSide,
   onToggleFocus,
   onOpenSettings,
@@ -44,13 +48,24 @@ export default function ActivityBar({
   return (
     <div className="activity-bar">
       <button
-        className={`activity-button ${navActive ? 'active' : ''}`}
+        className={`activity-button ${filesActive ? 'active' : ''}`}
         title="Toggle files"
-        onClick={onToggleNav}
+        onClick={onToggleFiles}
       >
         <Icon>
           <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
           <path d="M14 3v5h5" />
+        </Icon>
+      </button>
+      <button
+        className={`activity-button ${archiveActive ? 'active' : ''}`}
+        title="Writing archive"
+        onClick={onToggleArchive}
+      >
+        <Icon>
+          <path d="M4 5.5h16v14H4z" />
+          <path d="M8 5.5v14M12 5.5v14M16 5.5v14" />
+          <path d="M3 3h18" />
         </Icon>
       </button>
       <button

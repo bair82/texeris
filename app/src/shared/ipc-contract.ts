@@ -43,6 +43,13 @@ import type {
   CitationStyleId,
   CitationStyleSettings,
 } from './citation-style-types';
+import type {
+  ArchiveAttachment,
+  ArchiveImportReport,
+  ArchivePreview,
+  ArchiveSearchResult,
+  ArchiveSourceView,
+} from './archive-types';
 
 /**
  * IPC contract shared by main, preload, and renderer.
@@ -84,6 +91,20 @@ export interface TexerisApi {
     lookupDoi(doi: string): Promise<ReferenceDraft>;
     create(draft: ReferenceDraft): Promise<ReferenceCreateResult>;
     audit(markdown: string): Promise<CitationAudit>;
+  };
+  archive: {
+    list(): Promise<ArchiveSourceView[]>;
+    importDialog(source: 'files' | 'folder'): Promise<ArchiveImportReport | null>;
+    search(query: string, limit?: number): Promise<ArchiveSearchResult[]>;
+    preview(sourceId: string, offset?: number): Promise<ArchivePreview>;
+    delete(sourceId: string): Promise<{ deleted: boolean }>;
+    passages(passageIds: string[]): Promise<ArchiveAttachment[]>;
+    buildProfile(sourceIds: string[]): Promise<{
+      conversationId: string;
+      runId: string;
+      sourceCount: number;
+      warnings: string[];
+    }>;
   };
   chat: {
     getOrCreateConversation(): Promise<{ conversationId: string }>;

@@ -7,6 +7,7 @@ import type {
 import type { ProjectContext } from '../services/project';
 import type { ChangeSummary } from './changes';
 import { extractHeadings, sliceSection } from './markdown';
+import type { ArchiveAttachment } from '../../shared/archive-types';
 
 /**
  * Context assembly v1 (plan §11). Scopes: document / section (+ selection as
@@ -27,6 +28,7 @@ export function assembleContext(
   project: ProjectContext,
   scope: ContextScope,
   budgetChars: number = DOC_BUDGET_CHARS,
+  archivePassages: readonly ArchiveAttachment[] = [],
 ): AssembledContext {
   const documentId = scope.documentId ?? documentIdForPath(project, project.project.mainDocument);
   const documentPath = pathForDocument(project, documentId);
@@ -102,11 +104,35 @@ export function assembleContext(
     items.push({ label: 'project-instructions.md', chars: instructions.length });
   }
 
+  const archiveText = archivePassages.length
+    ? '\n\n<writing-archive>\n' +
+      archivePassages.map((passage) => {
+        const location = [
+          passage.heading ? `section=${JSON.stringify(passage.heading)}` : '',
+          passage.page ? `page=${passage.page}` : '',
+        ].filter(Boolean).join(' ');
+        return (
+          `<archive-passage title=${JSON.stringify(passage.title)} ${location}>\n` +
+          `${passage.excerpt}\n</archive-passage>`
+        );
+      }).join('\n\n') +
+      '\n</writing-archive>'
+    : '';
+  for (const passage of archivePassages) {
+    items.push({
+      label: `${passage.title}${passage.heading ? ` § ${passage.heading}` : ''}${
+        passage.page ? ` · p. ${passage.page}` : ''
+      } (archive)`,
+      chars: passage.excerpt.length,
+    });
+  }
+
   const contextText =
     `<document source="${documentPath}" revision="${baseRevision}">\n` +
     body +
     '\n</document>' +
     (instructions ? `\n\n<project-instructions>\n${instructions}\n</project-instructions>` : '') +
+    archiveText +
     (notices.length ? `\n\n<notices>\n${notices.join('\n')}\n</notices>` : '');
 
   return {
@@ -119,6 +145,9 @@ export function assembleContext(
       baseChangeCount,
       truncated,
       notices,
+      ...(archivePassages.length
+        ? { archivePassageIds: archivePassages.map((passage) => passage.passageId) }
+        : {}),
     },
   };
 }
@@ -153,7 +182,7 @@ export function buildSystemPrompt(
   const parts = [
     'You are Texeris, an editorial collaborator embedded in the user’s academic writing workspace.',
     'You answer questions about the manuscript and help revise it.',
-    'The current document context is below. Use the read tools when you need text outside this context, and read_revision_changes to see what changed recently.',
+    'The current document context is below. Explicitly attached writing-archive passages are examples from the user’s prior work; identify them by title when relying on them. Use the read tools when you need document text outside this context, and read_revision_changes to see what changed recently.',
     'To change text, call propose_patch: for each change, quote the exact text to replace in expectedText — the application locates it (add prefixContext/suffixContext only if the quote is not unique). The user reviews every group before anything is applied. Never claim your changes are applied; they are proposals.',
   ];
   if (changeSummary === 'unchanged') {
