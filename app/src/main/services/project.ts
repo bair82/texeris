@@ -13,6 +13,7 @@ import { UiStateService } from './uiState';
 import { seedWelcomeDocument } from './welcome';
 import { reconcileImageAssetsBestEffort } from './assets';
 import type { CitationStyleId } from '../../shared/citation-style-types';
+import { resolveProjectDocumentPath } from './projectPath';
 
 /**
  * Project service (plan §4.8, §7.1): a project is a user folder with a
@@ -80,7 +81,12 @@ function titleFor(relativePath: string): string {
   return path.basename(relativePath).replace(/\.md$/i, '');
 }
 
-function registerDocument(db: DatabaseSync, relativePath: string): string {
+function registerDocument(
+  db: DatabaseSync,
+  root: string,
+  relativePath: string,
+): string {
+  resolveProjectDocumentPath(root, relativePath);
   const existing = db
     .prepare('SELECT id FROM documents WHERE path = ?')
     .get(relativePath) as { id: string } | undefined;
@@ -107,13 +113,14 @@ export function createProject(root: string, mainDocument = 'manuscript.md'): Pro
     projectId: randomUUID(),
     mainDocument,
   };
+  resolveProjectDocumentPath(root, mainDocument);
   writeProjectJson(root, project);
-  const docPath = path.join(root, mainDocument);
+  const docPath = resolveProjectDocumentPath(root, mainDocument);
   if (!fs.existsSync(docPath)) {
     atomicWriteText(docPath, '');
   }
   const db = openDatabase(path.join(texerisDir(root), DB_FILE));
-  registerDocument(db, mainDocument);
+  registerDocument(db, root, mainDocument);
   const ctx: ProjectContext = { root, project, db, revisions: new RevisionService(db, root) };
   // EU7: seed welcome.md and make it the first thing a new project opens on.
   const welcomeId = seedWelcomeDocument(ctx);
@@ -130,26 +137,33 @@ export function createProject(root: string, mainDocument = 'manuscript.md'): Pro
 export function openProject(root: string): ProjectContext {
   const project = readProjectJson(root);
   const db = openDatabase(path.join(texerisDir(root), DB_FILE));
-  const revisions = new RevisionService(db, root);
-  const ctx: ProjectContext = { root, project, db, revisions };
+  try {
+    const revisions = new RevisionService(db, root);
+    const ctx: ProjectContext = { root, project, db, revisions };
 
-  cleanOrphanTmpFiles(root);
-  const docs = db
-    .prepare('SELECT id, path FROM documents WHERE trashed_at IS NULL')
-    .all() as Array<{ id: string; path: string }>;
-  for (const doc of docs) {
-    cleanOrphanTmpFiles(path.dirname(path.join(root, doc.path)));
-    revisions.importExternalChange(doc.id);
+    cleanOrphanTmpFiles(root);
+    resolveProjectDocumentPath(root, project.mainDocument);
+    const docs = db
+      .prepare('SELECT id, path FROM documents WHERE trashed_at IS NULL')
+      .all() as Array<{ id: string; path: string }>;
+    for (const doc of docs) {
+      const documentPath = resolveProjectDocumentPath(root, doc.path);
+      cleanOrphanTmpFiles(path.dirname(documentPath));
+      revisions.importExternalChange(doc.id);
+    }
+    // Interrupted image uploads and externally removed references are
+    // reconciled after canonical files have been imported.
+    reconcileImageAssetsBestEffort(root, db, { discardPending: true });
+    return ctx;
+  } catch (error) {
+    db.close();
+    throw error;
   }
-  // Interrupted image uploads and externally removed references are
-  // reconciled after canonical files have been imported.
-  reconcileImageAssetsBestEffort(root, db);
-  return ctx;
 }
 
 /** Look up a document id by relative path, registering it if it is new. */
 export function ensureDocument(ctx: ProjectContext, relativePath: string): string {
-  return registerDocument(ctx.db, relativePath);
+  return registerDocument(ctx.db, ctx.root, relativePath);
 }
 
 const SAFE_NAME = /^[\w .-]+\.md$/i;
@@ -172,7 +186,7 @@ export function createDocument(
       `invalid document name ${JSON.stringify(name)} — use a simple relative path ending in .md`,
     );
   }
-  const filePath = path.join(ctx.root, trimmed);
+  const filePath = resolveProjectDocumentPath(ctx.root, trimmed);
   const trashedRow = ctx.db
     .prepare('SELECT 1 AS x FROM documents WHERE path = ? AND trashed_at IS NOT NULL')
     .get(trimmed);

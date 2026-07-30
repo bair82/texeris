@@ -107,6 +107,38 @@ describe('PiAgentRuntime', () => {
     expect(runs[0].provider).toBe('faux');
   });
 
+  it('keeps the submitted prompt when the provider fails before answering', async () => {
+    faux.setResponses([
+      (() => {
+        throw new Error('provider unavailable');
+      }) as FauxResponseStep,
+    ]);
+    const { runId } = await runtime.startTurn({
+      conversationId,
+      text: 'Do not lose this prompt.',
+      mode: 'fast',
+      scope: { kind: 'document' },
+    });
+    const events = await drain(runId);
+
+    expect(events.at(-1)).toMatchObject({
+      type: 'run_end',
+      status: 'error',
+      errorMessage: 'provider unavailable',
+    });
+    const stored = conversations.listUiMessages(conversationId);
+    expect(stored[0]).toEqual({
+      seq: 1,
+      role: 'user',
+      text: 'Do not lose this prompt.',
+    });
+    expect(stored.filter((message) => message.role === 'user')).toHaveLength(1);
+    expect(conversations.listRuns(conversationId)[0]).toMatchObject({
+      status: 'error',
+      error: 'provider unavailable',
+    });
+  });
+
   it('executes read-only tools and records tool events', async () => {
     faux.setResponses([
       fauxAssistantMessage([fauxToolCall('read_document', {})]),

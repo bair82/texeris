@@ -126,6 +126,7 @@ export default function EditorRegion({
   const scrollCleanupRef = useRef<(() => void) | null>(null);
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingCommitsRef = useRef(new Set<Promise<void>>());
+  const pendingUploadsRef = useRef(new Set<Promise<{ path: string; alt: string }>>());
   const commitErrorsRef = useRef<unknown[]>([]);
   const modeRef = useRef(mode);
   modeRef.current = mode;
@@ -167,9 +168,14 @@ export default function EditorRegion({
       clearTimeout(scrollTimerRef.current);
       scrollTimerRef.current = null;
     }
+    sessionRef.current?.flush();
     sessionRef.current?.destroy();
     sessionRef.current = null;
   }, []);
+
+  useEffect(() => {
+    return () => destroySession();
+  }, [destroySession]);
 
   const createSession = useCallback(
     (text: string, forMode: EditorMode, documentId: string, restore?: UiStateDoc) => {
@@ -206,14 +212,22 @@ export default function EditorRegion({
           setSaveState('dirty');
         },
         uploadImage: async (file: File) => {
-          const mediaType = imageMediaType(file);
-          const sourceName = file.name || `pasted-image.${mediaType.split('/')[1] || 'png'}`;
-          return window.texeris.doc.addImage({
-            documentId,
-            sourceName,
-            mediaType,
-            dataBase64: await fileBase64(file),
-          });
+          const upload = (async () => {
+            const mediaType = imageMediaType(file);
+            const sourceName = file.name || `pasted-image.${mediaType.split('/')[1] || 'png'}`;
+            return window.texeris.doc.addImage({
+              documentId,
+              sourceName,
+              mediaType,
+              dataBase64: await fileBase64(file),
+            });
+          })();
+          pendingUploadsRef.current.add(upload);
+          void upload.then(
+            () => pendingUploadsRef.current.delete(upload),
+            () => pendingUploadsRef.current.delete(upload),
+          );
+          return upload;
         },
         onImageError: (error: unknown) => {
           setNotice({ text: `image could not be added: ${error instanceof Error ? error.message : String(error)}` });
@@ -338,6 +352,11 @@ export default function EditorRegion({
       toggleMode: () =>
         switchModeRef.current(modeRef.current === 'rendered' ? 'raw' : 'rendered'),
       flush: async () => {
+        sessionRef.current?.flush();
+        while (pendingUploadsRef.current.size > 0) {
+          await Promise.allSettled([...pendingUploadsRef.current]);
+        }
+        // Upload completion inserts the image reference into the editor.
         sessionRef.current?.flush();
         while (pendingCommitsRef.current.size > 0) {
           await Promise.all([...pendingCommitsRef.current]);

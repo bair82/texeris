@@ -41,6 +41,20 @@ describe('ProjectManager', () => {
     reopened.current?.db.close();
   });
 
+  it('prepares a project without closing the current one, then closes it on adoption', () => {
+    const current = manager.create(dir, 'one');
+    const candidate = manager.prepareCreate(dir, 'two');
+
+    expect(manager.current).toBe(current);
+    expect(current.db.prepare('SELECT 1 AS ok').get()).toEqual({ ok: 1 });
+
+    manager.adoptContext(candidate, () => {
+      expect(current.db.prepare('SELECT 1 AS ok').get()).toEqual({ ok: 1 });
+    });
+    expect(manager.current).toBe(candidate);
+    expect(() => current.db.prepare('SELECT 1')).toThrow();
+  });
+
   it('rejects invalid project names', () => {
     expect(() => manager.create(dir, '../escape')).toThrow(/invalid project name/);
     expect(() => manager.create(dir, '/absolute')).toThrow(/invalid project name/);

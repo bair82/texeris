@@ -25,12 +25,26 @@ import {
 } from '../shared/context-menu-types';
 import { ReferenceChannels } from '../shared/reference-types';
 import { ArchiveChannels } from '../shared/archive-types';
+import {
+  LifecycleChannels,
+  RendererFlushRequestSchema,
+} from '../shared/lifecycle-types';
 
 const api: TexerisApi = {
   async getAppInfo() {
     const payload: unknown = await ipcRenderer.invoke(IpcChannels.getAppInfo);
     // Validate whatever came across the bridge before handing it to the page.
     return Value.Decode(AppInfoSchema, payload);
+  },
+  lifecycle: {
+    onFlushRequest: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, raw: unknown) =>
+        callback(Value.Decode(RendererFlushRequestSchema, raw));
+      ipcRenderer.on(LifecycleChannels.flushRequest, listener);
+      return () => ipcRenderer.removeListener(LifecycleChannels.flushRequest, listener);
+    },
+    flushResult: (requestId, error) =>
+      ipcRenderer.invoke(LifecycleChannels.flushResult, { requestId, error }),
   },
   onMenuCommand: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, id: unknown) => {

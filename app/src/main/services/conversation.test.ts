@@ -103,6 +103,41 @@ describe('ConversationService', () => {
     expect(runs[0].manifest?.baseRevision).toBe(1);
     expect(runs[0].endedAt).toBeTruthy();
   });
+
+  it('persists the user prompt and running run as one turn boundary', () => {
+    const id = conversations.getOrCreateConversation();
+    const runId = conversations.startTurn({
+      conversationId: id,
+      modelMode: 'fast',
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      manifest,
+    }, 'durable prompt');
+
+    expect(conversations.listUiMessages(id)).toEqual([
+      { seq: 1, role: 'user', text: 'durable prompt' },
+    ]);
+    expect(conversations.listRuns(id)[0]).toMatchObject({ id: runId, status: 'running' });
+    expect(conversations.messageEditBoundary(id, 1).context.runId).toBe(runId);
+  });
+
+  it('keeps a submitted prompt and aborts its interrupted run on restart', () => {
+    const id = conversations.getOrCreateConversation();
+    conversations.startTurn({
+      conversationId: id,
+      modelMode: 'fast',
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      manifest,
+    }, 'survive restart');
+
+    const restarted = new ConversationService(ctx.db);
+    expect(restarted.listUiMessages(id)[0]?.text).toBe('survive restart');
+    expect(restarted.listRuns(id)[0]).toMatchObject({
+      status: 'aborted',
+      error: 'application closed before the run completed',
+    });
+  });
 });
 
 describe('conversation management (EU3)', () => {

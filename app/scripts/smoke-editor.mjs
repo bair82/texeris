@@ -270,7 +270,21 @@ try {
     `revision ${afterRestart.revision}, want ${baseRevision + 1}`,
   );
 
+  // Type and close immediately. The close handshake must save without waiting
+  // for the editor's five-second idle timer.
+  await waitFor(cdp, `!!document.querySelector('.tiptap-rendered')`, 'rendered editor never mounted after restart');
+  await evaluate(cdp, FOCUS_END_JS);
+  await cdp.send('Input.insertText', { text: '\n\nSaved during immediate close.' });
   app.proc.kill('SIGTERM');
+  await new Promise((resolve) => {
+    if (app.proc.exitCode !== null) resolve();
+    else app.proc.once('exit', resolve);
+  });
+  check(
+    'immediate close flushes recent typing',
+    fs.readFileSync(path.join(projectDir, 'manuscript.md'), 'utf8')
+      .includes('Saved during immediate close.'),
+  );
 } finally {
   app?.proc.kill('SIGKILL');
   fs.rmSync(projectDir, { recursive: true, force: true });

@@ -267,6 +267,22 @@ describe('exportDocumentFile', () => {
     }
   });
 
+  it('refuses to export through a document symlink that now escapes the project', async () => {
+    const canonical = path.join(root, 'manuscript.md');
+    const outside = path.join(path.dirname(root), `${path.basename(root)}-outside.md`);
+    const output = path.join(path.dirname(root), `${path.basename(root)}-escaped-export.md`);
+    fs.writeFileSync(outside, 'outside content\n');
+    fs.rmSync(canonical);
+    fs.symlinkSync(outside, canonical);
+    try {
+      await expect(exportDocumentFile(ctx, mainId, output)).rejects.toThrow(/symlink|escapes/);
+      expect(fs.existsSync(output)).toBe(false);
+    } finally {
+      fs.rmSync(outside, { force: true });
+      fs.rmSync(output, { force: true });
+    }
+  });
+
   it('writes PDF bytes atomically through the injected renderer', async () => {
     const output = path.join(root, '..', `export-${path.basename(root)}.pdf`);
     let printHtml = '';

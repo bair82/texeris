@@ -76,6 +76,17 @@ export type AppInfo = Static<typeof AppInfoSchema>;
 /** The narrow API the preload bridge exposes as `window.texeris`. */
 export interface TexerisApi {
   getAppInfo(): Promise<AppInfo>;
+  lifecycle: {
+    onFlushRequest(
+      callback: (
+        request: {
+          requestId: string;
+          reason: 'close' | 'project-switch';
+        },
+      ) => void,
+    ): () => void;
+    flushResult(requestId: string, error?: string): Promise<{ received: boolean }>;
+  };
   /** Subscribe to app-menu commands; returns an unsubscribe fn. */
   onMenuCommand(callback: (commandId: string) => void): () => void;
   contextMenu: {

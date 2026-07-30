@@ -3,11 +3,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { applySplices } from '../../shared/text-splice';
+import { resolveProjectDocumentPath } from './projectPath';
 
 const ASSET_ROOT = 'assets';
 const ASSET_TRASH = '.texeris/asset-trash';
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const IMAGE_EXTENSION = /\.(?:avif|gif|jpe?g|png|svg|webp)$/i;
+/** Uploads remain leased until a document commit references them. */
+const pendingUploads = new Set<string>();
 
 const MIME_EXTENSIONS: Record<string, string> = {
   'image/avif': '.avif',
@@ -81,6 +84,7 @@ export function addImageAsset(
       fs.rmSync(temp, { force: true });
     }
   }
+  pendingUploads.add(target);
   return {
     path: relative,
     alt: path.basename(input.sourceName, path.extname(input.sourceName)).trim(),
@@ -140,7 +144,11 @@ function removeEmptyDirs(dir: string, stopAt: string): void {
  * orphans are deleted. This makes image deletion economical without breaking
  * revision restore.
  */
-export function reconcileImageAssets(root: string, db: DatabaseSync): void {
+export function reconcileImageAssets(
+  root: string,
+  db: DatabaseSync,
+  options: { discardPending?: boolean } = {},
+): void {
   const publicRoot = path.join(root, ASSET_ROOT);
   const trashRoot = path.join(root, ASSET_TRASH);
   const publicFiles = walkImages(publicRoot);
@@ -152,9 +160,15 @@ export function reconcileImageAssets(root: string, db: DatabaseSync): void {
     .prepare('SELECT path FROM documents WHERE trashed_at IS NULL')
     .all() as Array<{ path: string }>;
   for (const doc of docs) {
-    const file = path.join(root, doc.path);
+    const file = resolveProjectDocumentPath(root, doc.path);
     if (fs.existsSync(file)) {
       for (const ref of referencedAssets(fs.readFileSync(file, 'utf8'))) live.add(ref);
+    }
+  }
+  for (const relativeBelowAssets of publicFiles) {
+    const relative = path.posix.join(ASSET_ROOT, relativeBelowAssets);
+    if (live.has(relative)) {
+      pendingUploads.delete(path.join(publicRoot, ...relativeBelowAssets.split('/')));
     }
   }
 
@@ -205,6 +219,8 @@ export function reconcileImageAssets(root: string, db: DatabaseSync): void {
     const relative = path.posix.join(ASSET_ROOT, relativeBelowAssets);
     if (live.has(relative)) continue;
     const source = path.join(publicRoot, ...relativeBelowAssets.split('/'));
+    if (!options.discardPending && pendingUploads.has(source)) continue;
+    pendingUploads.delete(source);
     if (historical.has(relative)) moveAsset(root, trashRoot, relative);
     else fs.rmSync(source, { force: true });
     removeEmptyDirs(path.dirname(source), publicRoot);
@@ -227,9 +243,10 @@ export function reconcileImageAssets(root: string, db: DatabaseSync): void {
 export function reconcileImageAssetsBestEffort(
   root: string,
   db: DatabaseSync,
+  options: { discardPending?: boolean } = {},
 ): void {
   try {
-    reconcileImageAssets(root, db);
+    reconcileImageAssets(root, db, options);
   } catch (error) {
     console.warn('image asset reconciliation failed; it will be retried', error);
   }

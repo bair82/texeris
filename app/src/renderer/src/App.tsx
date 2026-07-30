@@ -1,16 +1,30 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { AppInfo } from '../../shared/ipc-contract';
 import type { ProjectInfo } from '../../shared/project-types';
 import { initAppearance } from './appearance';
 import AppShell, { PROJECT_SWITCH_FLAG } from './layout/AppShell';
 import ProjectPicker from './ProjectPicker';
 import SettingsPanel from './SettingsPanel';
+import { getEditorCommands } from './editor/editorBridge';
 
 export default function App() {
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [project, setProject] = useState<ProjectInfo | null | undefined>(undefined);
   const [showSettings, setShowSettings] = useState(false);
   const [showProjectPicker, setShowProjectPicker] = useState(false);
+  const [projectPickerError, setProjectPickerError] = useState<string | null>(null);
+
+  const openProjectPicker = useCallback(async () => {
+    try {
+      await getEditorCommands()?.flush();
+      setProjectPickerError(null);
+      setShowProjectPicker(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setProjectPickerError(`Could not save before switching projects: ${message}`);
+      throw error;
+    }
+  }, []);
 
   useEffect(() => {
     void initAppearance().catch(console.error);
@@ -25,6 +39,22 @@ export default function App() {
     });
   }, []);
 
+  useEffect(() => {
+    return window.texeris.lifecycle.onFlushRequest(({ requestId }) => {
+      void (async () => {
+        try {
+          await getEditorCommands()?.flush();
+          await window.texeris.lifecycle.flushResult(requestId);
+        } catch (error) {
+          await window.texeris.lifecycle.flushResult(
+            requestId,
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      })();
+    });
+  }, []);
+
   if (project === undefined) {
     return null; // loading
   }
@@ -36,7 +66,7 @@ export default function App() {
     <main className="app-shell">
       <AppShell
         onOpenSettings={() => setShowSettings(true)}
-        onOpenProjectPicker={() => setShowProjectPicker(true)}
+        onOpenProjectPicker={openProjectPicker}
         mainDocument={project.mainDocument}
       />
       <footer className="app-footer">
@@ -46,10 +76,15 @@ export default function App() {
         <button
           className="footer-button"
           title="Open or create a project"
-          onClick={() => setShowProjectPicker(true)}
+          onClick={() => void openProjectPicker().catch(() => undefined)}
         >
           projects…
         </button>
+        {projectPickerError && (
+          <span role="alert" title={projectPickerError}>
+            save failed
+          </span>
+        )}
         <span className="footer-version">
           {info && `Texeris · Electron ${info.electronVersion} · Node ${info.nodeVersion}`}
         </span>
