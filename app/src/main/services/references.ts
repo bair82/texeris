@@ -4,7 +4,10 @@ import type {
   CitationAudit,
   CslName,
   CslReference,
+  ReferenceCreateResult,
+  ReferenceDraft,
   ReferenceImportReport,
+  ReferenceKind,
   ReferenceListItem,
 } from '../../shared/reference-types';
 import { atomicWriteText, hashText } from './document';
@@ -12,6 +15,227 @@ import { importBibliography } from './pandoc';
 import type { ProjectContext } from './project';
 
 export const REFERENCES_FILE = 'references.csl.json';
+const doiRecordCache = new Map<string, CslReference>();
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function text(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function firstText(value: unknown): string {
+  return Array.isArray(value) ? text(value[0]) : text(value);
+}
+
+export function normalizeDoi(value: string): string {
+  let doi = value.trim();
+  doi = doi.replace(/^doi:\s*/i, '');
+  try {
+    if (/^https?:\/\//i.test(doi)) {
+      const parsed = new URL(doi);
+      if (/^(?:dx\.)?doi\.org$/i.test(parsed.hostname)) {
+        doi = decodeURIComponent(parsed.pathname.replace(/^\/+/, ''));
+      }
+    }
+  } catch {
+    // The shape check below provides the user-facing validation error.
+  }
+  if (!/^10\.\d{4,9}\/\S+$/i.test(doi)) {
+    throw new Error('Enter a DOI such as 10.1000/example');
+  }
+  return doi.toLocaleLowerCase();
+}
+
+function normalizedDoiOrEmpty(value: unknown): string {
+  const doi = text(value);
+  if (!doi) return '';
+  try {
+    return normalizeDoi(doi);
+  } catch {
+    return '';
+  }
+}
+
+function crossrefType(value: unknown): ReferenceKind {
+  switch (text(value)) {
+    case 'journal-article':
+      return 'article-journal';
+    case 'book':
+    case 'book-set':
+    case 'edited-book':
+    case 'monograph':
+    case 'reference-book':
+      return 'book';
+    case 'book-chapter':
+    case 'book-part':
+    case 'book-section':
+    case 'reference-entry':
+      return 'chapter';
+    case 'proceedings-article':
+      return 'paper-conference';
+    case 'dissertation':
+      return 'thesis';
+    case 'report':
+      return 'report';
+    case 'posted-content':
+    case 'peer-review':
+    case 'journal-issue':
+      return 'article-journal';
+    default:
+      return 'document';
+  }
+}
+
+function crossrefIssued(message: Record<string, unknown>): CslReference['issued'] {
+  for (const field of ['published-print', 'published-online', 'published', 'issued', 'created']) {
+    const date = record(message[field]);
+    const parts = date?.['date-parts'];
+    if (
+      Array.isArray(parts) &&
+      Array.isArray(parts[0]) &&
+      typeof parts[0][0] === 'number'
+    ) {
+      return { 'date-parts': [parts[0] as number[]] };
+    }
+  }
+  return undefined;
+}
+
+/** Convert the bounded Crossref fields useful to CSL without retaining abstracts. */
+export function crossrefMessageToReference(
+  value: unknown,
+  requestedDoi: string,
+): CslReference {
+  const message = record(value);
+  if (!message) throw new Error('Crossref returned invalid metadata');
+  const title = firstText(message.title);
+  if (!title) throw new Error('Crossref has no title for this DOI');
+  const authors = Array.isArray(message.author)
+    ? message.author
+        .map((value): CslName | null => {
+          const author = record(value);
+          if (!author) return null;
+          const family = text(author.family);
+          const given = text(author.given);
+          const literal = text(author.name);
+          if (!family && !given && !literal) return null;
+          return literal ? { literal } : { family, given };
+        })
+        .filter((author): author is CslName => Boolean(author))
+    : [];
+  const issued = crossrefIssued(message);
+  const reference: CslReference = {
+    id: '',
+    type: crossrefType(message.type),
+    title,
+    ...(authors.length ? { author: authors } : {}),
+    ...(issued ? { issued } : {}),
+    DOI: normalizeDoi(text(message.DOI) || requestedDoi),
+  };
+  const scalarFields: Array<[keyof CslReference, unknown]> = [
+    ['container-title', firstText(message['container-title'])],
+    ['publisher', message.publisher],
+    ['publisher-place', message['publisher-location']],
+    ['volume', message.volume],
+    ['issue', message.issue],
+    ['page', message.page],
+    ['URL', message.URL],
+    ['language', message.language],
+  ];
+  for (const [key, raw] of scalarFields) {
+    const value = text(raw);
+    if (value) reference[key] = value;
+  }
+  for (const [key, raw] of [
+    ['ISSN', message.ISSN],
+    ['ISBN', message.ISBN],
+  ] as const) {
+    if (Array.isArray(raw)) {
+      const values = raw.map(text).filter(Boolean);
+      if (values.length) reference[key] = values;
+    }
+  }
+  return reference;
+}
+
+function formAuthors(names: CslName[] | undefined): string {
+  return (names ?? [])
+    .map((name) =>
+      name.literal ?? [name.given, name.family].filter(Boolean).join(' '),
+    )
+    .filter(Boolean)
+    .join('; ');
+}
+
+function parseAuthors(value: string): CslName[] {
+  return value
+    .split(/[;\n]+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((name) => {
+      const comma = name.indexOf(',');
+      if (comma >= 0) {
+        return {
+          family: name.slice(0, comma).trim(),
+          given: name.slice(comma + 1).trim(),
+        };
+      }
+      const parts = name.split(/\s+/);
+      return parts.length === 1
+        ? { literal: name }
+        : { family: parts.at(-1), given: parts.slice(0, -1).join(' ') };
+    });
+}
+
+function keyPart(value: string): string {
+  return value
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .replace(/[^A-Za-z0-9]+/g, '')
+    .toLocaleLowerCase();
+}
+
+function suggestedKey(draft: Pick<ReferenceDraft, 'authors' | 'year' | 'title'>): string {
+  const firstAuthor = draft.authors.split(/[;\n]+/)[0]?.trim() ?? '';
+  const family = firstAuthor.includes(',')
+    ? firstAuthor.split(',')[0]
+    : firstAuthor.split(/\s+/).at(-1) ?? '';
+  const author = keyPart(family);
+  const year = /^\d{1,4}$/.test(draft.year.trim()) ? draft.year.trim() : '';
+  const title = keyPart(draft.title.split(/\s+/).find((word) => word.length > 3) ?? '');
+  return `${author || title || 'ref'}${year}`;
+}
+
+function draftFromReference(reference: CslReference): ReferenceDraft {
+  return {
+    citationKey: suggestedKey({
+      authors: formAuthors(reference.author),
+      year: issuedYear(reference),
+      title: text(reference.title),
+    }),
+    type: (reference.type ?? 'document') as ReferenceKind,
+    title: text(reference.title),
+    authors: formAuthors(reference.author),
+    year: issuedYear(reference),
+    doi: text(reference.DOI),
+    url: text(reference.URL),
+  };
+}
+
+function validWebUrl(value: string): string {
+  if (!value.trim()) return '';
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error();
+    return url.toString();
+  } catch {
+    throw new Error('URL must start with http:// or https://');
+  }
+}
 
 function authorText(names: CslName[] | undefined): string {
   return (names ?? [])
@@ -124,6 +348,118 @@ export class ReferenceService {
       citedKeys: cited,
       unresolvedKeys: cited.filter((key) => !library.has(key)),
       unusedKeys: [...library].filter((key) => !cited.includes(key)).sort(),
+    };
+  }
+
+  async lookupDoi(value: string): Promise<ReferenceDraft> {
+    const doi = normalizeDoi(value);
+    const cached = doiRecordCache.get(doi);
+    if (cached) return draftFromReference(cached);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8_000);
+    try {
+      const encodedDoi = doi.split('/').map(encodeURIComponent).join('/');
+      const response = await fetch(`https://api.crossref.org/works/${encodedDoi}`, {
+        signal: controller.signal,
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': 'Texeris/0.1 (https://github.com/bair82/texeris)',
+        },
+      });
+      if (response.status === 404) {
+        throw new Error(
+          'No Crossref record was found. You can still enter the details manually.',
+        );
+      }
+      if (!response.ok) {
+        throw new Error(
+          'Crossref is temporarily unavailable. You can still enter the details manually.',
+        );
+      }
+      const envelope = record(await response.json());
+      const reference = crossrefMessageToReference(envelope?.message, doi);
+      doiRecordCache.set(doi, reference);
+      return draftFromReference(reference);
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error(
+          'DOI lookup timed out. You can still enter the details manually.',
+        );
+      }
+      if (
+        error instanceof Error &&
+        (error.message.startsWith('No Crossref') ||
+          error.message.startsWith('Crossref'))
+      ) {
+        throw error;
+      }
+      throw new Error(
+        'DOI lookup could not connect. You can still enter the details manually.',
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  create(draft: ReferenceDraft): ReferenceCreateResult {
+    const title = draft.title.trim();
+    if (!title) throw new Error('Title is required');
+    const year = draft.year.trim();
+    if (year && !/^\d{1,4}$/.test(year)) {
+      throw new Error('Year must contain one to four digits');
+    }
+    const doi = draft.doi.trim() ? normalizeDoi(draft.doi) : '';
+    const key = draft.citationKey.trim().replace(/^@/, '');
+    if (key && !/^[A-Za-z0-9_:.#$%&+?<>~/=-]+$/.test(key)) {
+      throw new Error('Citation key cannot contain spaces, brackets, commas, or semicolons');
+    }
+    const current = this.read();
+    if (doi) {
+      const existing = current.find(
+        (reference) => normalizedDoiOrEmpty(reference.DOI) === doi,
+      );
+      if (existing) {
+        return {
+          item: display(existing),
+          created: false,
+          warnings: [`@${existing.id} already uses this DOI.`],
+        };
+      }
+    }
+
+    const cached = doi ? doiRecordCache.get(doi) : undefined;
+    const reference: CslReference = cached
+      ? structuredClone(cached)
+      : { id: '', type: draft.type };
+    reference.id = key || suggestedKey(draft);
+    reference.type = draft.type;
+    reference.title = title;
+    const authors = parseAuthors(draft.authors);
+    if (authors.length) reference.author = authors;
+    else delete reference.author;
+    if (year) reference.issued = { 'date-parts': [[Number(year)]] };
+    else delete reference.issued;
+    if (doi) reference.DOI = doi;
+    else delete reference.DOI;
+    const url = validWebUrl(draft.url);
+    if (url) reference.URL = url;
+    else delete reference.URL;
+
+    const report = this.importRecords([reference], 'manual entry');
+    const finalKey =
+      report.renamed.find(({ from }) => from === reference.id)?.to ??
+      reference.id;
+    const item = this.list().find((candidate) => candidate.key === finalKey);
+    if (!item) throw new Error('Reference was saved but could not be indexed');
+    return {
+      item,
+      created: true,
+      warnings: [
+        ...report.renamed.map(
+          ({ from, to }) => `Citation key @${from} was already used; saved as @${to}.`,
+        ),
+        ...report.warnings,
+      ],
     };
   }
 

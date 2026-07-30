@@ -61,6 +61,10 @@ const api: TexerisApi = {
     search: (query, limit) =>
       ipcRenderer.invoke(ReferenceChannels.search, { query, limit }),
     importDialog: () => ipcRenderer.invoke(ReferenceChannels.importDialog),
+    lookupDoi: (doi) =>
+      ipcRenderer.invoke(ReferenceChannels.lookupDoi, { doi }),
+    create: (draft) =>
+      ipcRenderer.invoke(ReferenceChannels.create, draft),
     audit: (markdown) =>
       ipcRenderer.invoke(ReferenceChannels.audit, { markdown }),
   },

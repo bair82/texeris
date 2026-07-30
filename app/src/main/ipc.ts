@@ -87,6 +87,8 @@ import { JobCancelRequestSchema, JobChannels, type JobEvent } from '../shared/jo
 import {
   ReferenceAuditRequestSchema,
   ReferenceChannels,
+  ReferenceDoiLookupRequestSchema,
+  ReferenceDraftSchema,
   ReferenceSearchRequestSchema,
 } from '../shared/reference-types';
 import type { CorpusService } from './services/corpus';
@@ -300,6 +302,14 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       sourcePath = result.filePaths[0];
     }
     return new ReferenceService(deps.requireProject()).importFile(sourcePath);
+  });
+  ipcMain.handle(ReferenceChannels.lookupDoi, async (_event, raw: unknown) => {
+    const req = Value.Decode(ReferenceDoiLookupRequestSchema, raw);
+    return new ReferenceService(deps.requireProject()).lookupDoi(req.doi);
+  });
+  ipcMain.handle(ReferenceChannels.create, (_event, raw: unknown) => {
+    const req = Value.Decode(ReferenceDraftSchema, raw);
+    return new ReferenceService(deps.requireProject()).create(req);
   });
 
   ipcMain.handle(ChatChannels.previewMessageEdit, (_event, raw: unknown) => {

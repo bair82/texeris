@@ -254,3 +254,15 @@ duplicates/key conflicts. PDF and office export now invoke citeproc
 automatically and warn on unresolved keys. A dedicated Electron smoke covers
 BibTeX import, rendered/raw insertion, replacement, and bibliography-bearing PDF
 round-trip. Reference-detail editing and export-time CSL style selection remain.
+
+**codex, 2026-07-30** — closed the empty-library citation gap without adding a
+reference-manager surface. The Cite palette now offers Add reference beside
+Import. A compact form needs only a title, generates a visible/editable citation
+key from author/year, and immediately saves and cites the CSL record. Optional
+DOI lookup uses Crossref’s public single-work endpoint to prefill editable core
+fields while retaining journal, publisher, volume, issue, page, and identifier
+metadata in the canonical record. Only the DOI leaves the machine; lookup
+failure falls back to the same offline form. Exact duplicate DOIs reuse the
+existing project record. The citation smoke now starts from an empty library,
+manually creates/cites a record, then combines it with imported references and
+verifies the shared exported bibliography.

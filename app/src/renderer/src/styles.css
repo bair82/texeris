@@ -894,6 +894,128 @@ body.col-resizing {
   cursor: pointer;
 }
 
+.citation-empty-actions {
+  display: flex;
+  gap: 7px;
+}
+
+.reference-form {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  overflow-y: auto;
+  padding: 2px 18px 16px;
+}
+
+.reference-form label {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.reference-form label > span {
+  color: var(--text);
+  font-weight: 550;
+}
+
+.reference-form label small {
+  margin-left: 4px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 400;
+}
+
+.reference-form input,
+.reference-form select {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 9px;
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+}
+
+.reference-form input:focus,
+.reference-form select:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.reference-doi-row,
+.reference-form-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.reference-doi-row > button,
+.reference-form footer button {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 11px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.reference-doi-row > button:disabled,
+.reference-form footer button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.reference-form .citation-report,
+.reference-form .citation-error {
+  padding: 0;
+}
+
+.reference-form details {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.reference-form summary {
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.reference-form-more {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 0.55fr);
+  gap: 8px;
+  padding-top: 9px;
+}
+
+.reference-key-preview {
+  color: var(--text-faint) !important;
+  font-size: 11.5px;
+}
+
+.reference-key-preview strong {
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-weight: 500;
+}
+
+.reference-form footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.reference-form footer .reference-save {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
 .citation-report,
 .citation-import-warning,
 .citation-error,
