@@ -13,7 +13,7 @@ export class CheckpointService {
     private readonly revisions: RevisionService,
   ) {}
 
-  create(documentId: string, name: string): CheckpointInfo {
+  create(documentId: string, name: string, description = ''): CheckpointInfo {
     const revisionSeq = this.revisions.getCurrentRevision(documentId);
     if (revisionSeq === 0) {
       throw new Error('cannot checkpoint a document with no revisions');
@@ -24,29 +24,31 @@ export class CheckpointService {
       documentId,
       revisionSeq,
       name,
+      description,
       createdAt: new Date().toISOString(),
     };
     this.db
       .prepare(
         `INSERT INTO checkpoints
-           (id, document_id, revision_seq, name, created_at, snapshot_text)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+           (id, document_id, revision_seq, name, description, created_at, snapshot_text)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(info.id, documentId, revisionSeq, name, info.createdAt, snapshot);
+      .run(info.id, documentId, revisionSeq, name, description, info.createdAt, snapshot);
     return info;
   }
 
   list(documentId: string): CheckpointInfo[] {
     const rows = this.db
       .prepare(
-        `SELECT id, document_id, revision_seq, name, created_at
-         FROM checkpoints WHERE document_id = ? ORDER BY created_at`,
+        `SELECT id, document_id, revision_seq, name, description, created_at
+         FROM checkpoints WHERE document_id = ? ORDER BY created_at, rowid`,
       )
       .all(documentId) as Array<{
       id: string;
       document_id: string;
       revision_seq: number;
       name: string;
+      description: string;
       created_at: string;
     }>;
     return rows.map((row) => ({
@@ -54,6 +56,7 @@ export class CheckpointService {
       documentId: row.document_id,
       revisionSeq: row.revision_seq,
       name: row.name,
+      description: row.description,
       createdAt: row.created_at,
     }));
   }

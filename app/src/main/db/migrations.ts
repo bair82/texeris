@@ -242,4 +242,12 @@ export const migrations: ReadonlyArray<(db: DatabaseSync) => void> = [
       CREATE INDEX idx_reference_authors ON reference_index(authors);
     `);
   },
+  // 0007: checkpoints gain an optional human-readable description (owner
+  // request 2026-08-08) so history/rewind pickers stay scannable without
+  // opening each preview.
+  (db) => {
+    db.exec(`
+      ALTER TABLE checkpoints ADD COLUMN description TEXT NOT NULL DEFAULT '';
+    `);
+  },
 ];

@@ -11,6 +11,7 @@ export default function HistoryPanel({ documentId }: { documentId: string }) {
   const [revisions, setRevisions] = useState<RevisionInfo[]>([]);
   const [checkpoints, setCheckpoints] = useState<CheckpointInfo[]>([]);
   const [checkpointName, setCheckpointName] = useState('');
+  const [checkpointDescription, setCheckpointDescription] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -40,8 +41,13 @@ export default function HistoryPanel({ documentId }: { documentId: string }) {
     }
     setError(null);
     try {
-      await window.texeris.history.createCheckpoint(name, documentId);
+      await window.texeris.history.createCheckpoint(
+        name,
+        documentId,
+        checkpointDescription.trim() || undefined,
+      );
       setCheckpointName('');
+      setCheckpointDescription('');
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -73,6 +79,16 @@ export default function HistoryPanel({ documentId }: { documentId: string }) {
             }
           }}
         />
+        <input
+          placeholder="short description (optional)…"
+          value={checkpointDescription}
+          onChange={(e) => setCheckpointDescription(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              void createCheckpoint();
+            }
+          }}
+        />
         <button disabled={!checkpointName.trim()} onClick={() => void createCheckpoint()}>
           Checkpoint
         </button>
@@ -82,6 +98,11 @@ export default function HistoryPanel({ documentId }: { documentId: string }) {
           {checkpoints.map((cp) => (
             <li key={cp.id}>
               <span className="checkpoint-name">⚑ {cp.name}</span>
+              {cp.description && (
+                <span className="history-meta" title={cp.description}>
+                  {cp.description}
+                </span>
+              )}
               <span className="history-meta">rev {cp.revisionSeq}</span>
               <button onClick={() => void restoreCheckpoint(cp.id)}>Restore</button>
             </li>

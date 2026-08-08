@@ -344,7 +344,9 @@ Work packages, in order:
    messages, revisions, and patches remain intact. The latest assistant response
    also offers Regenerate through the same branch/restore path. General
    checkpoint-linked conversation rewind is deferred rather than inferred from
-   legacy data.
+   legacy data. Every history checkpoint carries a short human-readable
+   description (owner request 2026-08-08) so history/rewind pickers stay
+   scannable without opening each preview.
 9. **Lifecycle integrity audit:** require awaited editor flushes for close and
    project replacement; confine persisted document paths; make project/runtime
    handoff ordered; persist prompts before provider work; and protect
