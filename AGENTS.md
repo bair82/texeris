@@ -86,6 +86,8 @@ when product or architecture decisions change, update them.
   app/scripts/smoke-citations.mjs`
 - Doc & conversation management e2e smoke (rename, set-main, duplicate,
   trash, reopen renamed conversation): `node app/scripts/smoke-eu3.mjs`
+- Checkpoint UX e2e smoke (collapsed section, generated name/description,
+  inline rename, restore): `node app/scripts/smoke-checkpoint.mjs`
 - Live provider smoke (needs `DEEPSEEK_API_KEY` in env):
   `node app/scripts/smoke-live.mjs`
 - Editor spike dev server: `pnpm --filter @texeris/spike-editor dev`

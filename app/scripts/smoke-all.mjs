@@ -23,6 +23,7 @@ const SMOKE = [
   'scripts/smoke-citations.mjs',
   'scripts/smoke-archive.mjs',
   'scripts/smoke-pdf.mjs',
+  'scripts/smoke-checkpoint.mjs',
 ];
 
 const results = [];

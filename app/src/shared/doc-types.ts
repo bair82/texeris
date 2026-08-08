@@ -85,10 +85,18 @@ export type CheckpointListRequest = Static<typeof CheckpointListRequestSchema>;
 
 export const CheckpointCreateRequestSchema = Type.Object({
   documentId: Type.Optional(Type.String()),
-  name: Type.String({ minLength: 1 }),
+  /** Both optional: omitted values are generated (owner request 2026-08-08). */
+  name: Type.Optional(Type.String()),
   description: Type.Optional(Type.String()),
 });
 export type CheckpointCreateRequest = Static<typeof CheckpointCreateRequestSchema>;
+
+export const CheckpointRenameRequestSchema = Type.Object({
+  checkpointId: Type.String(),
+  name: Type.Optional(Type.String({ minLength: 1 })),
+  description: Type.Optional(Type.String()),
+});
+export type CheckpointRenameRequest = Static<typeof CheckpointRenameRequestSchema>;
 
 export const CheckpointRestoreRequestSchema = Type.Object({
   checkpointId: Type.String(),
@@ -99,6 +107,7 @@ export const HistoryChannels = {
   revisions: 'texeris:history-revisions',
   checkpointList: 'texeris:checkpoint-list',
   checkpointCreate: 'texeris:checkpoint-create',
+  checkpointRename: 'texeris:checkpoint-rename',
   checkpointRestore: 'texeris:checkpoint-restore',
 } as const;
 
