@@ -114,7 +114,10 @@ export function contextMenuTemplate(
     );
   } else if (context.kind === 'message') {
     separator();
-    items.push(actionItem(sender, context, 'Copy Message', 'message:copy'));
+    items.push(
+      actionItem(sender, context, 'Copy Message', 'message:copy'),
+      actionItem(sender, context, 'Rewind to This Turn…', 'message:rewind'),
+    );
   }
   if (items.at(-1)?.type === 'separator') items.pop();
   return items;

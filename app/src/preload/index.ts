@@ -17,6 +17,7 @@ import type { AppearanceConfig } from '../shared/settings-types';
 import { UiChannels } from '../shared/ui-types';
 import { ProjectChannels, type ProjectInfo } from '../shared/project-types';
 import { HistoryChannels } from '../shared/doc-types';
+import { RewindChannels } from '../shared/rewind-types';
 import { CorpusChannels, ProfileChannels } from '../shared/profile-types';
 import { JobChannels, type JobEvent } from '../shared/job-types';
 import { ContextMenuChannels, type ContextActionEvent, type ContextDescribeRequest } from '../shared/context-menu-types';
@@ -194,10 +195,16 @@ const api: TexerisApi = {
     revisions: (documentId) => ipcRenderer.invoke(HistoryChannels.revisions, { documentId }),
     listCheckpoints: (documentId) =>
       ipcRenderer.invoke(HistoryChannels.checkpointList, { documentId }),
-    createCheckpoint: (name, documentId) =>
-      ipcRenderer.invoke(HistoryChannels.checkpointCreate, { documentId, name }),
+    createCheckpoint: (name, documentId, description) =>
+      ipcRenderer.invoke(HistoryChannels.checkpointCreate, { documentId, name, description }),
     restoreCheckpoint: (checkpointId) =>
       ipcRenderer.invoke(HistoryChannels.checkpointRestore, { checkpointId }),
+  },
+  rewind: {
+    list: (conversationId, documentId) =>
+      ipcRenderer.invoke(RewindChannels.list, { conversationId, documentId }),
+    preview: (request) => ipcRenderer.invoke(RewindChannels.preview, request),
+    apply: (request) => ipcRenderer.invoke(RewindChannels.apply, request),
   },
 };
 

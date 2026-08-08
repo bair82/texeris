@@ -31,6 +31,7 @@ export const ContextActionSchema = Type.Union([
   Type.Literal('document:set-main'), Type.Literal('document:trash'),
   Type.Literal('conversation:open'), Type.Literal('conversation:rename'),
   Type.Literal('conversation:delete'), Type.Literal('message:copy'),
+  Type.Literal('message:rewind'),
 ]);
 export type ContextAction = Static<typeof ContextActionSchema>;
 

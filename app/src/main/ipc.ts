@@ -53,8 +53,15 @@ import {
   type SettingsView,
 } from '../shared/settings-types';
 import { UiChannels, UiStateSchema } from '../shared/ui-types';
+import {
+  RewindApplyRequestSchema,
+  RewindChannels,
+  RewindListRequestSchema,
+  RewindPreviewRequestSchema,
+} from '../shared/rewind-types';
 import type { AgentRuntime } from './agent/runtime';
 import { UiStateService } from './services/uiState';
+import { RewindService } from './services/rewind';
 import type { ConversationService } from './services/conversation';
 import { CredentialsService } from './services/credentials';
 import { CheckpointService } from './services/checkpoint';
@@ -543,7 +550,11 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const req = Value.Decode(CheckpointCreateRequestSchema, raw);
     const project = deps.requireProject();
     const docId = req.documentId ?? mainDocId(project);
-    return new CheckpointService(project.db, project.revisions).create(docId, req.name);
+    return new CheckpointService(project.db, project.revisions).create(
+      docId,
+      req.name,
+      req.description ?? '',
+    );
   });
 
   ipcMain.handle(HistoryChannels.checkpointRestore, (_event, raw: unknown) => {
@@ -551,6 +562,34 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const project = deps.requireProject();
     const seq = new CheckpointService(project.db, project.revisions).restore(req.checkpointId);
     return { seq };
+  });
+
+  // ---------------------------------------------------------------- rewind
+
+  const rewindService = (): RewindService => {
+    const project = deps.requireProject();
+    return new RewindService(
+      project.db,
+      deps.requireConversations(),
+      project.revisions,
+      new CheckpointService(project.db, project.revisions),
+      deps.requirePatches(),
+    );
+  };
+
+  ipcMain.handle(RewindChannels.list, (_event, raw: unknown) => {
+    const req = Value.Decode(RewindListRequestSchema, raw);
+    return rewindService().listPoints(req.conversationId, req.documentId);
+  });
+
+  ipcMain.handle(RewindChannels.preview, (_event, raw: unknown) => {
+    const req = Value.Decode(RewindPreviewRequestSchema, raw);
+    return rewindService().preview(req.conversationId, req.kind, req.id);
+  });
+
+  ipcMain.handle(RewindChannels.apply, (_event, raw: unknown) => {
+    const req = Value.Decode(RewindApplyRequestSchema, raw);
+    return rewindService().apply(req.conversationId, req.kind, req.id);
   });
 
   // ------------------------------------------------------------------ patch

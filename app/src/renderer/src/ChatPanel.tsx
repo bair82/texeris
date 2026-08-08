@@ -10,8 +10,10 @@ import type {
   DelegationRecord,
 } from '../../shared/chat-types';
 import type { HeadingInfo } from '../../shared/doc-types';
-import { getEditorSelection, registerChatCommands } from './editor/editorBridge';
+import type { RewindResult } from '../../shared/rewind-types';
+import { getEditorSelection, registerChatCommands, reloadEditor } from './editor/editorBridge';
 import MarkdownView from './MarkdownView';
+import RewindDialog from './layout/RewindDialog';
 import { registerContextActionHandler, showContextMenu } from './contextMenuBridge';
 
 interface StreamingState {
@@ -63,6 +65,8 @@ export default function ChatPanel({
   const [error, setError] = useState<string | null>(null);
   const [lastTurn, setLastTurn] = useState<LastTurn | null>(null);
   const [copiedSeq, setCopiedSeq] = useState<number | null>(null);
+  const [rewindOpen, setRewindOpen] = useState(false);
+  const [rewindSeq, setRewindSeq] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
 
@@ -206,6 +210,11 @@ export default function ChatPanel({
       setTimeout(() => setCopiedSeq((seq) => seq === message.seq ? null : seq), 1200);
       return true;
     }
+    if (event.context.kind === 'message' && event.action === 'message:rewind') {
+      setRewindSeq(event.context.seq);
+      setRewindOpen(true);
+      return true;
+    }
     return false;
   }), [conversations, messages, switchConversation]);
 
@@ -302,6 +311,19 @@ export default function ChatPanel({
       void window.texeris.chat.cancel(streaming.runId);
     }
   }, [streaming]);
+
+  // After a rewind: reload the editor to the restored revision, then open the
+  // forked conversation (switchConversation persists it via onConversationChange).
+  const onRewindApplied = useCallback(
+    async (result: RewindResult) => {
+      reloadEditor();
+      await refreshConversations();
+      if (result.conversationId) {
+        await switchConversation(result.conversationId);
+      }
+    },
+    [refreshConversations, switchConversation],
+  );
 
   return (
     <section className="chat">
@@ -436,12 +458,37 @@ export default function ChatPanel({
         </button>
         <button
           className="usage-toggle"
+          title="Rewind to an earlier turn or checkpoint (preview first; the original conversation is kept)"
+          onClick={() => {
+            setRewindSeq(null);
+            setRewindOpen(true);
+          }}
+        >
+          rewind
+        </button>
+        <button
+          className="usage-toggle"
           title="Usage records"
           onClick={() => setShowUsage((v) => !v)}
         >
           usage
         </button>
       </header>
+
+      {rewindOpen && conversationId && (
+        <RewindDialog
+          conversationId={conversationId}
+          documentId={documentId}
+          initialSeq={rewindSeq}
+          onClose={() => {
+            setRewindOpen(false);
+            setRewindSeq(null);
+          }}
+          onApplied={(result) => {
+            void onRewindApplied(result);
+          }}
+        />
+      )}
 
       {showUsage && (
         <div className="usage-panel">

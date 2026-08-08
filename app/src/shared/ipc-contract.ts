@@ -30,6 +30,13 @@ import type { CorpusGrantView, ProfileBeginRequest } from './profile-types';
 import type { JobEvent } from './job-types';
 import type { PatchStyleMode } from './settings-types';
 import type { ContextActionEvent, ContextDescribeRequest, ContextDescriptor } from './context-menu-types';
+import type {
+  RewindApplyRequest,
+  RewindPoint,
+  RewindPreview,
+  RewindPreviewRequest,
+  RewindResult,
+} from './rewind-types';
 
 /**
  * IPC contract shared by main, preload, and renderer.
@@ -157,7 +164,12 @@ export interface TexerisApi {
   history: {
     revisions(documentId?: string): Promise<RevisionInfo[]>;
     listCheckpoints(documentId?: string): Promise<CheckpointInfo[]>;
-    createCheckpoint(name: string, documentId?: string): Promise<CheckpointInfo>;
+    createCheckpoint(name: string, documentId?: string, description?: string): Promise<CheckpointInfo>;
     restoreCheckpoint(checkpointId: string): Promise<{ seq: number }>;
+  };
+  rewind: {
+    list(conversationId: string, documentId?: string): Promise<RewindPoint[]>;
+    preview(request: RewindPreviewRequest): Promise<RewindPreview>;
+    apply(request: RewindApplyRequest): Promise<RewindResult>;
   };
 }
