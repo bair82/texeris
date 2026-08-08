@@ -5,9 +5,11 @@ import { minimalSplice } from '../../shared/text-splice';
 import { atomicWriteText, hashText } from './document';
 import type { ProjectContext } from './project';
 import { convertToMarkdown, formatForPath, writePandocExport, type InterchangeFormat } from './pandoc';
+import { ReferenceService } from './references';
 import { reconcileImageAssetsBestEffort } from './assets';
 import { extractPdfText, MAX_PDF_BYTES, PdfExtractionError, pdfDocumentMarkdown } from './pdf';
 import { buildPdfPrintHtml } from './pdfExportHtml';
+import { resolveProjectDocumentPath } from './projectPath';
 
 /**
  * Document management (M1.5 EU3): rename (ids never change), trash (file
@@ -76,7 +78,7 @@ function assertLive(row: DocumentRow): void {
 }
 
 function pathTaken(ctx: ProjectContext, relativePath: string): boolean {
-  if (fs.existsSync(path.join(ctx.root, relativePath))) {
+  if (fs.existsSync(resolveProjectDocumentPath(ctx.root, relativePath))) {
     return true;
   }
   return (
@@ -104,8 +106,8 @@ export function renameDocument(
   if (pathTaken(ctx, target)) {
     throw new Error(`a document named ${target} already exists`);
   }
-  const from = path.join(ctx.root, row.path);
-  const to = path.join(ctx.root, target);
+  const from = resolveProjectDocumentPath(ctx.root, row.path);
+  const to = resolveProjectDocumentPath(ctx.root, target);
   fs.mkdirSync(path.dirname(to), { recursive: true });
   fs.renameSync(from, to);
   ctx.db
@@ -133,7 +135,7 @@ export function trashDocument(ctx: ProjectContext, documentId: string): void {
     throw new Error('the main document cannot be trashed');
   }
   const trashDir = path.join(ctx.root, TRASH_DIR);
-  const from = path.join(ctx.root, row.path);
+  const from = resolveProjectDocumentPath(ctx.root, row.path);
   const to = path.join(trashDir, `${row.id}.md`);
   fs.mkdirSync(trashDir, { recursive: true });
   fs.renameSync(from, to);
@@ -158,7 +160,10 @@ export function duplicateDocument(ctx: ProjectContext, documentId: string): Docu
   for (let n = 2; pathTaken(ctx, target); n++) {
     target = `${base} copy ${n}.md`;
   }
-  const content = fs.readFileSync(path.join(ctx.root, row.path), 'utf8');
+  const content = fs.readFileSync(
+    resolveProjectDocumentPath(ctx.root, row.path),
+    'utf8',
+  );
   const id = registerImported(ctx, target, content, `duplicate of ${row.path}`);
   return { id, path: target, title: titleFor(target) };
 }
@@ -220,14 +225,21 @@ export async function exportDocumentFile(
   outputPath: string,
   renderPdf?: PdfRenderer,
   signal?: AbortSignal,
+  citationStylePath?: string,
 ): Promise<DocumentExportResult> {
   const row = docRow(ctx, documentId);
   assertLive(row);
   const format = formatForPath(outputPath);
   if (!format) throw new Error('choose a PDF, Markdown, DOCX, ODT, or RTF filename');
-  const sourcePath = path.resolve(ctx.root, row.path);
+  const sourcePath = resolveProjectDocumentPath(ctx.root, row.path);
   if (path.resolve(outputPath) === sourcePath) throw new Error('choose a different path from the canonical project document');
   const text = fs.readFileSync(sourcePath, 'utf8');
+  const references = new ReferenceService(ctx);
+  const audit = references.audit(text);
+  const bibliographyPath =
+    audit.citedKeys.length > 0 && references.list().length > 0
+      ? references.filePath
+      : undefined;
   const tempPath = path.join(
     path.dirname(outputPath),
     `.${path.basename(outputPath)}.${randomUUID()}.tmp${path.extname(outputPath)}`,
@@ -238,7 +250,11 @@ export async function exportDocumentFile(
       atomicWriteText(tempPath, text);
     } else if (format === 'pdf') {
       if (!renderPdf) throw new Error('PDF rendering is unavailable');
-      const prepared = await buildPdfPrintHtml(text, row.title, ctx.root, { signal });
+      const prepared = await buildPdfPrintHtml(text, row.title, ctx.root, {
+        signal,
+        bibliographyPath,
+        citationStylePath,
+      });
       const bytes = await renderPdf(prepared.html);
       if (!bytes.subarray(0, 5).equals(Buffer.from('%PDF-'))) {
         throw new Error('PDF rendering returned an invalid file');
@@ -246,11 +262,25 @@ export async function exportDocumentFile(
       fs.writeFileSync(tempPath, bytes, { flag: 'wx' });
       warnings = prepared.warnings;
     } else {
-      warnings = await writePandocExport(text, tempPath, format, ctx.root, signal);
+      warnings = await writePandocExport(
+        text,
+        tempPath,
+        format,
+        ctx.root,
+        signal,
+        bibliographyPath,
+        citationStylePath,
+      );
     }
     fs.renameSync(tempPath, outputPath);
-    if (/\[@[-\w]+/.test(text)) {
-      warnings.push('Citation markers were preserved where possible, but no bibliography was rendered because this project has no reference library yet.');
+    if (audit.unresolvedKeys.length > 0) {
+      warnings.push(
+        `Unresolved citation key(s): ${audit.unresolvedKeys.join(', ')}.`,
+      );
+    } else if (audit.citedKeys.length > 0 && !bibliographyPath) {
+      warnings.push(
+        'Citation markers were preserved, but no bibliography was rendered because the project reference library is empty.',
+      );
     }
     return { path: outputPath, format, warnings };
   } catch (error) {
@@ -267,7 +297,7 @@ export function registerImported(
   summary: string,
 ): string {
   // the commit writes the file — start from the canonical empty state
-  atomicWriteText(path.join(ctx.root, relativePath), '');
+  atomicWriteText(resolveProjectDocumentPath(ctx.root, relativePath), '');
   const id = randomUUID();
   ctx.db
     .prepare(
@@ -296,7 +326,7 @@ export function createGeneratedDocument(
   for (let n = 2; pathTaken(ctx, target); n++) {
     target = `${base} ${n}.md`;
   }
-  atomicWriteText(path.join(ctx.root, target), '');
+  atomicWriteText(resolveProjectDocumentPath(ctx.root, target), '');
   const id = randomUUID();
   ctx.db
     .prepare(
@@ -360,7 +390,7 @@ function pathTakenByOther(
   relativePath: string,
   excludeId: string,
 ): boolean {
-  if (fs.existsSync(path.join(ctx.root, relativePath))) {
+  if (fs.existsSync(resolveProjectDocumentPath(ctx.root, relativePath))) {
     return true;
   }
   return (
@@ -394,7 +424,7 @@ export function restoreDocument(ctx: ProjectContext, documentId: string): Docume
       target = `${base} (restored ${n}).md`;
     }
   }
-  const to = path.join(ctx.root, target);
+  const to = resolveProjectDocumentPath(ctx.root, target);
   fs.mkdirSync(path.dirname(to), { recursive: true });
   fs.renameSync(trashFile, to);
   try {

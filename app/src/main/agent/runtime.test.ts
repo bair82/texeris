@@ -107,6 +107,38 @@ describe('PiAgentRuntime', () => {
     expect(runs[0].provider).toBe('faux');
   });
 
+  it('keeps the submitted prompt when the provider fails before answering', async () => {
+    faux.setResponses([
+      (() => {
+        throw new Error('provider unavailable');
+      }) as FauxResponseStep,
+    ]);
+    const { runId } = await runtime.startTurn({
+      conversationId,
+      text: 'Do not lose this prompt.',
+      mode: 'fast',
+      scope: { kind: 'document' },
+    });
+    const events = await drain(runId);
+
+    expect(events.at(-1)).toMatchObject({
+      type: 'run_end',
+      status: 'error',
+      errorMessage: 'provider unavailable',
+    });
+    const stored = conversations.listUiMessages(conversationId);
+    expect(stored[0]).toEqual({
+      seq: 1,
+      role: 'user',
+      text: 'Do not lose this prompt.',
+    });
+    expect(stored.filter((message) => message.role === 'user')).toHaveLength(1);
+    expect(conversations.listRuns(conversationId)[0]).toMatchObject({
+      status: 'error',
+      error: 'provider unavailable',
+    });
+  });
+
   it('executes read-only tools and records tool events', async () => {
     faux.setResponses([
       fauxAssistantMessage([fauxToolCall('read_document', {})]),
@@ -238,6 +270,113 @@ describe('PiAgentRuntime', () => {
       .listRevisions(docId)
       .find((r) => r.actor === 'agent');
     expect(agentRev?.source).toMatchObject({ kind: 'patch', patchId: proposed[0].id });
+  });
+
+  it('enforces a Conservative rewrite conversation tool boundary', async () => {
+    const skillConversationId = conversations.startNewConversation({
+      id: 'conservative-rewrite',
+      version: 1,
+    });
+    let seenTools: string[] = [];
+    let seenSystemPrompt = '';
+    faux.setResponses([
+      (context) => {
+        seenTools = (context.tools ?? []).map((tool) => tool.name);
+        seenSystemPrompt = context.systemPrompt ?? '';
+        return fauxAssistantMessage([
+          fauxToolCall('propose_patch', {
+            baseRevision: 1,
+            title: 'Conservative copy-edit',
+            summary: 'Remove one unnecessary word.',
+            groups: [
+              {
+                explanation: 'concision',
+                changes: [{ from: 13, to: 18, expectedText: 'quick', insert: 'swift' }],
+              },
+            ],
+          }),
+        ]);
+      },
+      fauxAssistantMessage('I proposed one bounded change for review.'),
+    ]);
+
+    const { runId } = await runtime.startTurn({
+      conversationId: skillConversationId,
+      text: 'Run Conservative rewrite on the selected scope.',
+      mode: 'fast',
+      scope: { kind: 'selection', from: 13, to: 18 },
+    });
+    await drain(runId);
+
+    expect(seenTools.sort()).toEqual([
+      'propose_patch',
+      'read_document',
+      'read_document_range',
+      'read_project_instructions',
+      'read_writing_profile',
+    ]);
+    expect(seenSystemPrompt).toContain("Texeris's Conservative rewrite skill");
+    expect(seenSystemPrompt).toContain('Stay inside the supplied selection');
+    expect(conversations.listRuns(skillConversationId)[0]).toMatchObject({
+      skillId: 'conservative-rewrite',
+      skillVersion: 1,
+    });
+    expect(patches.list()).toHaveLength(1);
+  });
+
+  it('runs the verbal-tick skill as a bounded, audit-first conversation', async () => {
+    const skillConversationId = conversations.startNewConversation({
+      id: 'llm-verbal-ticks',
+      version: 1,
+    });
+    let seenTools: string[] = [];
+    let seenSystemPrompt = '';
+    faux.setResponses([
+      (context) => {
+        seenTools = (context.tools ?? []).map((tool) => tool.name);
+        seenSystemPrompt = context.systemPrompt ?? '';
+        return fauxAssistantMessage(
+          '1. “It is important to note” — empty emphasis — high confidence — delete.',
+        );
+      },
+    ]);
+
+    const { runId } = await runtime.startTurn({
+      conversationId: skillConversationId,
+      text: 'Audit the selected scope. Return numbered findings only. Do not call propose_patch.',
+      mode: 'fast',
+      scope: { kind: 'document' },
+    });
+    await drain(runId);
+
+    expect(seenTools.sort()).toEqual([
+      'propose_patch',
+      'read_document',
+      'read_document_range',
+      'read_project_instructions',
+      'read_writing_profile',
+    ]);
+    expect(seenSystemPrompt).toContain("Texeris's LLM verbal-tick audit");
+    expect(seenSystemPrompt).toContain('Do not infer that text was AI-generated');
+    expect(conversations.listRuns(skillConversationId)[0]).toMatchObject({
+      skillId: 'llm-verbal-ticks',
+      skillVersion: 1,
+    });
+    expect(patches.list()).toHaveLength(0);
+  });
+
+  it('fails closed when a persisted skill version is unavailable', async () => {
+    const oldConversationId = conversations.startNewConversation({
+      id: 'conservative-rewrite',
+      version: 99,
+    });
+    await expect(runtime.startTurn({
+      conversationId: oldConversationId,
+      text: 'rewrite',
+      mode: 'fast',
+      scope: { kind: 'document' },
+    })).rejects.toThrow(/unsupported Conservative rewrite version: 99/);
+    expect(conversations.listRuns(oldConversationId)).toHaveLength(0);
   });
 
   it('injects a compact change summary between turns (last-seen revision)', async () => {

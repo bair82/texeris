@@ -19,6 +19,9 @@ export const UiStateSchema = Type.Object({
   navWidth: Type.Optional(Type.Number()),
   sideWidth: Type.Optional(Type.Number()),
   navVisible: Type.Optional(Type.Boolean()),
+  navMode: Type.Optional(
+    Type.Union([Type.Literal('files'), Type.Literal('archive')]),
+  ),
   sideVisible: Type.Optional(Type.Boolean()),
   focusMode: Type.Optional(Type.Boolean()),
   editorMode: Type.Optional(

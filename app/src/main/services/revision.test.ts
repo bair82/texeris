@@ -118,6 +118,90 @@ describe('RevisionService.commit', () => {
     expect(seq).toBe(1);
     expect(ctx.revisions.getCurrentRevision(docId)).toBe(1);
   });
+
+  it('restores the canonical file when the revision transaction fails after rename', () => {
+    ctx.db.exec(`
+      CREATE TRIGGER inject_revision_failure
+      BEFORE INSERT ON revisions
+      BEGIN
+        SELECT RAISE(ABORT, 'injected revision failure');
+      END
+    `);
+
+    expect(() =>
+      ctx.revisions.commit(docId, [typing('not committed', 0)], {
+        actor: 'user',
+        source: { kind: 'paste' },
+      }),
+    ).toThrow(/injected revision failure/);
+
+    expect(readFile()).toBe('');
+    expect(ctx.revisions.getCurrentRevision(docId)).toBe(0);
+    expect(
+      ctx.db.prepare('SELECT COUNT(*) AS n FROM revisions WHERE document_id = ?')
+        .get(docId),
+    ).toMatchObject({ n: 0 });
+  });
+
+  it('restores the canonical file when amending the typing tip fails', () => {
+    ctx.revisions.commit(docId, [typing('hello', 0)], {
+      actor: 'user',
+      source: { kind: 'typing' },
+    });
+    ctx.db.exec(`
+      CREATE TRIGGER inject_amend_failure
+      BEFORE INSERT ON revision_changes
+      WHEN NEW.document_id = '${docId}' AND NEW.seq = 1 AND NEW.idx = 1
+      BEGIN
+        SELECT RAISE(ABORT, 'injected amend failure');
+      END
+    `);
+
+    expect(() =>
+      ctx.revisions.commit(docId, [typing(' world', 5)], {
+        actor: 'user',
+        source: { kind: 'typing' },
+      }),
+    ).toThrow(/injected amend failure/);
+
+    expect(readFile()).toBe('hello');
+    expect(ctx.revisions.getTextAt(docId, 1)).toBe('hello');
+  });
+});
+
+describe('exact coalesced-revision boundaries', () => {
+  it('reconstructs and restores the change count captured by an earlier turn', () => {
+    ctx.revisions.commit(docId, [typing('hello', 0)], {
+      actor: 'user',
+      source: { kind: 'typing' },
+    });
+    const boundaryCount = (
+      ctx.db
+        .prepare(
+          'SELECT COUNT(*) AS n FROM revision_changes WHERE document_id = ? AND seq = 1',
+        )
+        .get(docId) as { n: number }
+    ).n;
+    ctx.revisions.commit(docId, [typing(' world', 5)], {
+      actor: 'user',
+      source: { kind: 'typing' },
+    });
+
+    expect(ctx.revisions.getTextAt(docId, 1)).toBe('hello world');
+    expect(ctx.revisions.getTextAtBoundary(docId, 1, boundaryCount)).toBe('hello');
+
+    const restored = ctx.revisions.restoreBoundary(docId, 1, boundaryCount, {
+      conversationId: 'fork',
+    });
+    expect(restored).toBe(2);
+    expect(readFile()).toBe('hello');
+    expect(ctx.revisions.listRevisions(docId)[0].source).toMatchObject({
+      kind: 'restore',
+      conversationId: 'fork',
+      fromRevision: 1,
+      fromChangeCount: boundaryCount,
+    });
+  });
 });
 
 describe('snapshots and replay', () => {

@@ -11,6 +11,7 @@ import {
   CancelRequestSchema,
   ChatChannels,
   ConversationRequestSchema,
+  EditMessageRequestSchema,
   RenameConversationRequestSchema,
   StartTurnRequestSchema,
 } from '../shared/chat-types';
@@ -29,6 +30,7 @@ import {
   DocRevisionsRequestSchema,
   HistoryChannels,
 } from '../shared/doc-types';
+import { DocExportRequestSchema } from '../shared/citation-style-types';
 import {
   PatchAcceptRequestSchema,
   PatchChannels,
@@ -56,6 +58,10 @@ import { UiChannels, UiStateSchema } from '../shared/ui-types';
 import type { AgentRuntime } from './agent/runtime';
 import { UiStateService } from './services/uiState';
 import type { ConversationService } from './services/conversation';
+import {
+  forkMessage,
+  previewMessageEdit,
+} from './services/conversationRewind';
 import { CredentialsService } from './services/credentials';
 import { CheckpointService } from './services/checkpoint';
 import type { PatchService } from './services/patch';
@@ -63,6 +69,12 @@ import type { ProjectContext } from './services/project';
 import type { ProjectManager } from './services/projectManager';
 import type { WorkspaceConfig } from './services/settings';
 import { saveWorkspaceConfig } from './services/settings';
+import {
+  citationStyleSettings,
+  importCustomCitationStyle,
+  resolveCitationStylePath,
+  setCitationStyle,
+} from './services/citationStyles';
 import { extractHeadings } from './agent/markdown';
 import {
   deleteTrashedDocument,
@@ -77,12 +89,45 @@ import {
 } from './services/documents';
 import { addImageAsset } from './services/assets';
 import { createDocument, ensureDocument } from './services/project';
-import { CorpusChannels, CorpusDeleteRequestSchema, ProfileBeginRequestSchema, ProfileChannels } from '../shared/profile-types';
+import {
+  CorpusChannels,
+  CorpusDeleteRequestSchema,
+  ProfileBeginRequestSchema,
+  ProfileChannels,
+  type CorpusSourceView,
+} from '../shared/profile-types';
 import { JobCancelRequestSchema, JobChannels, type JobEvent } from '../shared/job-types';
+import {
+  ReferenceAuditRequestSchema,
+  ReferenceChannels,
+  ReferenceDoiLookupRequestSchema,
+  ReferenceDraftSchema,
+  ReferenceSearchRequestSchema,
+} from '../shared/reference-types';
 import type { CorpusService } from './services/corpus';
 import type { WritingProfileService } from './services/profile';
 import { printHtmlToPdf } from './pdfExport';
 import { isCancellation } from './jobs/runner';
+import { ReferenceService } from './services/references';
+import {
+  ArchiveChannels,
+  ArchiveImportRequestSchema,
+  ArchivePassagesRequestSchema,
+  ArchiveProfileRequestSchema,
+  ArchiveSearchRequestSchema,
+  ArchiveSourceRequestSchema,
+} from '../shared/archive-types';
+import type { ArchiveService } from './services/archive';
+import { requestRendererFlush } from './rendererFlush';
+import {
+  SkillChannels,
+  SkillLaunchRequestSchema,
+} from '../shared/skill-types';
+import {
+  launchableSkills,
+  skillById,
+  skillSummary,
+} from './agent/skills';
 
 export interface IpcDeps {
   requireProject(): ProjectContext;
@@ -94,6 +139,7 @@ export interface IpcDeps {
   manager: ProjectManager;
   corpus: CorpusService;
   profiles: WritingProfileService;
+  archive: ArchiveService;
   adoptProject(ctx: ProjectContext): void;
 }
 
@@ -196,22 +242,40 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     if (result.canceled) {
       return null;
     }
-    const ctx = deps.manager.open(result.filePaths[0]);
-    deps.adoptProject(ctx);
+    await requestRendererFlush(event.sender, 'project-switch');
+    const ctx = deps.manager.prepareOpen(result.filePaths[0]);
+    try {
+      deps.adoptProject(ctx);
+    } catch (error) {
+      if (deps.manager.current !== ctx) ctx.db.close();
+      throw error;
+    }
     return projectInfo(ctx);
   });
 
-  ipcMain.handle(ProjectChannels.openPath, (_event, raw: unknown) => {
+  ipcMain.handle(ProjectChannels.openPath, async (event, raw: unknown) => {
     const req = Value.Decode(ProjectOpenPathRequestSchema, raw);
-    const ctx = deps.manager.open(req.path);
-    deps.adoptProject(ctx);
+    await requestRendererFlush(event.sender, 'project-switch');
+    const ctx = deps.manager.prepareOpen(req.path);
+    try {
+      deps.adoptProject(ctx);
+    } catch (error) {
+      if (deps.manager.current !== ctx) ctx.db.close();
+      throw error;
+    }
     return projectInfo(ctx);
   });
 
-  ipcMain.handle(ProjectChannels.create, (_event, raw: unknown) => {
+  ipcMain.handle(ProjectChannels.create, async (event, raw: unknown) => {
     const req = Value.Decode(ProjectCreateRequestSchema, raw);
-    const ctx = deps.manager.create(req.parentDir, req.name);
-    deps.adoptProject(ctx);
+    await requestRendererFlush(event.sender, 'project-switch');
+    const ctx = deps.manager.prepareCreate(req.parentDir, req.name);
+    try {
+      deps.adoptProject(ctx);
+    } catch (error) {
+      if (deps.manager.current !== ctx) ctx.db.close();
+      throw error;
+    }
     return projectInfo(ctx);
   });
 
@@ -257,6 +321,70 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return deps.requireConversations().listDelegations(req.conversationId);
   });
 
+  ipcMain.handle(ReferenceChannels.list, () =>
+    new ReferenceService(deps.requireProject()).list(),
+  );
+  ipcMain.handle(ReferenceChannels.search, (_event, raw: unknown) => {
+    const req = Value.Decode(ReferenceSearchRequestSchema, raw);
+    return new ReferenceService(deps.requireProject()).search(
+      req.query,
+      req.limit,
+    );
+  });
+  ipcMain.handle(ReferenceChannels.audit, (_event, raw: unknown) => {
+    const req = Value.Decode(ReferenceAuditRequestSchema, raw);
+    return new ReferenceService(deps.requireProject()).audit(req.markdown);
+  });
+  ipcMain.handle(ReferenceChannels.importDialog, async (event) => {
+    let sourcePath =
+      process.env.TEXERIS_SMOKE === '1'
+        ? process.env.TEXERIS_REFERENCE_IMPORT_PATH
+        : undefined;
+    if (!sourcePath) {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      const result = await dialog.showOpenDialog(win!, {
+        title: 'Import references',
+        filters: [
+          { name: 'Bibliography', extensions: ['json', 'bib', 'bibtex', 'ris'] },
+        ],
+        properties: ['openFile'],
+      });
+      if (result.canceled || result.filePaths.length === 0) return null;
+      sourcePath = result.filePaths[0];
+    }
+    return new ReferenceService(deps.requireProject()).importFile(sourcePath);
+  });
+  ipcMain.handle(ReferenceChannels.lookupDoi, async (_event, raw: unknown) => {
+    const req = Value.Decode(ReferenceDoiLookupRequestSchema, raw);
+    return new ReferenceService(deps.requireProject()).lookupDoi(req.doi);
+  });
+  ipcMain.handle(ReferenceChannels.create, (_event, raw: unknown) => {
+    const req = Value.Decode(ReferenceDraftSchema, raw);
+    return new ReferenceService(deps.requireProject()).create(req);
+  });
+
+  ipcMain.handle(ChatChannels.previewMessageEdit, (_event, raw: unknown) => {
+    const req = Value.Decode(EditMessageRequestSchema, raw);
+    return previewMessageEdit(
+      deps.requireProject(),
+      deps.requireConversations(),
+      req.conversationId,
+      req.messageSeq,
+    );
+  });
+
+  ipcMain.handle(ChatChannels.forkMessage, (_event, raw: unknown) => {
+    const req = Value.Decode(EditMessageRequestSchema, raw);
+    deps.requireRuntime().assertIdle();
+    return forkMessage(
+      deps.requireProject(),
+      deps.requireConversations(),
+      req.conversationId,
+      req.messageSeq,
+      req.reason ?? 'edit',
+    );
+  });
+
   ipcMain.handle(ChatChannels.startTurn, async (event, raw: unknown) => {
     const req = Value.Decode(StartTurnRequestSchema, raw);
     const { runId } = await deps.requireRuntime().startTurn(req);
@@ -278,11 +406,156 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     return { cancelled: true };
   });
 
+  // --------------------------------------------------------------- skills
+
+  ipcMain.handle(SkillChannels.list, () => launchableSkills());
+
+  ipcMain.handle(SkillChannels.launch, async (event, raw: unknown) => {
+    const req = Value.Decode(SkillLaunchRequestSchema, raw);
+    const skill = skillById(req.skillId);
+    if (!skill?.launchPrompt) throw new Error(`skill is not launchable: ${req.skillId}`);
+    if (!skill.supportsScopes.includes(req.scope.kind)) {
+      throw new Error(`${skill.name} does not support ${req.scope.kind} scope`);
+    }
+    if (!req.scope.documentId) {
+      throw new Error('a skill launch requires an explicit document');
+    }
+    if (req.scope.kind === 'selection' && req.scope.to <= req.scope.from) {
+      throw new Error('select some text before launching this skill');
+    }
+    if (req.scope.kind === 'section' && !req.scope.heading.trim()) {
+      throw new Error('choose a section before launching this skill');
+    }
+
+    const runtime = deps.requireRuntime();
+    runtime.assertIdle();
+    const conversations = deps.requireConversations();
+    const conversationId = conversations.startNewConversation({
+      id: skill.id,
+      version: skill.version,
+    });
+    try {
+      const { runId } = await runtime.startTurn({
+        conversationId,
+        text: skill.launchPrompt(req.optionId),
+        mode: req.mode,
+        scope: req.scope,
+      });
+      void (async () => {
+        for await (const agentEvent of runtime.events(runId)) {
+          if (!event.sender.isDestroyed()) {
+            event.sender.send(ChatChannels.event, agentEvent);
+          }
+        }
+      })();
+      return { conversationId, runId, skill: skillSummary(skill) };
+    } catch (error) {
+      conversations.deleteConversation(conversationId);
+      throw error;
+    }
+  });
+
+  // --------------------------------------------------------- writing archive
+
+  ipcMain.handle(ArchiveChannels.list, () => deps.archive.list());
+
+  ipcMain.handle(ArchiveChannels.importDialog, async (event, raw: unknown) => {
+    const req = Value.Decode(ArchiveImportRequestSchema, raw);
+    let selected =
+      process.env.TEXERIS_SMOKE === '1' && process.env.TEXERIS_ARCHIVE_IMPORT_PATH
+        ? [process.env.TEXERIS_ARCHIVE_IMPORT_PATH]
+        : null;
+    if (!selected) {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      const result = await dialog.showOpenDialog(win!, {
+        title: req.source === 'folder' ? 'Add writing folder' : 'Add previous writing',
+        properties:
+          req.source === 'folder'
+            ? ['openDirectory']
+            : ['openFile', 'multiSelections'],
+        filters:
+          req.source === 'files'
+            ? [{
+                name: 'Writing documents',
+                extensions: ['md', 'markdown', 'mdown', 'txt', 'html', 'htm', 'docx', 'odt', 'rtf', 'pdf'],
+              }]
+            : undefined,
+      });
+      if (result.canceled || result.filePaths.length === 0) return null;
+      selected = result.filePaths;
+    }
+    return runJob(event.sender, 'archive-import', (signal, reportProgress) =>
+      deps.archive.importPaths(selected, signal, (done, total, file) =>
+        reportProgress({ done, total }, file),
+      ),
+    );
+  });
+
+  ipcMain.handle(ArchiveChannels.search, (_event, raw: unknown) => {
+    const req = Value.Decode(ArchiveSearchRequestSchema, raw);
+    return deps.archive.search(req.query, req.limit);
+  });
+
+  ipcMain.handle(ArchiveChannels.preview, (_event, raw: unknown) => {
+    const req = Value.Decode(ArchiveSourceRequestSchema, raw);
+    return deps.archive.preview(req.sourceId, req.offset);
+  });
+
+  ipcMain.handle(ArchiveChannels.passages, (_event, raw: unknown) => {
+    const req = Value.Decode(ArchivePassagesRequestSchema, raw);
+    return deps.archive.passages(req.passageIds);
+  });
+
+  ipcMain.handle(ArchiveChannels.delete, (_event, raw: unknown) => {
+    const req = Value.Decode(ArchiveSourceRequestSchema, raw);
+    deps.archive.delete(req.sourceId);
+    return { deleted: true };
+  });
+
+  ipcMain.handle(ArchiveChannels.reindex, (event) =>
+    runJob(event.sender, 'archive-reindex', (signal) =>
+      deps.archive.reindex(signal),
+    ),
+  );
+
   // --------------------------------------------------------- writing profile
+
+  const launchProfile = async (
+    event: Electron.IpcMainInvokeEvent,
+    createGrant: (
+      conversationId: string,
+    ) => Promise<{ sources: CorpusSourceView[]; warnings: string[] }>,
+  ) => {
+    deps.requireRuntime().assertIdle();
+    const conversations = deps.requireConversations();
+    const conversationId = conversations.startNewConversation({ id: 'writing-profile', version: 1 });
+    try {
+      const grant = await createGrant(conversationId);
+      const { runId } = await deps.requireRuntime().startTurn({
+        conversationId,
+        text: 'Analyze the selected corpus and build my writing profile. Begin by reviewing the corpus inventory and conversion warnings. Delegate bounded corpus-analysis and metadata tasks where useful. Ask me before any lookup involving an ambiguous or apparently private work.',
+        mode: 'deep',
+        scope: { kind: 'document', documentId: mainDocId(deps.requireProject()) },
+      });
+      void (async () => {
+        for await (const agentEvent of deps.requireRuntime().events(runId)) {
+          if (!event.sender.isDestroyed()) event.sender.send(ChatChannels.event, agentEvent);
+        }
+      })();
+      return {
+        conversationId,
+        runId,
+        sourceCount: grant.sources.length,
+        warnings: grant.warnings,
+      };
+    } catch (error) {
+      conversations.deleteConversation(conversationId);
+      throw error;
+    }
+  };
 
   ipcMain.handle(ProfileChannels.begin, async (event, raw: unknown) => {
     const req = Value.Decode(ProfileBeginRequestSchema, raw);
-    deps.requireRuntime().assertIdle();
     const win = BrowserWindow.fromWebContents(event.sender);
     const result = await dialog.showOpenDialog(win!, {
       title: req.source === 'folder' ? 'Choose writing corpus folder' : 'Choose writing files',
@@ -292,26 +565,36 @@ export function registerIpcHandlers(deps: IpcDeps): void {
         : undefined,
     });
     if (result.canceled || result.filePaths.length === 0) return null;
-    const conversations = deps.requireConversations();
-    const conversationId = conversations.startNewConversation({ id: 'writing-profile', version: 1 });
-    const grant = await runJob(event.sender, 'corpus-grant', (signal, reportProgress) =>
-      deps.corpus.createGrant(deps.requireProject(), conversationId, result.filePaths, req.source, {
-        signal,
-        onProgress: (progress) => reportProgress({ done: progress.done, total: progress.total }, progress.file),
-      }),
+    return launchProfile(event, (conversationId) =>
+      runJob(event.sender, 'corpus-grant', (signal, reportProgress) =>
+        deps.corpus.createGrant(deps.requireProject(), conversationId, result.filePaths, req.source, {
+          signal,
+          onProgress: (progress) => reportProgress({ done: progress.done, total: progress.total }, progress.file),
+        }),
+      ),
     );
-    const { runId } = await deps.requireRuntime().startTurn({
-      conversationId,
-      text: 'Analyze the selected corpus and build my writing profile. Begin by reviewing the corpus inventory and conversion warnings. Delegate bounded corpus-analysis and metadata tasks where useful. Ask me before any lookup involving an ambiguous or apparently private work.',
-      mode: 'deep',
-      scope: { kind: 'document', documentId: mainDocId(deps.requireProject()) },
-    });
-    void (async () => {
-      for await (const agentEvent of deps.requireRuntime().events(runId)) {
-        if (!event.sender.isDestroyed()) event.sender.send(ChatChannels.event, agentEvent);
-      }
-    })();
-    return { conversationId, runId, sourceCount: grant.sources.length, warnings: grant.warnings };
+  });
+
+  ipcMain.handle(ArchiveChannels.buildProfile, async (event, raw: unknown) => {
+    const req = Value.Decode(ArchiveProfileRequestSchema, raw);
+    const sources = deps.archive.corpusSources(req.sourceIds);
+    if (sources.length !== new Set(req.sourceIds).size) {
+      throw new Error('one or more selected archive sources are unavailable');
+    }
+    return launchProfile(event, (conversationId) =>
+      runJob(event.sender, 'corpus-grant', (signal, reportProgress) =>
+        deps.corpus.createGrantFromArchive(
+          deps.requireProject(),
+          conversationId,
+          sources,
+          {
+            signal,
+            onProgress: (progress) =>
+              reportProgress({ done: progress.done, total: progress.total }, progress.file),
+          },
+        ),
+      ),
+    );
   });
 
   // ------------------------------------------------------------------ corpus
@@ -461,9 +744,25 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     );
   });
 
+  ipcMain.handle(DocChannels.exportSettings, () =>
+    citationStyleSettings(deps.requireProject()),
+  );
+
+  ipcMain.handle(DocChannels.chooseCitationStyle, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Choose a citation style',
+      filters: [{ name: 'Citation Style Language', extensions: ['csl'] }],
+      properties: ['openFile'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return importCustomCitationStyle(deps.requireProject(), result.filePaths[0]);
+  });
+
   ipcMain.handle(DocChannels.exportDialog, async (event, raw: unknown) => {
-    const req = Value.Decode(DocIdRequestSchema, raw);
+    const req = Value.Decode(DocExportRequestSchema, raw);
     const project = deps.requireProject();
+    setCitationStyle(project, req.citationStyle);
     const row = project.db.prepare('SELECT path, title FROM documents WHERE id = ?').get(req.documentId) as
       | { path: string; title: string }
       | undefined;
@@ -488,8 +787,23 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       if (result.canceled || !result.filePath) return null;
       outputPath = result.filePath;
     }
+    const styleResources = app.isPackaged
+      ? path.join(process.resourcesPath, 'csl')
+      : path.join(app.getAppPath(), 'resources', 'csl');
+    const citationStylePath = resolveCitationStylePath(
+      project,
+      styleResources,
+      req.citationStyle,
+    );
     return await runJob(event.sender, 'export', (signal) =>
-      exportDocumentFile(project, req.documentId, outputPath!, printHtmlToPdf, signal),
+      exportDocumentFile(
+        project,
+        req.documentId,
+        outputPath!,
+        printHtmlToPdf,
+        signal,
+        citationStylePath,
+      ),
     );
   });
 
@@ -543,7 +857,11 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const req = Value.Decode(CheckpointCreateRequestSchema, raw);
     const project = deps.requireProject();
     const docId = req.documentId ?? mainDocId(project);
-    return new CheckpointService(project.db, project.revisions).create(docId, req.name);
+    return new CheckpointService(project.db, project.revisions).create(
+      docId,
+      req.name,
+      req.description ?? '',
+    );
   });
 
   ipcMain.handle(HistoryChannels.checkpointRestore, (_event, raw: unknown) => {

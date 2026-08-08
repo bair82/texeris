@@ -28,6 +28,8 @@ export interface RevisionSource {
   patchId?: string;
   /** For restores: the revision whose content was restored. */
   fromRevision?: number;
+  /** Exact boundary within a coalesced revision, when applicable. */
+  fromChangeCount?: number;
 }
 
 export interface DocumentInfo {
@@ -55,5 +57,7 @@ export interface CheckpointInfo {
   documentId: string;
   revisionSeq: number;
   name: string;
+  /** Optional human-readable description ('' = none; owner request 2026-08-08). */
+  description: string;
   createdAt: string;
 }

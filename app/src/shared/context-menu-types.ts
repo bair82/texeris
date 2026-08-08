@@ -19,7 +19,17 @@ export const ContextDescriptorSchema = Type.Union([
     conversationId: Type.String(),
     active: Type.Boolean(),
   }),
-  Type.Object({ kind: Type.Literal('message'), seq: Type.Integer() }),
+  Type.Object({
+    kind: Type.Literal('message'),
+    seq: Type.Integer(),
+    role: Type.Union([
+      Type.Literal('user'),
+      Type.Literal('assistant'),
+      Type.Literal('tool'),
+    ]),
+    editable: Type.Boolean(),
+    regeneratable: Type.Boolean(),
+  }),
 ]);
 export type ContextDescriptor = Static<typeof ContextDescriptorSchema>;
 
@@ -31,6 +41,7 @@ export const ContextActionSchema = Type.Union([
   Type.Literal('document:set-main'), Type.Literal('document:trash'),
   Type.Literal('conversation:open'), Type.Literal('conversation:rename'),
   Type.Literal('conversation:delete'), Type.Literal('message:copy'),
+  Type.Literal('message:edit'), Type.Literal('message:regenerate'),
 ]);
 export type ContextAction = Static<typeof ContextActionSchema>;
 
@@ -44,8 +55,18 @@ export const ContextShowRequestSchema = Type.Object({
   y: Type.Integer(),
 });
 
-export interface ContextDescribeRequest { requestId: string; x: number; y: number }
-export interface ContextActionEvent { action: ContextAction; context: ContextDescriptor }
+export const ContextDescribeRequestSchema = Type.Object({
+  requestId: Type.String(),
+  x: Type.Integer(),
+  y: Type.Integer(),
+});
+export type ContextDescribeRequest = Static<typeof ContextDescribeRequestSchema>;
+
+export const ContextActionEventSchema = Type.Object({
+  action: ContextActionSchema,
+  context: ContextDescriptorSchema,
+});
+export type ContextActionEvent = Static<typeof ContextActionEventSchema>;
 
 export const ContextMenuChannels = {
   describe: 'texeris:context-menu-describe',

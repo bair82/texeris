@@ -13,6 +13,7 @@ import {
 import HistoryPanel from './HistoryPanel';
 import SearchPanel from './SearchPanel';
 import Toolbar from './Toolbar';
+import CitationPicker from './CitationPicker';
 
 type SaveState = 'loading' | 'saved' | 'dirty' | 'saving' | 'error';
 
@@ -113,6 +114,9 @@ export default function EditorRegion({
   const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [citationPicker, setCitationPicker] = useState<
+    { mode: 'insert' } | { mode: 'replace'; position: number } | null
+  >(null);
   const [wordCount, setWordCount] = useState<number | null>(null);
   const [selStats, setSelStats] = useState<{ words: number; chars: number } | null>(null);
   const lastCountedTextRef = useRef<string | null>(null);
@@ -121,6 +125,9 @@ export default function EditorRegion({
   const openSeqRef = useRef(0);
   const scrollCleanupRef = useRef<(() => void) | null>(null);
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingCommitsRef = useRef(new Set<Promise<void>>());
+  const pendingUploadsRef = useRef(new Set<Promise<{ path: string; alt: string }>>());
+  const commitErrorsRef = useRef<unknown[]>([]);
   const modeRef = useRef(mode);
   modeRef.current = mode;
   const docStatesRef = useRef(docStates);
@@ -161,9 +168,14 @@ export default function EditorRegion({
       clearTimeout(scrollTimerRef.current);
       scrollTimerRef.current = null;
     }
+    sessionRef.current?.flush();
     sessionRef.current?.destroy();
     sessionRef.current = null;
   }, []);
+
+  useEffect(() => {
+    return () => destroySession();
+  }, [destroySession]);
 
   const createSession = useCallback(
     (text: string, forMode: EditorMode, documentId: string, restore?: UiStateDoc) => {
@@ -176,7 +188,7 @@ export default function EditorRegion({
         text,
         onFlush: (splices: Parameters<typeof window.texeris.doc.commit>[0]['splices']) => {
           setSaveState('saving');
-          window.texeris.doc
+          const commit = window.texeris.doc
             .commit({ documentId, splices, kind: 'typing' })
             .then(({ seq }) => {
               dirtyRef.current = false;
@@ -185,26 +197,37 @@ export default function EditorRegion({
               setSaveState('saved');
             })
             .catch((err: unknown) => {
+              commitErrorsRef.current.push(err);
               setSaveState('error');
               setNotice({
                 text: `commit failed: ${err instanceof Error ? err.message : String(err)} — reloading`,
               });
               void reload();
             });
+          pendingCommitsRef.current.add(commit);
+          void commit.finally(() => pendingCommitsRef.current.delete(commit));
         },
         onDirty: () => {
           dirtyRef.current = true;
           setSaveState('dirty');
         },
         uploadImage: async (file: File) => {
-          const mediaType = imageMediaType(file);
-          const sourceName = file.name || `pasted-image.${mediaType.split('/')[1] || 'png'}`;
-          return window.texeris.doc.addImage({
-            documentId,
-            sourceName,
-            mediaType,
-            dataBase64: await fileBase64(file),
-          });
+          const upload = (async () => {
+            const mediaType = imageMediaType(file);
+            const sourceName = file.name || `pasted-image.${mediaType.split('/')[1] || 'png'}`;
+            return window.texeris.doc.addImage({
+              documentId,
+              sourceName,
+              mediaType,
+              dataBase64: await fileBase64(file),
+            });
+          })();
+          pendingUploadsRef.current.add(upload);
+          void upload.then(
+            () => pendingUploadsRef.current.delete(upload),
+            () => pendingUploadsRef.current.delete(upload),
+          );
+          return upload;
         },
         onImageError: (error: unknown) => {
           setNotice({ text: `image could not be added: ${error instanceof Error ? error.message : String(error)}` });
@@ -324,10 +347,25 @@ export default function EditorRegion({
       undo: () => sessionRef.current?.undo() ?? false,
       redo: () => sessionRef.current?.redo() ?? false,
       openSearch: () => setSearchOpen(true),
+      openCitationPicker: () => setCitationPicker({ mode: 'insert' }),
       toggleHistory: () => setShowHistory((v) => !v),
       toggleMode: () =>
         switchModeRef.current(modeRef.current === 'rendered' ? 'raw' : 'rendered'),
-      flush: () => sessionRef.current?.flush(),
+      flush: async () => {
+        sessionRef.current?.flush();
+        while (pendingUploadsRef.current.size > 0) {
+          await Promise.allSettled([...pendingUploadsRef.current]);
+        }
+        // Upload completion inserts the image reference into the editor.
+        sessionRef.current?.flush();
+        while (pendingCommitsRef.current.size > 0) {
+          await Promise.all([...pendingCommitsRef.current]);
+        }
+        const errors = commitErrorsRef.current.splice(0);
+        if (errors.length > 0) {
+          throw errors.at(-1);
+        }
+      },
       contextAt: (x, y) => ({
         kind: 'editor',
         ...(sessionRef.current?.prepareContextAt(x, y) ?? { image: false, canUndo: false, canRedo: false }),
@@ -418,15 +456,46 @@ export default function EditorRegion({
   return (
     <section
       className="editor-region"
+      onDoubleClick={(event) => {
+        const target =
+          event.target instanceof Element ? event.target.closest('.cite') : null;
+        if (mode === 'rendered' && target && activeEditor) {
+          const position = activeEditor.view.posAtDOM(target, 0);
+          setCitationPicker({ mode: 'replace', position });
+        }
+      }}
       onKeyDownCapture={(e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
           e.preventDefault();
           setSearchOpen(true);
+        } else if (
+          (e.ctrlKey || e.metaKey) &&
+          e.shiftKey &&
+          e.key.toLowerCase() === 'c'
+        ) {
+          e.preventDefault();
+          setCitationPicker({ mode: 'insert' });
         }
       }}
     >
-      {activeEditor && <Toolbar editor={activeEditor} />}
+      {activeEditor && (
+        <Toolbar editor={activeEditor} onCite={() => setCitationPicker({ mode: 'insert' })} />
+      )}
       <div className="editor-host" ref={hostRef} />
+      {citationPicker && (
+        <CitationPicker
+          markdown={sessionRef.current?.getText() ?? ''}
+          replacing={citationPicker.mode === 'replace'}
+          onInsert={(key) => {
+            if (citationPicker.mode === 'replace') {
+              sessionRef.current?.replaceCitation(citationPicker.position, key);
+            } else {
+              sessionRef.current?.insertCitation(key);
+            }
+          }}
+          onClose={() => setCitationPicker(null)}
+        />
+      )}
       {showHistory && openDocId && <HistoryPanel documentId={openDocId} />}
       {searchOpen && sessionRef.current && (
         <SearchPanel session={sessionRef.current} onClose={() => setSearchOpen(false)} />

@@ -3,6 +3,8 @@ import type {
   AgentRunRecord,
   ConversationListItem,
   DelegationRecord,
+  EditMessagePreview,
+  ForkMessageResult,
   NormalizedAgentEvent,
   StartTurnRequest,
   UiMessage,
@@ -30,13 +32,38 @@ import type { CorpusGrantView, ProfileBeginRequest } from './profile-types';
 import type { JobEvent } from './job-types';
 import type { PatchStyleMode } from './settings-types';
 import type { ContextActionEvent, ContextDescribeRequest, ContextDescriptor } from './context-menu-types';
+import type {
+  CitationAudit,
+  ReferenceCreateResult,
+  ReferenceDraft,
+  ReferenceImportReport,
+  ReferenceListItem,
+} from './reference-types';
+import type {
+  CitationStyleId,
+  CitationStyleSettings,
+} from './citation-style-types';
+import type {
+  ArchiveAttachment,
+  ArchiveImportReport,
+  ArchivePreview,
+  ArchiveReindexReport,
+  ArchiveSearchResult,
+  ArchiveSourceView,
+} from './archive-types';
+import type {
+  SkillLaunchRequest,
+  SkillLaunchResult,
+  SkillSummary,
+} from './skill-types';
 
 /**
  * IPC contract shared by main, preload, and renderer.
- * Renderer requests are validated by main against TypeBox schemas. Trusted
- * main-originated events and most responses are currently typed but not
- * decoded again in preload; see the contract-hardening item in the active
- * development plan.
+ * Renderer requests are untrusted and decoded by main against TypeBox
+ * schemas. Main-originated events that trigger renderer actions or state
+ * changes are decoded in preload. Invoke responses originate in trusted main
+ * code and remain statically typed unless a boundary has a specific need for
+ * runtime decoding (AppInfo is the current example).
  */
 
 export const IpcChannels = {
@@ -55,6 +82,17 @@ export type AppInfo = Static<typeof AppInfoSchema>;
 /** The narrow API the preload bridge exposes as `window.texeris`. */
 export interface TexerisApi {
   getAppInfo(): Promise<AppInfo>;
+  lifecycle: {
+    onFlushRequest(
+      callback: (
+        request: {
+          requestId: string;
+          reason: 'close' | 'project-switch';
+        },
+      ) => void,
+    ): () => void;
+    flushResult(requestId: string, error?: string): Promise<{ received: boolean }>;
+  };
   /** Subscribe to app-menu commands; returns an unsubscribe fn. */
   onMenuCommand(callback: (commandId: string) => void): () => void;
   contextMenu: {
@@ -62,6 +100,33 @@ export interface TexerisApi {
     reply(requestId: string, context: ContextDescriptor): Promise<{ shown: boolean }>;
     show(context: ContextDescriptor, x: number, y: number): Promise<{ shown: boolean }>;
     onAction(callback: (event: ContextActionEvent) => void): () => void;
+  };
+  references: {
+    list(): Promise<ReferenceListItem[]>;
+    search(query: string, limit?: number): Promise<ReferenceListItem[]>;
+    importDialog(): Promise<ReferenceImportReport | null>;
+    lookupDoi(doi: string): Promise<ReferenceDraft>;
+    create(draft: ReferenceDraft): Promise<ReferenceCreateResult>;
+    audit(markdown: string): Promise<CitationAudit>;
+  };
+  archive: {
+    list(): Promise<ArchiveSourceView[]>;
+    importDialog(source: 'files' | 'folder'): Promise<ArchiveImportReport | null>;
+    search(query: string, limit?: number): Promise<ArchiveSearchResult[]>;
+    preview(sourceId: string, offset?: number): Promise<ArchivePreview>;
+    delete(sourceId: string): Promise<{ deleted: boolean }>;
+    reindex(): Promise<ArchiveReindexReport>;
+    passages(passageIds: string[]): Promise<ArchiveAttachment[]>;
+    buildProfile(sourceIds: string[]): Promise<{
+      conversationId: string;
+      runId: string;
+      sourceCount: number;
+      warnings: string[];
+    }>;
+  };
+  skills: {
+    list(): Promise<SkillSummary[]>;
+    launch(request: SkillLaunchRequest): Promise<SkillLaunchResult>;
   };
   chat: {
     getOrCreateConversation(): Promise<{ conversationId: string }>;
@@ -75,6 +140,15 @@ export interface TexerisApi {
     listMessages(conversationId: string): Promise<UiMessage[]>;
     listRuns(conversationId: string): Promise<AgentRunRecord[]>;
     listDelegations(conversationId: string): Promise<DelegationRecord[]>;
+    previewMessageEdit(
+      conversationId: string,
+      messageSeq: number,
+    ): Promise<EditMessagePreview>;
+    forkMessage(
+      conversationId: string,
+      messageSeq: number,
+      reason?: 'edit' | 'regenerate',
+    ): Promise<ForkMessageResult>;
     startTurn(request: StartTurnRequest): Promise<{ runId: string }>;
     cancel(runId: string): Promise<{ cancelled: boolean }>;
     /** Subscribe to normalized agent events; returns an unsubscribe fn. */
@@ -109,7 +183,12 @@ export interface TexerisApi {
       dataBase64: string;
     }): Promise<AddedImageAsset>;
     importDialog(): Promise<DocumentImportResult | null>;
-    exportDialog(documentId: string): Promise<DocumentExportResult | null>;
+    exportSettings(): Promise<CitationStyleSettings>;
+    chooseCitationStyle(): Promise<CitationStyleSettings | null>;
+    exportDialog(
+      documentId: string,
+      citationStyle: CitationStyleId,
+    ): Promise<DocumentExportResult | null>;
     setMain(documentId: string): Promise<ProjectInfo>;
     reveal(documentId: string): Promise<{ revealed: boolean }>;
     trashList(): Promise<TrashedDocumentInfo[]>;
@@ -157,7 +236,7 @@ export interface TexerisApi {
   history: {
     revisions(documentId?: string): Promise<RevisionInfo[]>;
     listCheckpoints(documentId?: string): Promise<CheckpointInfo[]>;
-    createCheckpoint(name: string, documentId?: string): Promise<CheckpointInfo>;
+    createCheckpoint(name: string, documentId?: string, description?: string): Promise<CheckpointInfo>;
     restoreCheckpoint(checkpointId: string): Promise<{ seq: number }>;
   };
 }

@@ -1,0 +1,30 @@
+[
+  {
+    "id": "preserve-qualification-and-citation",
+    "focus": "light",
+    "input": "These findings may indicate a limited association in this sample [@rao2024].",
+    "required": ["may", "limited", "[@rao2024]"],
+    "forbidden": ["demonstrates", "proves"]
+  },
+  {
+    "id": "preserve-specialist-term",
+    "focus": "flow",
+    "input": "The functor is faithful, although it is not full.",
+    "required": ["functor", "faithful", "not full"],
+    "forbidden": ["function is accurate"]
+  },
+  {
+    "id": "prefer-no-op",
+    "focus": "light",
+    "input": "We distinguish the descriptive claim from its normative consequence.",
+    "required": ["no patch when no clear improvement exists"],
+    "forbidden": ["ornamental rewrite"]
+  },
+  {
+    "id": "selection-boundary",
+    "focus": "shorten",
+    "input": "Selected sentence only.",
+    "required": ["changes remain inside the supplied scope"],
+    "forbidden": ["edits to adjacent paragraphs"]
+  }
+]

@@ -1,5 +1,4 @@
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import type {
   Actor,
@@ -14,6 +13,7 @@ import {
 } from '../../shared/text-splice';
 import { atomicWriteText, hashText } from './document';
 import { reconcileImageAssetsBestEffort } from './assets';
+import { resolveProjectDocumentPath } from './projectPath';
 
 /** Full-text snapshot is stored on every SNAPSHOT_EVERY-th revision (§7.2). */
 export const SNAPSHOT_EVERY = 25;
@@ -90,7 +90,7 @@ export class RevisionService {
       return doc.current_revision; // no-op change group, nothing to record
     }
     if (meta.actor === 'user' && meta.source.kind === 'typing') {
-      const amended = this.tryAmendTip(doc, newText, splices, meta);
+      const amended = this.tryAmendTip(doc, baseText, newText, splices, meta);
       if (amended !== null) {
         reconcileImageAssetsBestEffort(this.projectRoot, this.db);
         return amended;
@@ -107,14 +107,46 @@ export class RevisionService {
    * change records are corrupt — fail loudly.
    */
   getTextAt(documentId: string, seq: number): string {
+    return this.getTextAtBoundary(documentId, seq, Number.MAX_SAFE_INTEGER);
+  }
+
+  /**
+   * Reconstruct an exact turn boundary. Typing may amend the current tip
+   * revision after a run starts, so a stored boundary is (seq, change count),
+   * not always just a revision number.
+   */
+  getTextAtBoundary(documentId: string, seq: number, changeCount: number): string {
     const current = this.getCurrentRevision(documentId);
+    if (seq === 0) {
+      if (changeCount !== 0) {
+        throw new Error('revision 0 has no changes');
+      }
+      return '';
+    }
     if (seq < 1 || seq > current) {
       throw new Error(`revision ${seq} out of range (1..${current})`);
     }
+    const totalChanges = (
+      this.db
+        .prepare(
+          'SELECT COUNT(*) AS n FROM revision_changes WHERE document_id = ? AND seq = ?',
+        )
+        .get(documentId, seq) as { n: number }
+    ).n;
+    const boundedCount =
+      changeCount === Number.MAX_SAFE_INTEGER ? totalChanges : changeCount;
+    if (boundedCount < 0 || boundedCount > totalChanges) {
+      throw new Error(
+        `change boundary ${boundedCount} out of range (0..${totalChanges}) for revision ${seq}`,
+      );
+    }
+    const isFullRevision = boundedCount === totalChanges;
     const snapshotRow = this.db
       .prepare(
         `SELECT seq, snapshot_text FROM revisions
-         WHERE document_id = ? AND seq <= ? AND snapshot_text IS NOT NULL
+         WHERE document_id = ?
+           AND seq ${isFullRevision ? '<=' : '<'} ?
+           AND snapshot_text IS NOT NULL
          ORDER BY seq DESC LIMIT 1`,
       )
       .get(documentId, seq) as { seq: number; snapshot_text: string } | undefined;
@@ -134,10 +166,11 @@ export class RevisionService {
       .prepare(
         `SELECT seq, idx, from_off, to_off, deleted_text, inserted_text
          FROM revision_changes
-         WHERE document_id = ? AND seq > ? AND seq <= ?
+         WHERE document_id = ? AND seq > ?
+           AND (seq < ? OR (seq = ? AND idx < ?))
          ORDER BY seq, idx`,
       )
-      .all(documentId, fromSeq, seq) as Array<{
+      .all(documentId, fromSeq, seq, seq, boundedCount) as Array<{
       seq: number;
       idx: number;
       from_off: number;
@@ -182,6 +215,30 @@ export class RevisionService {
       actor: meta.actor,
       source: { kind: 'restore', fromRevision: seq },
       summary: `restore of revision ${seq}`,
+    });
+  }
+
+  /** Restore an exact coalesced-revision boundary as a new revision. */
+  restoreBoundary(
+    documentId: string,
+    seq: number,
+    changeCount: number,
+    origin: { conversationId?: string } = {},
+  ): number {
+    const target = this.getTextAtBoundary(documentId, seq, changeCount);
+    const current = this.getCurrentText(documentId);
+    if (target === current) {
+      return this.getCurrentRevision(documentId);
+    }
+    return this.commit(documentId, [minimalSplice(current, target)], {
+      actor: 'user',
+      source: {
+        kind: 'restore',
+        fromRevision: seq,
+        fromChangeCount: changeCount,
+        ...origin,
+      },
+      summary: `conversation rewind to revision ${seq}`,
     });
   }
 
@@ -318,6 +375,12 @@ export class RevisionService {
         this.db.exec('COMMIT');
       } catch (err) {
         this.db.exec('ROLLBACK');
+        // The canonical rename happens before the SQLite transaction. If the
+        // transaction fails while the process is still alive, put the file
+        // back immediately instead of waiting for startup reconciliation.
+        if (options.writeFile) {
+          atomicWriteText(this.filePath(doc), baseText);
+        }
         throw err;
       }
     } finally {
@@ -336,6 +399,7 @@ export class RevisionService {
    */
   private tryAmendTip(
     doc: DocumentRow,
+    baseText: string,
     newText: string,
     splices: readonly TextSplice[],
     meta: CommitMeta,
@@ -441,6 +505,7 @@ export class RevisionService {
         this.db.exec('COMMIT');
       } catch (err) {
         this.db.exec('ROLLBACK');
+        atomicWriteText(this.filePath(doc), baseText);
         throw err;
       }
     } finally {
@@ -462,6 +527,6 @@ export class RevisionService {
   }
 
   private filePath(doc: DocumentRow): string {
-    return path.join(this.projectRoot, doc.path);
+    return resolveProjectDocumentPath(this.projectRoot, doc.path);
   }
 }

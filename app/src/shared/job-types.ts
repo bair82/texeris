@@ -17,6 +17,8 @@ export const JobEventSchema = Type.Object({
     Type.Literal('import'),
     Type.Literal('export'),
     Type.Literal('corpus-grant'),
+    Type.Literal('archive-import'),
+    Type.Literal('archive-reindex'),
   ]),
   status: Type.Union([
     Type.Literal('started'),

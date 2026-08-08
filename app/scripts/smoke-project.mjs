@@ -71,11 +71,18 @@ try {
       pending.delete(msg.id);
     }
   };
-  const evaluate = async (expression) => {
+  const send = (method, params = {}) => {
     const id = ++msgId;
-    const res = await new Promise((resolve, reject) => {
+    return new Promise((resolve, reject) => {
       pending.set(id, (msg) => (msg.error ? reject(new Error(msg.error.message)) : resolve(msg.result)));
-      ws.send(JSON.stringify({ id, method: 'Runtime.evaluate', params: { expression, awaitPromise: true, returnByValue: true } }));
+      ws.send(JSON.stringify({ id, method, params }));
+    });
+  };
+  const evaluate = async (expression) => {
+    const res = await send('Runtime.evaluate', {
+      expression,
+      awaitPromise: true,
+      returnByValue: true,
     });
     if (res.exceptionDetails) throw new Error(JSON.stringify(res.exceptionDetails));
     return res.result.value;
@@ -112,6 +119,30 @@ try {
   check(
     'recents persist the new project',
     Array.isArray(recents) && recents[0] === path.join(parentDir, 'smoke-proj'),
+  );
+
+  // Type and open the project picker immediately. This route unmounts the
+  // editor, so the picker must not appear until the pending commit finishes.
+  await waitFor(`!!document.querySelector('.tiptap-rendered')`, 'rendered editor never mounted');
+  await evaluate(`(() => {
+    const el = document.querySelector('.tiptap-rendered');
+    el.focus();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return true;
+  })()`);
+  await send('Input.insertText', { text: '\\n\\nSaved during immediate project switch.' });
+  await evaluate(`document.querySelector('.footer-button').click(); true`);
+  await waitFor(`!!document.querySelector('.project-picker')`, 'project picker opened before save completed');
+  await evaluate(`window.texeris.project.create(${JSON.stringify(parentDir)}, 'smoke-proj-two')`);
+  check(
+    'immediate project switch flushes recent typing',
+    fs.readFileSync(path.join(parentDir, 'smoke-proj', 'welcome.md'), 'utf8')
+      .includes('Saved during immediate project switch.'),
   );
 
   proc.kill('SIGTERM');

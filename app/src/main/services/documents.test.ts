@@ -258,9 +258,27 @@ describe('exportDocumentFile', () => {
     const id = makeDoc('cited.md', 'A claim [@source].\n');
     const output = path.join(root, '..', `export-${path.basename(root)}.rtf`);
     try {
-      expect((await exportDocumentFile(ctx, id, output)).warnings.join(' ')).toMatch(/bibliography/);
+      expect((await exportDocumentFile(ctx, id, output)).warnings.join(' ')).toMatch(
+        /Unresolved citation key.*source/,
+      );
       await expect(exportDocumentFile(ctx, id, path.join(root, 'cited.md'))).rejects.toThrow(/different path/);
     } finally {
+      fs.rmSync(output, { force: true });
+    }
+  });
+
+  it('refuses to export through a document symlink that now escapes the project', async () => {
+    const canonical = path.join(root, 'manuscript.md');
+    const outside = path.join(path.dirname(root), `${path.basename(root)}-outside.md`);
+    const output = path.join(path.dirname(root), `${path.basename(root)}-escaped-export.md`);
+    fs.writeFileSync(outside, 'outside content\n');
+    fs.rmSync(canonical);
+    fs.symlinkSync(outside, canonical);
+    try {
+      await expect(exportDocumentFile(ctx, mainId, output)).rejects.toThrow(/symlink|escapes/);
+      expect(fs.existsSync(output)).toBe(false);
+    } finally {
+      fs.rmSync(outside, { force: true });
       fs.rmSync(output, { force: true });
     }
   });
@@ -277,6 +295,26 @@ describe('exportDocumentFile', () => {
       expect(fs.readFileSync(output).subarray(0, 5).toString()).toBe('%PDF-');
       expect(printHtml).toContain('size: A4 portrait');
       expect(ctx.revisions.getTextAt(mainId, 1)).toBe('# Main\n');
+    } finally {
+      fs.rmSync(output, { force: true });
+    }
+  });
+
+  it('leaves an existing export and no temp file when PDF rendering fails', async () => {
+    const output = path.join(root, '..', `export-${path.basename(root)}.pdf`);
+    fs.writeFileSync(output, 'previous export');
+    try {
+      await expect(
+        exportDocumentFile(ctx, mainId, output, async () => {
+          throw new Error('injected renderer failure');
+        }),
+      ).rejects.toThrow(/injected renderer failure/);
+      expect(fs.readFileSync(output, 'utf8')).toBe('previous export');
+      expect(
+        fs.readdirSync(path.dirname(output)).filter((entry) =>
+          entry.startsWith(`.${path.basename(output)}.`),
+        ),
+      ).toEqual([]);
     } finally {
       fs.rmSync(output, { force: true });
     }

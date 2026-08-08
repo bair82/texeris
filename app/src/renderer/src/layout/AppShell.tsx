@@ -2,6 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { DocumentInfo } from '../../../shared/domain-types';
 import type { JobEvent } from '../../../shared/job-types';
+import type { CitationStyleId } from '../../../shared/citation-style-types';
+import type { ArchiveAttachment } from '../../../shared/archive-types';
+import type { HeadingInfo } from '../../../shared/doc-types';
+import type { SkillSummary } from '../../../shared/skill-types';
 import type { UiState, UiStateDoc } from '../../../shared/ui-types';
 import ChatPanel from '../ChatPanel';
 import PatchReview from '../PatchReview';
@@ -9,6 +13,7 @@ import EditorRegion, { type WorkspaceStatus } from '../editor/EditorRegion';
 import {
   getChatCommands,
   getEditorCommands,
+  getEditorSelection,
   navigateToHeading,
 } from '../editor/editorBridge';
 import type { EditorMode } from '../editor/session';
@@ -17,6 +22,9 @@ import CommandPalette from './CommandPalette';
 import ProjectNav from './ProjectNav';
 import ShortcutsOverlay from './ShortcutsOverlay';
 import TrashDialog from './TrashDialog';
+import ExportDialog from './ExportDialog';
+import ArchivePanel from './ArchivePanel';
+import SkillLaunchDialog from './SkillLaunchDialog';
 import { describeContextAt, dispatchContextAction } from '../contextMenuBridge';
 
 const DEFAULT_NAV_WIDTH = 232;
@@ -54,7 +62,7 @@ export default function AppShell({
 }: {
   onOpenSettings: () => void;
   /** Return to the project picker to open or create a project. */
-  onOpenProjectPicker: () => void;
+  onOpenProjectPicker: () => Promise<void>;
   mainDocument: string;
 }) {
   const [ui, setUi] = useState<UiState | null>(null);
@@ -67,6 +75,14 @@ export default function AppShell({
   const [trashOpen, setTrashOpen] = useState(false);
   const [newDocRequested, setNewDocRequested] = useState(0);
   const [profileSourceOpen, setProfileSourceOpen] = useState(false);
+  const [skillLaunch, setSkillLaunch] = useState<{
+    skill: SkillSummary;
+    documentId: string;
+    selection: { from: number; to: number } | null;
+    headings: HeadingInfo[];
+  } | null>(null);
+  const [exportTargetId, setExportTargetId] = useState<string | null>(null);
+  const [archiveAttachments, setArchiveAttachments] = useState<ArchiveAttachment[]>([]);
   const [operationNotice, setOperationNotice] = useState<WorkspaceStatus | null>(null);
   const uiRef = useRef<UiState>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -190,6 +206,7 @@ export default function AppShell({
 
   const focusMode = ui?.focusMode ?? false;
   const navVisible = !focusMode && (ui?.navVisible ?? true);
+  const navMode = ui?.navMode ?? 'files';
   const sideVisible = !focusMode && (ui?.sideVisible ?? true);
   const navWidth = ui?.navWidth ?? DEFAULT_NAV_WIDTH;
   const sideWidth = ui?.sideWidth ?? DEFAULT_SIDE_WIDTH;
@@ -198,6 +215,16 @@ export default function AppShell({
     const focus = uiRef.current.focusMode ?? false;
     const nav = !focus && (uiRef.current.navVisible ?? true);
     patchUi(focus ? { focusMode: false, navVisible: true } : { navVisible: !nav }, true);
+  }, [patchUi]);
+  const toggleNavMode = useCallback((mode: 'files' | 'archive') => {
+    const focus = uiRef.current.focusMode ?? false;
+    const visible = !focus && (uiRef.current.navVisible ?? true);
+    const currentMode = uiRef.current.navMode ?? 'files';
+    if (visible && currentMode === mode) {
+      patchUi({ navVisible: false }, true);
+    } else {
+      patchUi({ focusMode: false, navVisible: true, navMode: mode }, true);
+    }
   }, [patchUi]);
   const toggleSide = useCallback(() => {
     const focus = uiRef.current.focusMode ?? false;
@@ -208,6 +235,18 @@ export default function AppShell({
     () => patchUi({ focusMode: !(uiRef.current.focusMode ?? false) }, true),
     [patchUi],
   );
+  const openProjectPickerSafely = useCallback(async () => {
+    try {
+      await onOpenProjectPicker();
+    } catch (error) {
+      setOperationNotice({
+        message: `Could not save before switching projects: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        tone: 'error',
+      });
+    }
+  }, [onOpenProjectPicker]);
 
   const openDoc = useCallback(
     (documentId: string) => {
@@ -301,12 +340,20 @@ export default function AppShell({
   const onExportDoc = useCallback(async (documentId?: string) => {
     const targetId = documentId ?? openDocId;
     if (!targetId || exportingRef.current) return;
+    if (targetId === openDocId) await getEditorCommands()?.flush();
+    setExportTargetId(targetId);
+  }, [openDocId]);
+
+  const performExport = useCallback(async (
+    targetId: string,
+    citationStyle: CitationStyleId,
+  ) => {
+    if (exportingRef.current) return;
     exportingRef.current = true;
     activeJobRef.current = { op: 'export', jobId: null };
     try {
-      if (targetId === openDocId) getEditorCommands()?.flush();
       setOperationNotice(jobProgressNotice('export'));
-      const exported = await window.texeris.doc.exportDialog(targetId);
+      const exported = await window.texeris.doc.exportDialog(targetId, citationStyle);
       if (exported) {
         setOperationNotice({
           message: exported.warnings.length
@@ -327,8 +374,9 @@ export default function AppShell({
     } finally {
       exportingRef.current = false;
       activeJobRef.current = null;
+      setExportTargetId(null);
     }
-  }, [openDocId, jobProgressNotice]);
+  }, [jobProgressNotice]);
 
   const onSetMainDoc = useCallback(async (documentId: string) => {
     const info = await window.texeris.doc.setMain(documentId);
@@ -350,6 +398,34 @@ export default function AppShell({
 
   // ------------------------------------------------------- command registry
 
+  const openSkillLauncher = useCallback(async (skillId: string) => {
+    if (!openDocId) {
+      setOperationNotice({ message: 'Open a document before starting this review.', tone: 'warning' });
+      return;
+    }
+    try {
+      const [skills, headings] = await Promise.all([
+        window.texeris.skills.list(),
+        window.texeris.doc.outline(openDocId),
+      ]);
+      const skill = skills.find((item) => item.id === skillId);
+      if (!skill) throw new Error('This skill is unavailable');
+      setSkillLaunch({
+        skill,
+        documentId: openDocId,
+        selection: getEditorSelection(),
+        headings,
+      });
+    } catch (error) {
+      setOperationNotice({
+        message: `Could not open skill: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        tone: 'error',
+      });
+    }
+  }, [openDocId]);
+
   /** Every app-menu / palette command (M1.5 EU5) routes through here. */
   const runCommand = useCallback(
     (id: string) => {
@@ -360,13 +436,15 @@ export default function AppShell({
           const focus = uiRef.current.focusMode ?? false;
           const nav = !focus && (uiRef.current.navVisible ?? true);
           if (!nav) {
-            patchUi({ focusMode: false, navVisible: true }, true);
+            patchUi({ focusMode: false, navVisible: true, navMode: 'files' }, true);
+          } else if ((uiRef.current.navMode ?? 'files') !== 'files') {
+            patchUi({ navMode: 'files' }, true);
           }
           setNewDocRequested((n) => n + 1);
           break;
         }
         case 'file:new-project':
-          onOpenProjectPicker();
+          void openProjectPickerSafely();
           break;
         case 'file:import-document':
           void onImportDoc();
@@ -375,9 +453,7 @@ export default function AppShell({
           void onExportDoc();
           break;
         case 'file:switch-project':
-          void window.texeris.project.openDialog().catch(() => {
-            /* cancelled */
-          });
+          void openProjectPickerSafely();
           break;
         case 'edit:undo':
           editor?.undo();
@@ -387,6 +463,9 @@ export default function AppShell({
           break;
         case 'edit:find':
           editor?.openSearch();
+          break;
+        case 'edit:insert-citation':
+          editor?.openCitationPicker();
           break;
         case 'view:command-palette':
           setPaletteOpen((v) => !v);
@@ -412,12 +491,27 @@ export default function AppShell({
         case 'chat:build-writing-profile':
           setProfileSourceOpen(true);
           break;
+        case 'chat:conservative-rewrite':
+          void openSkillLauncher('conservative-rewrite');
+          break;
+        case 'chat:audit-verbal-ticks':
+          void openSkillLauncher('llm-verbal-ticks');
+          break;
         case 'help:shortcuts':
           setShortcutsOpen((v) => !v);
           break;
       }
     },
-    [onExportDoc, onImportDoc, onOpenProjectPicker, patchUi, toggleNav, toggleSide, toggleFocus],
+    [
+      onExportDoc,
+      onImportDoc,
+      openSkillLauncher,
+      openProjectPickerSafely,
+      patchUi,
+      toggleNav,
+      toggleSide,
+      toggleFocus,
+    ],
   );
 
   // App-menu commands from main.
@@ -501,17 +595,19 @@ export default function AppShell({
   return (
     <div className="app-columns">
       <ActivityBar
-        navActive={navVisible}
+        filesActive={navVisible && navMode === 'files'}
+        archiveActive={navVisible && navMode === 'archive'}
         sideActive={sideVisible}
         focusMode={focusMode}
-        onToggleNav={toggleNav}
+        onToggleFiles={() => toggleNavMode('files')}
+        onToggleArchive={() => toggleNavMode('archive')}
         onToggleSide={toggleSide}
         onToggleFocus={toggleFocus}
         onOpenSettings={onOpenSettings}
       />
       {navVisible && (
         <>
-          <ProjectNav
+          {navMode === 'files' ? <ProjectNav
             width={navWidth}
             docs={docs}
             openDocId={openDocId}
@@ -529,7 +625,18 @@ export default function AppShell({
             onRevealDoc={onRevealDoc}
             onOpenTrash={() => setTrashOpen(true)}
             onNavigate={navigateToHeading}
-          />
+          /> : <ArchivePanel
+            width={navWidth}
+            attachedPassageIds={new Set(archiveAttachments.map((item) => item.passageId))}
+            onAttach={(result) =>
+              setArchiveAttachments((current) =>
+                current.some((item) => item.passageId === result.passageId)
+                  ? current
+                  : [...current, result].slice(0, 12),
+              )
+            }
+            onProfileStarted={openProfileResult}
+          />}
           <div
             className="split-handle"
             role="separator"
@@ -565,6 +672,13 @@ export default function AppShell({
               }}
               initialConversationId={ui.openConversationId ?? null}
               onConversationChange={(id) => patchUi({ openConversationId: id })}
+              archiveAttachments={archiveAttachments}
+              onRemoveArchiveAttachment={(passageId) =>
+                setArchiveAttachments((current) =>
+                  current.filter((item) => item.passageId !== passageId),
+                )
+              }
+              onArchiveAttachmentsUsed={() => setArchiveAttachments([])}
             />
           </div>
         </>
@@ -575,6 +689,13 @@ export default function AppShell({
       {shortcutsOpen && <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />}
       {trashOpen && (
         <TrashDialog onClose={() => setTrashOpen(false)} onRestored={onRestoredDoc} />
+      )}
+      {exportTargetId && (
+        <ExportDialog
+          documentTitle={docs.find((doc) => doc.id === exportTargetId)?.title ?? 'document'}
+          onExport={(style) => performExport(exportTargetId, style)}
+          onClose={() => setExportTargetId(null)}
+        />
       )}
       {profileSourceOpen && (
         <div className="settings-overlay" onClick={() => setProfileSourceOpen(false)}>
@@ -589,6 +710,31 @@ export default function AppShell({
           </div>
         </div>
       )}
+      {skillLaunch && (
+        <SkillLaunchDialog
+          {...skillLaunch}
+          onClose={() => setSkillLaunch(null)}
+          onLaunch={async ({ mode, optionId, scope }) => {
+            await getEditorCommands()?.flush();
+            const result = await window.texeris.skills.launch({
+              skillId: skillLaunch.skill.id,
+              mode,
+              optionId,
+              scope,
+            });
+            setSkillLaunch(null);
+            patchUi(
+              {
+                focusMode: false,
+                sideVisible: true,
+                openConversationId: result.conversationId,
+              },
+              true,
+            );
+            getChatCommands()?.openConversation(result.conversationId);
+          }}
+        />
+      )}
     </div>
   );
 
@@ -601,17 +747,7 @@ export default function AppShell({
         setOperationNotice(null);
         return;
       }
-      setProfileSourceOpen(false);
-      patchUi({ focusMode: false, sideVisible: true, openConversationId: result.conversationId }, true);
-      getChatCommands()?.openConversation(result.conversationId);
-      if (result.warnings.length) {
-        setOperationNotice({
-          message: `Corpus grant created with warnings. ${result.warnings.join(' ')}`,
-          tone: 'warning',
-        });
-      } else {
-        setOperationNotice(null);
-      }
+      openProfileResult(result);
     } catch (error) {
       if (isJobCancellation(error)) {
         setOperationNotice({ message: 'Corpus grant cancelled.', tone: 'warning' });
@@ -622,5 +758,29 @@ export default function AppShell({
     } finally {
       activeJobRef.current = null;
     }
+  }
+
+  function openProfileResult(result: {
+    conversationId: string;
+    warnings: string[];
+  }): void {
+    setProfileSourceOpen(false);
+    patchUi(
+      {
+        focusMode: false,
+        sideVisible: true,
+        openConversationId: result.conversationId,
+      },
+      true,
+    );
+    getChatCommands()?.openConversation(result.conversationId);
+    setOperationNotice(
+      result.warnings.length
+        ? {
+            message: `Corpus grant created with warnings. ${result.warnings.join(' ')}`,
+            tone: 'warning',
+          }
+        : null,
+    );
   }
 }

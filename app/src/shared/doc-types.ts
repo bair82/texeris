@@ -86,6 +86,7 @@ export type CheckpointListRequest = Static<typeof CheckpointListRequestSchema>;
 export const CheckpointCreateRequestSchema = Type.Object({
   documentId: Type.Optional(Type.String()),
   name: Type.String({ minLength: 1 }),
+  description: Type.Optional(Type.String()),
 });
 export type CheckpointCreateRequest = Static<typeof CheckpointCreateRequestSchema>;
 
@@ -109,9 +110,18 @@ export interface DocText {
 }
 
 /** main → renderer push events about external file changes (plan §8). */
-export type DocEvent =
-  | { type: 'external-import'; documentId: string; revision: number }
-  | { type: 'external-conflict'; documentId: string };
+export const DocEventSchema = Type.Union([
+  Type.Object({
+    type: Type.Literal('external-import'),
+    documentId: Type.String(),
+    revision: Type.Integer({ minimum: 1 }),
+  }),
+  Type.Object({
+    type: Type.Literal('external-conflict'),
+    documentId: Type.String(),
+  }),
+]);
+export type DocEvent = Static<typeof DocEventSchema>;
 
 export interface HeadingInfo {
   level: number;
@@ -140,6 +150,8 @@ export const DocChannels = {
   duplicate: 'texeris:doc-duplicate',
   addImage: 'texeris:doc-add-image',
   importDialog: 'texeris:doc-import-dialog',
+  exportSettings: 'texeris:doc-export-settings',
+  chooseCitationStyle: 'texeris:doc-choose-citation-style',
   exportDialog: 'texeris:doc-export-dialog',
   setMain: 'texeris:doc-set-main',
   reveal: 'texeris:doc-reveal',

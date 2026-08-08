@@ -378,11 +378,12 @@ export const DocRestoreRequestSchema = Type.Object({
 export type DocRestoreRequest = Static<typeof DocRestoreRequestSchema>;
 
 /** main → renderer push event when the agent proposes a patch. */
-export interface PatchProposedEvent {
-  type: 'patch-proposed';
-  patchId: string;
-  title: string;
-}
+export const PatchProposedEventSchema = Type.Object({
+  type: Type.Literal('patch-proposed'),
+  patchId: Type.String(),
+  title: Type.String(),
+});
+export type PatchProposedEvent = Static<typeof PatchProposedEventSchema>;
 
 export const PatchChannels = {
   list: 'texeris:patch-list',

@@ -32,6 +32,7 @@ try {
     env: {
       ...process.env,
       TEXERIS_FAUX_PROVIDER: '1',
+      TEXERIS_FAUX_REPEAT: '3',
       TEXERIS_PROJECT_DIR: projectDir,
       ELECTRON_ENABLE_LOGGING: '1',
       TEXERIS_SMOKE: '1',
@@ -115,6 +116,24 @@ try {
     'main document is marked',
     await evaluate(`!!document.querySelector('.nav-main-dot')`),
   );
+  check(
+    'chat header keeps conversation and context on distinct rows',
+    await evaluate(`(() => {
+      const header = document.querySelector('.chat-header').getBoundingClientRect();
+      const primary = document.querySelector('.chat-header-primary').getBoundingClientRect();
+      const context = document.querySelector('.chat-header-context').getBoundingClientRect();
+      return primary.bottom < context.top &&
+        primary.left >= header.left && primary.right <= header.right &&
+        context.left >= header.left && context.right <= header.right;
+    })()`),
+  );
+  await evaluate(
+    `document.querySelector('.chat-header-icon[aria-label="Usage records"]').click(); true`,
+  );
+  check('usage icon toggles the usage panel', await evaluate(`!!document.querySelector('.usage-panel')`));
+  await evaluate(
+    `document.querySelector('.chat-header-icon[aria-label="Usage records"]').click(); true`,
+  );
 
   // create a second document through the nav
   await evaluate(`document.querySelector('.nav-action:not(.import-action)').click(); true`);
@@ -184,6 +203,103 @@ try {
     await evaluate(`[...document.querySelector('.scope-select').options].some(o => o.value === 'section:Copy heading')`),
   );
 
+  // Editing a persisted user message creates a branch, restores the exact
+  // document boundary that message saw, then resends the edited text.
+  await evaluate(`(async () => {
+    const doc = (await window.texeris.doc.list()).find(d => d.path === 'journal copy.md');
+    const current = await window.texeris.doc.getText(doc.id);
+    await window.texeris.doc.commit({
+      documentId: doc.id,
+      kind: 'typing',
+      splices: [{
+        from: current.text.length,
+        to: current.text.length,
+        deletedText: '',
+        insertedText: 'future text that rewind removes\\n',
+      }],
+    });
+    return true;
+  })()`);
+  await evaluate(`document.querySelector('.msg-user .msg-actions button[aria-label="Edit message"]').click(); true`);
+  await waitFor(`!!document.querySelector('.message-edit textarea')`, 'message editor did not open');
+  check(
+    'message editor fits within the chat column',
+    await evaluate(`(() => {
+      const chat = document.querySelector('.chat').getBoundingClientRect();
+      const editor = document.querySelector('.msg-editing').getBoundingClientRect();
+      return editor.left >= chat.left && editor.right <= chat.right;
+    })()`),
+  );
+  check(
+    'edit warning previews a conversation branch and document restore',
+    (await evaluate(`document.querySelector('.message-edit-warning').textContent`)).includes('new conversation branch'),
+  );
+  await evaluate(setInput('.message-edit textarea', 'revised smoke question'));
+  await evaluate(`[...document.querySelectorAll('.message-edit-actions button')].find(b => b.textContent.includes('Save and resend')).click(); true`);
+  await waitFor(
+    `[...document.querySelectorAll('.msg-user')].some(m => m.textContent.includes('revised smoke question'))`,
+    'edited user message did not appear in the branch',
+  );
+  await waitFor(
+    `[...document.querySelectorAll('.msg-assistant')].some(m => m.textContent.includes('scripted offline response'))`,
+    'edited message did not receive an assistant answer',
+    80,
+  );
+  const rewindState = await evaluate(`(async () => {
+    const conversations = await window.texeris.chat.listConversations();
+    const doc = (await window.texeris.doc.list()).find(d => d.path === 'journal copy.md');
+    const current = await window.texeris.doc.getText(doc.id);
+    return {
+      conversations: conversations.map(c => ({ title: c.title, messageCount: c.messageCount })),
+      text: current.text,
+    };
+  })()`);
+  check(
+    'edit creates an independently listed conversation branch',
+    rewindState.conversations.length === 2 &&
+      rewindState.conversations.some(c => c.title.includes('(edited)')),
+    JSON.stringify(rewindState.conversations),
+  );
+  check(
+    'edit restores the exact pre-message document boundary',
+    rewindState.text === '# Copy heading\n',
+    JSON.stringify(rewindState.text),
+  );
+
+  // Regenerating the latest completed answer reuses the same turn through a
+  // distinct branch and keeps the prior response available.
+  await evaluate(`document.querySelector('.msg-assistant .msg-actions button[aria-label="Regenerate response"]').click(); true`);
+  await waitFor(
+    `!!document.querySelector('.regenerate-confirm')`,
+    'regenerate confirmation did not appear',
+  );
+  check(
+    'regenerate explains branch preservation',
+    (await evaluate(`document.querySelector('.regenerate-confirm').textContent`))
+      .includes('original response remains available'),
+  );
+  await evaluate(`[...document.querySelectorAll('.regenerate-confirm .message-edit-actions button')].find(b => b.textContent === 'Regenerate').click(); true`);
+  await waitFor(
+    `[...document.querySelectorAll('.msg-assistant')].some(m => m.textContent.includes('scripted offline response'))`,
+    'regenerated assistant answer never arrived',
+    80,
+  );
+  const regeneratedConversations = await evaluate(
+    `(async () => (await window.texeris.chat.listConversations()).map(c => c.title))()`,
+  );
+  check(
+    'regenerate creates a preserved conversation branch',
+    regeneratedConversations.length === 3 &&
+      regeneratedConversations.some(title => title.includes('(regenerated)')),
+    JSON.stringify(regeneratedConversations),
+  );
+  check(
+    'active conversation shows its branch as a badge',
+    await evaluate(
+      `document.querySelector('.conv-branch')?.textContent === 'regenerated'`,
+    ),
+  );
+
   // trash the duplicate
   await evaluate(withDocument('journal copy.md', 'trash'));
   await reload();
@@ -206,7 +322,7 @@ try {
   // start a new chat, then reopen the renamed one. (Synthetic .click() emits
   // no mousedown, so the picker's outside-click close never fires here —
   // open it idempotently instead of toggling.)
-  await evaluate(`[...document.querySelectorAll('.usage-toggle')].find(b => b.textContent === 'new chat').click(); true`);
+  await evaluate(`document.querySelector('.chat-header-icon[aria-label="New conversation"]').click(); true`);
   await sleep(400);
   check(
     'new chat starts empty',

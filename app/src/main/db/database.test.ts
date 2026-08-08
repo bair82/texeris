@@ -67,7 +67,7 @@ describe('openDatabase / migration 0001', () => {
     reopened.close();
   });
 
-  it('migrates a 0003 database to 0004, keeping legacy corpus rows intact', () => {
+  it('migrates a 0003 database through current, keeping legacy corpus rows intact', () => {
     // Build a database exactly at schema version 3 with a legacy corpus row.
     const db = new DatabaseSync(dbPath);
     for (let i = 0; i < 3; i++) {
@@ -105,6 +105,87 @@ describe('openDatabase / migration 0001', () => {
     ).map((r) => r.name);
     expect(indexes).toContain('idx_corpus_sources_grant');
     expect(indexes).toContain('idx_corpus_grants_conversation');
+    migrated.close();
+  });
+
+  it('backfills edit boundaries for historical user messages when timestamps identify the run', () => {
+    const db = new DatabaseSync(dbPath);
+    for (let i = 0; i < 4; i++) {
+      migrations[i](db);
+      db.exec(`PRAGMA user_version = ${i + 1}`);
+    }
+    const manifest = JSON.stringify({
+      scope: { kind: 'document', documentId: 'doc' },
+      documentId: 'doc',
+      items: [],
+      baseRevision: 0,
+      baseChangeCount: 0,
+      truncated: false,
+      notices: [],
+    });
+    db.prepare(
+      "INSERT INTO conversations (id, title, created_at) VALUES ('c1', 'Chat', '2026-01-01T00:00:00.000Z')",
+    ).run();
+    db.prepare(
+      `INSERT INTO agent_runs
+         (id, conversation_id, model_mode, provider, model, status, started_at,
+          ended_at, context_manifest_json)
+       VALUES ('r1', 'c1', 'deep', 'faux', 'faux', 'completed',
+               '2026-01-01T00:00:01.000Z', '2026-01-01T00:00:03.000Z', ?)`,
+    ).run(manifest);
+    db.prepare(
+      `INSERT INTO messages
+         (id, conversation_id, seq, role, payload_json, created_at)
+       VALUES ('m1', 'c1', 1, 'user', ?, '2026-01-01T00:00:02.000Z')`,
+    ).run(JSON.stringify({ role: 'user', content: 'hello', timestamp: 1 }));
+    db.close();
+
+    const migrated = openDatabase(dbPath);
+    const row = migrated
+      .prepare('SELECT turn_context_json FROM messages WHERE id = ?')
+      .get('m1') as { turn_context_json: string };
+    expect(JSON.parse(row.turn_context_json)).toMatchObject({
+      runId: 'r1',
+      mode: 'deep',
+      manifest: { documentId: 'doc', baseRevision: 0 },
+    });
+    const conversationColumns = (
+      migrated.prepare('PRAGMA table_info(conversations)').all() as Array<{ name: string }>
+    ).map((column) => column.name);
+    expect(conversationColumns).toEqual(expect.arrayContaining([
+      'parent_conversation_id',
+      'forked_from_message_seq',
+    ]));
+    migrated.close();
+  });
+
+  it('migrates a 0006 database to 0007, adding checkpoint descriptions', () => {
+    const db = new DatabaseSync(dbPath);
+    for (let i = 0; i < 6; i++) {
+      migrations[i](db);
+      db.exec(`PRAGMA user_version = ${i + 1}`);
+    }
+    db.prepare(
+      "INSERT INTO documents (id, path, title, created_at, content_hash) VALUES ('d1', '/tmp/d.md', 'd', 'now', 'h')",
+    ).run();
+    db.prepare(
+      `INSERT INTO checkpoints (id, document_id, revision_seq, name, created_at, snapshot_text)
+       VALUES ('k1', 'd1', 1, 'before edits', 'now', 'text')`,
+    ).run();
+    db.close();
+
+    const migrated = openDatabase(dbPath);
+    const version = migrated.prepare('PRAGMA user_version').get() as { user_version: number };
+    expect(version.user_version).toBe(migrations.length);
+    const columns = (
+      migrated.prepare('PRAGMA table_info(checkpoints)').all() as Array<{ name: string }>
+    ).map((c) => c.name);
+    expect(columns).toContain('description');
+    // legacy rows migrate to an empty description
+    const row = migrated
+      .prepare('SELECT description FROM checkpoints WHERE id = ?')
+      .get('k1') as { description: string };
+    expect(row.description).toBe('');
     migrated.close();
   });
 });

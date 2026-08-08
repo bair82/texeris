@@ -45,4 +45,25 @@ describe('WritingProfileService', () => {
     expect(service.view().enabled).toBe(false);
     expect(fs.existsSync(path.join(workspace, 'profiles', active.id, 'writing-profile.md'))).toBe(true);
   });
+
+  it('treats a malformed active manifest as disabled and does not expose artifacts', () => {
+    const origin = { conversationId: 'conv', agentRunId: 'run' };
+    const report = createGeneratedDocument(project, 'writing-style-report.md', '# Report\n', origin);
+    const writing = createGeneratedDocument(project, 'writing-profile.md', '# Voice\n', origin);
+    const intellectual = createGeneratedDocument(project, 'intellectual-profile.md', '# Outlook\n', origin);
+    const service = new WritingProfileService(config, workspace);
+    const active = service.activate(project, {
+      reportDocumentId: report.id,
+      writingProfileDocumentId: writing.id,
+      intellectualProfileDocumentId: intellectual.id,
+    });
+    fs.writeFileSync(
+      path.join(workspace, 'profiles', active.id, 'manifest.json'),
+      JSON.stringify({ id: active.id, artifacts: 'not-an-array' }),
+    );
+
+    expect(service.active()).toBeNull();
+    expect(service.view()).toMatchObject({ enabled: false, activeProfileId: null });
+    expect(service.read('writing-profile')).toBeNull();
+  });
 });

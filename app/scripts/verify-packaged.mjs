@@ -17,7 +17,17 @@ const resourcesOnly = args.includes('--resources-only');
 const BIN =
   args.find((arg) => arg !== '--resources-only') ??
   new URL('../dist/texeris-0.1.0-x86_64.AppImage', import.meta.url).pathname;
-const UNPACKED = new URL('../dist/linux-unpacked/resources/', import.meta.url).pathname;
+const dist = new URL('../dist/', import.meta.url).pathname;
+const architecture = process.arch === 'x64' ? 'amd64' : process.arch;
+const UNPACKED = process.platform === 'darwin'
+  ? path.join(
+      dist,
+      process.arch === 'arm64' ? 'mac-arm64' : 'mac',
+      'Texeris.app',
+      'Contents',
+      'Resources',
+    )
+  : path.join(dist, 'linux-unpacked', 'resources');
 
 if (resourcesOnly) {
   let failures = 0;
@@ -26,9 +36,17 @@ if (resourcesOnly) {
     if (!ok) failures += 1;
   };
   const appAsar = path.join(UNPACKED, 'app.asar');
-  const pandoc = path.join(UNPACKED, 'pandoc', 'linux-amd64', 'pandoc');
+  const pandoc = path.join(UNPACKED, 'pandoc', `${process.platform}-${architecture}`, 'pandoc');
   check('packaged app.asar exists', fs.existsSync(appAsar));
   check('bundled Pandoc exists and is executable', fs.existsSync(pandoc) && (fs.statSync(pandoc).mode & 0o111) !== 0);
+  const cslDir = path.join(UNPACKED, 'csl');
+  for (const file of ['chicago-author-date.csl', 'apa.csl', 'ieee.csl', 'vancouver.csl']) {
+    const csl = path.join(cslDir, file);
+    const valid =
+      fs.existsSync(csl) &&
+      fs.readFileSync(csl, 'utf8').includes('http://purl.org/net/xbiblio/csl');
+    check(`bundled citation style ${file}`, valid);
+  }
   try {
     const version = execFileSync(pandoc, ['--version'], { encoding: 'utf8' });
     check('bundled Pandoc launches', version.startsWith('pandoc '), version.split('\n')[0]);

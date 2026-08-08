@@ -15,13 +15,30 @@ export class ProjectManager {
 
   constructor(private readonly recentsFile = path.join(workspaceDir(), 'recents.json')) {}
 
+  /** Build and validate a context without disturbing the currently open one. */
+  prepareOpen(root: string): ProjectContext {
+    return openProject(root);
+  }
+
+  /** Create a context without disturbing the currently open one. */
+  prepareCreate(parentDir: string, name: string): ProjectContext {
+    const trimmed = this.validProjectName(name);
+    return createProject(path.join(parentDir, trimmed));
+  }
+
   open(root: string): ProjectContext {
-    const ctx = openProject(root);
+    const ctx = this.prepareOpen(root);
     this.adopt(ctx);
     return ctx;
   }
 
   create(parentDir: string, name: string): ProjectContext {
+    const ctx = this.prepareCreate(parentDir, name);
+    this.adopt(ctx);
+    return ctx;
+  }
+
+  private validProjectName(name: string): string {
     const trimmed = name.trim();
     if (
       !trimmed ||
@@ -34,15 +51,15 @@ export class ProjectManager {
     ) {
       throw new Error(`invalid project name ${JSON.stringify(name)}`);
     }
-    const root = path.join(parentDir, trimmed);
-    const ctx = createProject(root);
-    this.adopt(ctx);
-    return ctx;
+    return trimmed;
   }
 
-  /** Adopt an externally built context (e.g. the dev-project harness). */
-  adoptContext(ctx: ProjectContext): ProjectContext {
-    this.adopt(ctx);
+  /**
+   * Adopt an externally built context. The handoff runs after recents are
+   * durable but while the previous database is still open.
+   */
+  adoptContext(ctx: ProjectContext, handoff?: () => void): ProjectContext {
+    this.adopt(ctx, handoff);
     return ctx;
   }
 
@@ -55,10 +72,11 @@ export class ProjectManager {
     }
   }
 
-  private adopt(ctx: ProjectContext): void {
+  private adopt(ctx: ProjectContext, handoff?: () => void): void {
+    this.pushRecent(ctx.root);
+    handoff?.();
     this.current?.db.close();
     this.current = ctx;
-    this.pushRecent(ctx.root);
   }
 
   private pushRecent(root: string): void {

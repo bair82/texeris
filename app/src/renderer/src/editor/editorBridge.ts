@@ -88,7 +88,8 @@ export interface EditorCommands {
   openSearch(): void;
   toggleHistory(): void;
   toggleMode(): void;
-  flush(): void;
+  openCitationPicker(): void;
+  flush(): Promise<void>;
   contextAt(x: number, y: number): import('../../../shared/context-menu-types').ContextDescriptor;
   contextAction(action: import('../../../shared/context-menu-types').ContextAction): boolean;
 }

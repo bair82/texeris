@@ -25,6 +25,8 @@ asarUnpack:
 extraResources:
   - from: vendor/resources/pandoc
     to: pandoc
+  - from: resources/csl
+    to: csl
 
 npmRebuild: false
 

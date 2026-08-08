@@ -56,7 +56,11 @@ describe('createProject', () => {
       .prepare('SELECT id FROM documents WHERE path = ?')
       .get(WELCOME_DOCUMENT) as { id: string } | undefined;
     expect(row?.id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(ctx.revisions.getCurrentText(row!.id)).toContain('# Welcome to Texeris');
+    const welcome = ctx.revisions.getCurrentText(row!.id);
+    expect(welcome).toContain('# Welcome to Texeris');
+    expect(welcome).toContain('Open **manuscript.md**');
+    expect(welcome).toContain('Use **Cite**');
+    expect(welcome).toContain('The **Archive**');
     expect(new UiStateService(ctx.db).get().openDocumentId).toBe(row!.id);
   });
 
@@ -88,6 +92,54 @@ describe('openProject', () => {
     json.formatVersion = 99;
     fs.writeFileSync(file, JSON.stringify(json));
     expect(() => openProject(root)).toThrow(/format version 99/);
+  });
+
+  it('rejects an unknown project citation style', () => {
+    create();
+    const file = path.join(root, '.texeris', 'project.json');
+    const json = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
+    json.citationStyle = '../../outside.csl';
+    fs.writeFileSync(file, JSON.stringify(json));
+    expect(() => openProject(root)).toThrow(/invalid project\.json/);
+  });
+
+  it('rejects a main document path that escapes the project', () => {
+    create();
+    const file = path.join(root, '.texeris', 'project.json');
+    const json = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
+    json.mainDocument = '../outside.md';
+    fs.writeFileSync(file, JSON.stringify(json));
+    expect(() => openProject(root)).toThrow(/invalid project document path|escapes/);
+  });
+
+  it('rejects a persisted document path that escapes the project', () => {
+    const ctx = create();
+    const outside = path.join(path.dirname(root), `${path.basename(root)}-outside.md`);
+    fs.writeFileSync(outside, 'must stay untouched\n');
+    try {
+      ctx.db
+        .prepare("UPDATE documents SET path = ? WHERE path = 'manuscript.md'")
+        .run(path.relative(root, outside));
+      ctx.db.close();
+      created.length = 0;
+
+      expect(() => openProject(root)).toThrow(/invalid project document path|escapes/);
+      expect(fs.readFileSync(outside, 'utf8')).toBe('must stay untouched\n');
+    } finally {
+      fs.rmSync(outside, { force: true });
+    }
+  });
+
+  it('rejects a document symlink that resolves outside the project', () => {
+    const ctx = create();
+    const outside = path.join(path.dirname(root), `${path.basename(root)}-linked.md`);
+    fs.writeFileSync(outside, 'outside\n');
+    try {
+      fs.symlinkSync(outside, path.join(root, 'linked.md'));
+      expect(() => ensureDocument(ctx, 'linked.md')).toThrow(/symlink|escapes/);
+    } finally {
+      fs.rmSync(outside, { force: true });
+    }
   });
 
   it('cleans orphan tmp files and never chooses them as content', () => {

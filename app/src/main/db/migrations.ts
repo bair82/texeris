@@ -199,4 +199,55 @@ export const migrations: ReadonlyArray<(db: DatabaseSync) => void> = [
       CREATE INDEX IF NOT EXISTS idx_corpus_grants_conversation ON corpus_grants(conversation_id);
     `);
   },
+  // 0005: edit-message rewind. User messages retain the exact run context
+  // they saw; conversation forks record their origin without sharing runs,
+  // patches, delegations, or corpus grants.
+  (db) => {
+    db.exec(`
+      ALTER TABLE messages ADD COLUMN turn_context_json TEXT;
+      ALTER TABLE conversations ADD COLUMN parent_conversation_id TEXT;
+      ALTER TABLE conversations ADD COLUMN forked_from_message_seq INTEGER;
+
+      UPDATE messages
+      SET turn_context_json = (
+        SELECT json_object(
+          'runId', r.id,
+          'mode', r.model_mode,
+          'manifest', json(r.context_manifest_json)
+        )
+        FROM agent_runs r
+        WHERE r.conversation_id = messages.conversation_id
+          AND r.parent_run_id IS NULL
+          AND r.context_manifest_json IS NOT NULL
+          AND r.started_at <= messages.created_at
+          AND (r.ended_at IS NULL OR r.ended_at >= messages.created_at)
+        ORDER BY r.started_at DESC, r.rowid DESC
+        LIMIT 1
+      )
+      WHERE messages.role = 'user';
+    `);
+  },
+  // 0006: rebuildable search index for the canonical project CSL JSON file.
+  (db) => {
+    db.exec(`
+      CREATE TABLE reference_index(
+        citation_key TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        authors TEXT NOT NULL,
+        issued_year TEXT NOT NULL,
+        doi TEXT,
+        record_json TEXT NOT NULL
+      );
+      CREATE INDEX idx_reference_title ON reference_index(title);
+      CREATE INDEX idx_reference_authors ON reference_index(authors);
+    `);
+  },
+  // 0007: checkpoints gain an optional human-readable description (owner
+  // request 2026-08-08) so history/rewind pickers stay scannable without
+  // opening each preview.
+  (db) => {
+    db.exec(`
+      ALTER TABLE checkpoints ADD COLUMN description TEXT NOT NULL DEFAULT '';
+    `);
+  },
 ];

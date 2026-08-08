@@ -472,6 +472,13 @@ Examples:
 
 A skill may ask for scope or use the current selection/document context. It should produce a predictable type of result: report, comments, patch, reference changes, or exported file.
 
+The first productised launcher is deliberately compact: the command palette
+opens Conservative Rewrite, preselects an active editor selection when one
+exists, otherwise defaults to the whole document, and lets the user choose a
+section, focus, or Deep override. The resulting conversation and run retain
+the skill/version boundary, and prose changes still enter the ordinary patch
+review flow.
+
 ## 10.10 Create a named checkpoint
 
 The user can name a stable document state. Checkpoints should be easy to compare and restore.
@@ -592,6 +599,11 @@ Example names:
 - Invoke tools and skills.
 - Display proposed patches and reports.
 - Preserve conversation history.
+- Edit a persisted user message by creating a non-destructive conversation
+  branch and restoring the scoped document to the exact context that message
+  originally saw.
+- Regenerate the latest completed AI response through the same branch-and-
+  restore model, preserving the original response and its patches.
 
 ### Likely
 
@@ -637,6 +649,14 @@ The actual content sent to the model may be reduced to fit model limits, but the
 
 ## 11.6 Writing archive
 
+The first implementation is a workspace-local Writing archive reached from
+the activity rail. Imports create private immutable snapshots while retaining
+the original path for provenance and changed/missing status. Users search
+passages, inspect the saved text and source location, and explicitly choose
+“Use in chat”; visible composer chips and the turn manifest show exactly what
+is sent. Archived works may also be selected as inputs to Build writing
+profile. The archive is not searched silently.
+
 ### Core
 
 - Import previous works in at least Markdown and plain-text form.
@@ -651,7 +671,8 @@ The actual content sent to the model may be reduced to fit model limits, but the
   derivatives retain page markers for later source attribution.
 - Filter by document type, project, date, or status.
 - Detect duplicate imports.
-- Re-index changed files.
+- Rebuild the disposable search index from stored archive passages without
+  changing passage identities used by conversations.
 
 ### Exploratory
 
@@ -788,8 +809,12 @@ The first deterministic interchange workflow exports PDF, Markdown, DOCX, ODT,
 and RTF through a native save dialog. PDF is the default: a fixed A4 academic
 layout is produced from sanitized Pandoc HTML by an isolated Electron print
 renderer. Exports are derived artifacts and never replace the canonical project
-Markdown; citation markers may be preserved, but a formatted bibliography
-awaits the reference-library workflow.
+Markdown. When a document uses records from the project’s canonical
+`references.csl.json`, Pandoc citeproc now renders in-text citations and the
+bibliography automatically; unresolved keys are reported as export warnings.
+A compact export preflight remembers a project-level choice among Chicago
+author-date, APA, IEEE, and Elsevier Vancouver, or accepts a custom journal CSL file.
+The style affects PDF and office derivatives; canonical Markdown is unchanged.
 
 ### Exploratory
 
@@ -826,6 +851,14 @@ The initial catalogue should be small enough to test and refine thoroughly.
 - Improve flow.
 - Reduce repetition.
 - Preserve sentence structure where possible.
+
+**Current implementation:** Version 1 supports selection, section, and whole-
+document scope with Light copy-edit, Shorten, Improve flow, and Reduce
+repetition focuses. It may read only the scoped document, project instructions,
+and active writing profile, and may return prose changes only through
+`propose_patch`. The prompt explicitly prefers no patch over an ornamental
+rewrite and preserves qualifications, specialist terms, Pandoc citations,
+footnotes, links, code, and controlled HTML.
 
 ## 12.2 Remove typical LLM verbal ticks
 
@@ -870,6 +903,17 @@ The initial catalogue should be small enough to test and refine thoroughly.
 - Academic prose containing the same vocabulary legitimately.
 - The user's own recurring expressions that should normally be preserved.
 - Text where removing a phrase would alter caution or argumentative structure.
+
+**Current implementation:** Version 1 is audit-first and uses the shared skill
+launcher for selection, section, or whole-document scope. The default Audit
+first path returns compact numbered conversational findings with excerpt,
+category, confidence, explanation, and recommendation, but no initial patch.
+The user can naturally request selected findings later. Audit + rewrite clear
+cases may immediately propose minimal patches for high-confidence findings.
+Neither path infers AI authorship, and every textual change remains subject to
+ordinary patch review. A dedicated findings database and deterministic phrase
+scanner are deferred until real use demonstrates that they improve consistency
+enough to justify another product surface.
 
 ## 12.3 Structure and argument review
 
@@ -962,21 +1006,24 @@ The first usable release should prioritise the complete writing loop over featur
 14. DOCX and Markdown export; PDF if practical in the first release.
 15. Named checkpoints.
 
-**Implementation audit, 2026-07-22:** the core editor/agent/revision loop,
+**Implementation audit, 2026-07-30:** the core editor/agent/revision loop,
 projects, checkpoints, and deterministic Markdown/office/PDF interchange work
-on the current development branch. macOS distribution, the reusable writing
-archive, the full editable profile lifecycle, packaged rewrite/tick skills,
-and structured references/bibliography export remain incomplete. The active
-ordering and exit gates are maintained in
+on the current development branch. The first structured-reference workflow also
+works end to end: CSL JSON/BibTeX/RIS import, search-first citation
+insert/replace, compact manual creation, optional Crossref DOI autofill,
+unresolved-key audit, and citeproc bibliography export. Editing existing
+reference details and style selection, macOS distribution, the reusable writing
+archive, the full editable profile lifecycle, and packaged rewrite/tick skills
+remain incomplete. The active ordering and exit gates are maintained in
 [`development-plan.md`](development-plan.md); phase labels below remain product
 hypotheses rather than implementation status.
 
 ### 13.2 Can wait until the core loop is proven
 
 - Semantic archive search.
-- DOI resolution.
 - Zotero integration.
-- Complex batch reference repair.
+- Complex batch reference repair, handled by reviewable custom agent workflows
+  rather than expanding the core UI into a full reference manager.
 - Multi-document agent planning.
 - Extensive source/PDF research.
 - Collaboration.
@@ -1145,6 +1192,9 @@ When the document changed after a patch was generated:
 If the model call fails:
 
 - Preserve the prompt and context selection.
+- Persist the submitted prompt before contacting the provider; after a restart,
+  show interrupted work as aborted and retryable rather than silently dropping
+  it or leaving it indefinitely running.
 - Allow retry with the same or other model mode.
 - Do not lose document changes.
 
@@ -1156,19 +1206,28 @@ If a job partially succeeds:
 - Keep generated artifacts or patches that are independently valid.
 - Avoid applying incomplete document changes automatically.
 
-### 16.4 Invalid citation marker
+### 16.4 Close and project-switch failure
+
+- Flush pending editor input and await its canonical commit before closing the
+  window or replacing the active project.
+- If saving fails, keep the current window/project open and explain the error;
+  closing without saving requires an explicit user choice.
+- A project switch must abort and record active foreground work while the old
+  project database is still available.
+
+### 16.5 Invalid citation marker
 
 - Highlight the marker.
 - Explain the syntax problem.
 - Do not silently rewrite a citation key unless the match is unambiguous.
 
-### 16.5 Missing reference
+### 16.6 Missing reference
 
 - Mark the citation as unresolved.
 - Allow the user or a future resolver to attach a record.
 - Preserve the textual key during editing and export attempts.
 
-### 16.6 External file changes
+### 16.7 External file changes
 
 If project files can be edited outside the application:
 
@@ -1177,7 +1236,7 @@ If project files can be edited outside the application:
 - Avoid overwriting external edits.
 - Show a conflict if both versions changed incompatibly.
 
-### 16.7 Very large context
+### 16.8 Very large context
 
 When requested context exceeds a model's practical limit:
 

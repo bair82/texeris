@@ -29,7 +29,17 @@ export function describeContextAt(x: number, y: number): ContextDescriptor {
     active: conversation.dataset.contextConversationActive === 'true',
   };
   const message = element?.closest<HTMLElement>('[data-context-message-seq]');
-  if (message) return { kind: 'message', seq: Number(message.dataset.contextMessageSeq) };
+  if (message) return {
+    kind: 'message',
+    seq: Number(message.dataset.contextMessageSeq),
+    role:
+      message.dataset.contextMessageRole === 'user' ||
+      message.dataset.contextMessageRole === 'assistant'
+        ? message.dataset.contextMessageRole
+        : 'tool',
+    editable: message.dataset.contextMessageEditable === 'true',
+    regeneratable: message.dataset.contextMessageRegeneratable === 'true',
+  };
   if (element?.closest('.editor-host')) {
     return getEditorCommands()?.contextAt(x, y) ?? { kind: 'generic' };
   }

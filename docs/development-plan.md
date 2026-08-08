@@ -30,26 +30,26 @@ This plan is ordered around that thesis and the application that exists now.
 | Editor | Tiptap rendered mode and CodeMirror raw mode over one canonical Markdown file; autosave, revisions, checkpoints, find/replace, outline, tables, footnotes, images, and appearance settings. |
 | Agent loop | Fast/Deep chat, explicit selection/section/document scope, context manifest, edit awareness between turns, structured patch proposal/review, partial acceptance, conflicts, retry, cancel, and usage records. |
 | Conversations | Multiple named conversations with persistence, reopening, deletion, and native context menus. |
-| Writing profile | One built-in profile skill, scoped corpus grants, deterministic conversion, bounded corpus reads, delegated analysis, reviewable artifacts, explicit activation, and an optional patch-style critic. |
+| Skills and writing profile | A versioned application registry now exposes Conservative Rewrite through the command palette with explicit selection/section/document scope, focus, model mode, enforced tool allow-list, and patch-only mutation. The profile skill retains scoped corpus grants, delegated analysis, reviewable artifacts, explicit activation, and an optional patch-style critic. |
 | Interchange | Markdown, DOCX, ODT, and RTF import/export; image preservation; text-bearing PDF import; fixed-layout A4 PDF export. |
 | Recovery and security boundaries | Atomic canonical-file writes, startup reconciliation, append-oriented revision history, sandboxed renderer, narrow preload bridge, main-owned filesystem and credentials, and no agent shell/filesystem tools. |
-| Packaging | Linux AppImage builds and launches; pinned Pandoc is bundled and verified. macOS targets are configured but unbuilt. |
+| Packaging | Linux x64 AppImage and native macOS Apple Silicon/Intel DMG+ZIP targets build with pinned, checksum-verified Pandoc resources. Linux packaged launch is tested; macOS artifacts are unsigned and not notarised. |
 
 The local verification baseline is strong but narrower than the documentation
-has sometimes implied: TypeScript passes; Vitest reports 185 passing tests and
-2 conditional compatibility tests skipped; focused Electron smokes and the
+has sometimes implied: TypeScript passes; Vitest reports 257 passing tests and
+6 conditional tests skipped; focused Electron smokes and the
 packaged-app verifier pass.
 
 ### 2.2 What is partial or absent
 
 | Area | Status |
 |---|---|
-| References and citations | Citation syntax renders, but there is no CSL JSON library, insert/edit UI, unresolved-key audit, citeproc bibliography, or reference import. Export explicitly does not render a bibliography. |
-| Writing archive | Profile corpus grants are private, conversation-scoped inputs—not a browsable, searchable archive. There is no FTS5 archive UI or reusable attachment workflow. |
-| Skills | The runtime boundary exists, but the registry is hard-coded and only the writing-profile workflow is user-facing. Conservative rewrite and verbal-tick cleanup are not packaged skills with evaluations. |
+| References and citations | The everyday G2 workflow is operational: canonical project CSL JSON with a rebuildable SQLite index, import/manual add with DOI autofill, search-first insert/replace UI, unresolved-key audit, and citeproc PDF/office export with a remembered built-in or custom CSL style. Reference-detail editing remains. |
+| Writing archive | The first G3 slice is operational: workspace-local immutable snapshots, provenance and change status, conversion, passage-level FTS5 search/preview and repair, explicit chat attachments, deletion, and archive-selected writing-profile builds. Evaluated retrieval tuning remains. |
+| Skills | Conservative Rewrite and the audit-first LLM verbal-tick review have bounded launchers, prompt contracts, tool enforcement, versioned run records, reviewable patch output, and failure-oriented fixtures. A model-evaluation runner remains. |
 | PDF/source research | Text extraction exists; OCR, a source library, PDF viewing, page-linked reading, annotations, and question-answering over saved sources do not. |
 | Spellcheck | Chromium spellcheck remains unreliable in rendered mode and structurally unsuitable for CodeMirror decorations. The app-level replacement is undecided. |
-| Release engineering | No CI, no automated macOS artifact, no signing/notarisation, no application icon, no Linux `desktopName`, no release/versioning procedure, and no dependency-update policy. |
+| Release engineering | Linux CI typechecks, tests, builds, packages, and inspects the AppImage. A manual native macOS matrix produces inspected Apple Silicon and Intel artifacts. Signing/notarisation, an application icon, Linux `desktopName`, a release/versioning procedure, and a dependency-update policy remain. |
 
 ## 3. Audit findings
 
@@ -152,6 +152,36 @@ rapidly turning a prototype into a real application.
    reconciliation can recover after a crash, but an injected DB failure can
    leave the running process temporarily inconsistent. This needs explicit
    fault tests and a defined immediate-recovery path.
+7. **Recent editor input can be lost on close or project switch.** The editor
+   groups typing for five seconds, while teardown previously destroyed that
+   accumulator without awaiting the resulting IPC commit. The editor smoke
+   itself hid the gap with a 6.5-second wait. **Resolved 2026-07-30:** every
+   picker entry point, window close, and project adoption now requires a
+   renderer flush acknowledgement; the flush also awaits in-progress image
+   uploads and their reference commit. Save failures keep the window/project
+   open. Immediate-close and picker-mediated immediate-switch desktop checks
+   exercise the real timing path.
+8. **Persisted document paths can escape a project root.** A tampered/shared
+   project database could supply traversal or symlinked paths to ordinary
+   document services. **Resolved 2026-07-30:** every canonical Markdown path is
+   resolved through one project-confinement guard before reads, writes,
+   imports, revision commits, or asset reconciliation.
+9. **Project adoption can split service ownership during an active run.**
+   Closing the old database before runtime cancellation lets abort persistence
+   hit a closed handle. **Resolved 2026-07-30:** candidates are prepared
+   without disturbing the current context; runtime handoff runs while the old
+   database is open, and only then does the manager close and replace it.
+10. **A submitted prompt is not durable until provider completion.** A crash or
+    early provider failure can lose the user message while leaving a run marked
+    running. **Resolved 2026-07-30:** prompt, immutable turn context, and
+    running-run row commit transactionally before provider work. Startup marks
+    interrupted runs aborted while retaining their prompts.
+11. **Image ingest and editor commits race.** Uploading an image before flushing
+    earlier typing can make asset reconciliation delete the upload before its
+    reference commit arrives. **Resolved 2026-07-30:** newly uploaded assets
+    receive a short in-process lease until a canonical revision references
+    them; startup discards abandoned leases. A composed upload → unrelated
+    typing commit → image-reference commit test guards the sequence.
 
 ### 3.3 P1 — privacy, permission, and contract gaps
 
@@ -175,9 +205,13 @@ rapidly turning a prototype into a real application.
    bibliography-aware export, an archive, and a small evaluated skill set.
 2. Persistent undo across document/mode switches is revision-based in theory
    but not presented as a normal undo experience.
-3. **Conversation/document rewind is absent.** A writer cannot select an
-   earlier chat turn and return both the active conversation and document to
-   that historical point as one deliberate operation.
+3. **Conversation/document rewind is available through user-message editing.**
+   **Resolved 2026-07-29:** Edit message previews the rollback, creates a
+   non-destructive conversation branch, restores the scoped document at its
+   exact revision/change boundary, and resends with the original mode and
+   scope. Regenerate on the latest assistant response reuses the same safe
+   branch/restore operation without changing the prompt. Checkpoints retain
+   their existing document-only restore semantics.
 4. Section movement/folding and math remain meaningful document-authoring
    gaps. Split view and more themes are lower-value until real use says
    otherwise.
@@ -284,8 +318,16 @@ Work packages, in order:
    fed by a self-contained prepared artifact. Add progress/cancel/error status.
 5. **Fault injection:** test DB failure after file rename, interrupted export,
    missing source/cache, corrupted profile manifest, and startup reconciliation.
+   **Resolved 2026-07-29:** a failed revision transaction now restores the
+   canonical file immediately (including typing-tip amendments); focused tests
+   cover that split point, interrupted export cleanup, malformed profile
+   manifests, missing/tampered corpus derivatives, and startup reconciliation.
 6. **Contract hardening:** validate security-relevant IPC responses/events or
    narrow the documented guarantee to the actual boundary.
+   **Resolved 2026-07-29:** renderer requests remain runtime-decoded in main;
+   preload now decodes main push events that trigger actions or state changes.
+   Trusted invoke responses and display-only chat streams remain statically
+   typed, and the architecture now states that boundary explicitly.
 7. **Daily editor reliability:** fix active-document outline refresh; implement
    the app-level spellchecker after deciding initial languages and dictionary
    distribution; expose revision restore as the cross-session undo story.
@@ -294,9 +336,23 @@ Work packages, in order:
    boundary, then restore the document as a new revision and fork/reopen the
    conversation from that boundary. Preserve the abandoned conversation and
    revision history; invalidate or clearly retain pending patches by origin,
-   never silently delete evidence. Every history checkpoint carries a short
-   human-readable description (owner request 2026-08-08) so the rewind picker
-   is scannable without opening each preview.
+   never silently delete evidence.
+   **Resolved 2026-07-29:** the chosen UI is Edit message on persisted user
+   messages. Hover and native context-menu actions open an inline editor with a
+   rollback warning and optional compact diff. Save creates a transcript fork,
+   restores the one scoped document as a new revision, and resends; original
+   messages, revisions, and patches remain intact. The latest assistant response
+   also offers Regenerate through the same branch/restore path. General
+   checkpoint-linked conversation rewind is deferred rather than inferred from
+   legacy data. Every history checkpoint carries a short human-readable
+   description (owner request 2026-08-08) so history/rewind pickers stay
+   scannable without opening each preview.
+9. **Lifecycle integrity audit:** require awaited editor flushes for close and
+   project replacement; confine persisted document paths; make project/runtime
+   handoff ordered; persist prompts before provider work; and protect
+   just-uploaded assets across intervening commits.
+   **Resolved 2026-07-30:** all five paths have focused failure-mode tests, with
+   real Electron checks for immediate close and immediate project switch.
 
 Exit gate:
 
@@ -316,6 +372,33 @@ Decision first:
 - Choose a portable canonical CSL JSON representation and its relationship to
   SQLite indexing. Recommended shape: a user-inspectable project CSL JSON file
   as canonical data, with SQLite as a rebuildable search/index layer.
+
+**Decision (2026-07-30):** `references.csl.json` in the project root is the
+portable canonical library. SQLite’s `reference_index` is a disposable search
+projection and is rebuilt whenever the canonical file’s content hash changes.
+The first UI stays deliberately small: one Cite action opens a search palette;
+an empty palette offers bibliography import in place, and double-clicking a
+rendered marker reuses the palette to replace it. Export invokes citeproc
+automatically when the document cites records in the library.
+
+**Implemented first slice (2026-07-30):** stable-key validation, duplicate/key
+conflict reporting, external-file index repair, CSL JSON/BibTeX/RIS import,
+compact manual creation with generated keys and optional Crossref DOI autofill,
+author/title/year/key search, rendered and raw insertion, rendered replacement,
+missing/unused-key audit, and bibliography-aware PDF/DOCX/ODT/RTF export. The
+remaining G2 work is editing existing reference details, explicit missing-key
+resolution, and broader golden fixtures.
+
+Product boundary:
+
+- Keep the built-in citation surface focused on deterministic everyday work:
+  add/import records, search, insert or replace markers, inspect missing keys,
+  and export.
+- Defer complex reference reconciliation, batch metadata cleanup, citation
+  normalization across documents, and similar open-ended work to custom agent
+  workflows. Those workflows must propose structured reference/document
+  changes for review and use the existing validation/apply boundary; they do
+  not receive raw filesystem access or silently rewrite the canonical library.
 
 Work:
 
@@ -340,15 +423,26 @@ Exit gate:
 **Goal:** turn one-off profile corpora into a reusable local writing archive
 without conflating sources with bibliographic references.
 
-Work:
+Implemented first slice (2026-07-30):
 
-- Workspace archive with immutable source snapshots, provenance, metadata,
-  content hashes, duplicate detection, delete/retention controls, and FTS5.
-- Import status UI and conversion warnings for Markdown, text, office formats,
-  and text-bearing PDFs; retain PDF page markers.
-- Search results with excerpts and source/page locations; attach selected
-  results explicitly to a conversation or skill run.
-- Re-index and integrity repair commands.
+- Workspace-global archive with immutable source snapshots, original-path
+  provenance/change status, content hashes, duplicate detection, predictable
+  deletion, and a separate SQLite/FTS5 projection.
+- Import progress and conversion warnings for Markdown, text, office formats,
+  and text-bearing PDFs; PDF derivatives retain page markers.
+- Passage search with excerpts and heading/page locations, source preview, and
+  visible explicit attachments to chat turns. Attachment IDs are persisted in
+  turn manifests and survive edit/regenerate rewind.
+- Selected archived works can feed the existing writing-profile workflow
+  without reselecting their original files.
+- A user-triggered re-index operation atomically rebuilds FTS5 from the stored
+  passage rows in a cancellable worker. Stable passage IDs are preserved, so
+  existing chat manifests and attachments remain resolvable.
+
+Remaining work:
+
+- Derivative/snapshot integrity reporting and bounded repair where canonical
+  local data is sufficient; never fabricate or silently replace a snapshot.
 - Evaluate actual FTS misses before selecting embeddings or a vector store.
 
 Exit gate:
@@ -364,11 +458,15 @@ collection of prompts hidden in code.
 Work:
 
 - Small application-owned skill registry and launcher with explicit scope,
-  mode, allowed tools, output type, and version.
+  mode, allowed tools, output type, and version. The first launcher and runtime
+  allow-list enforcement are implemented for Conservative Rewrite.
 - Ship conservative rewrite and verbal-tick audit/rewrite as the next two
   skills; preserve patch review as the only prose mutation route.
+  Both initial skills are implemented.
 - Add compact deterministic/model-assisted evaluation fixtures before adding
-  more skills.
+  more skills. Initial preservation, no-op, terminology, and scope-boundary
+  cases ship with Conservative Rewrite; the verbal-tick set balances genuine
+  findings against phrase-match false positives. A model runner remains.
 - Finish profile lifecycle: update/rebuild, provenance, genre variants,
   activation history, disable/delete, and clear distinction between observed
   habits and desired rules.
@@ -406,13 +504,16 @@ Work:
 
 - App icon, Linux desktop identity, licence and third-party notices, semantic
   versioning, changelog, checksums, and reproducible release notes.
-- Automated Linux artifacts and a real macOS build/test lane; signing and
-  notarisation when distribution extends beyond personal use.
+- Promote the manual native macOS packaging matrix into the release process;
+  add signing and notarisation when distribution extends beyond personal use.
 - Migration compatibility tests from every released project schema.
 - Accessibility pass for keyboard, focus, semantics, contrast, and reduced
   motion; performance budgets for large manuscripts and archives.
 - Backup/export documentation for project and workspace-global profile/archive
   data.
+- Searchable in-app Help backed by versioned shipped Markdown, with contextual
+  links from relevant empty/error states. Keep `welcome.md` as orientation,
+  not the permanent manual.
 
 ## 6. Prioritised next queue
 
@@ -427,14 +528,18 @@ Do not begin G2 until items 1–7 are closed:
    creation.~~ Done 2026-07-26 (immutable snapshots, PR #5).
 7. ~~Move expensive conversion/extraction work into cancellable jobs.~~ Done
    2026-07-26 (worker-thread jobs with progress/cancel).
-8. Add safe conversation/document rewind with preview and non-destructive
-   conversation branching.
-9. Build references/citation library and bibliography-aware export (G2).
-10. Build archive + FTS5 retrieval (G3).
+8. ~~Add safe conversation/document rewind with preview and non-destructive
+   conversation branching.~~ Done 2026-07-29 through Edit message; checkpoints
+   remain document-only.
+9. ~~Ship the everyday reference/citation library and bibliography-aware
+   export slice (G2).~~ Done 2026-07-30; reference-detail editing remains.
+10. ~~Build archive + FTS5 retrieval (G3), including deterministic search-index
+    rebuild.~~ Done 2026-07-30; tune retrieval only from observed misses.
 11. Productise and evaluate the next two skills (G4).
 12. Resume app-level spellcheck as a bounded daily-use package; it may move
    earlier if current writing sessions make it more costly than items 6–7.
-13. Only then consider math, section manipulation, PDF viewing/OCR, split view,
+13. Add the lightweight searchable Help system before broader distribution.
+14. Only then consider math, section manipulation, PDF viewing/OCR, split view,
    additional themes, a console, or generic AI shortcuts.
 
 ## 7. Definition of done for every work package

@@ -3,8 +3,9 @@ import { Type, type Static } from '@sinclair/typebox';
 /**
  * Chat/agent domain + IPC types shared by main, preload, and renderer.
  * Request payloads (renderer → main) are validated in main against these
- * schemas; events (main → renderer) originate in the trusted process and
- * are not re-validated.
+ * schemas. Streaming chat events originate in trusted main code and carry
+ * display content only; any later renderer request is validated again by
+ * main.
  */
 
 export type ModelMode = 'fast' | 'deep';
@@ -26,27 +27,38 @@ export const ContextScopeSchema = Type.Union([
   }),
 ]);
 
-export interface ContextManifestItem {
-  label: string;
-  chars: number;
-}
+export const ContextManifestItemSchema = Type.Object({
+  label: Type.String(),
+  chars: Type.Integer({ minimum: 0 }),
+});
+export type ContextManifestItem = Static<typeof ContextManifestItemSchema>;
 
 /** What actually went into the model's context for a run (plan §11). */
-export interface ContextManifest {
-  scope: ContextScope;
-  documentId: string;
-  items: ContextManifestItem[];
-  baseRevision: number;
+export const ContextManifestSchema = Type.Object({
+  scope: ContextScopeSchema,
+  documentId: Type.String(),
+  items: Type.Array(ContextManifestItemSchema),
+  baseRevision: Type.Integer({ minimum: 0 }),
   /**
    * Number of change rows the base revision had when this context was
    * assembled. Revision coalescing appends user typing to the tip revision,
    * so "what changed since the run" is tracked by change index, not only by
    * revision number. Absent in manifests predating coalescing.
    */
-  baseChangeCount?: number;
-  truncated: boolean;
-  notices: string[];
-}
+  baseChangeCount: Type.Optional(Type.Integer({ minimum: 0 })),
+  truncated: Type.Boolean(),
+  notices: Type.Array(Type.String()),
+  archivePassageIds: Type.Optional(Type.Array(Type.String(), { maxItems: 12 })),
+});
+export type ContextManifest = Static<typeof ContextManifestSchema>;
+
+/** Self-contained boundary stored with a persisted user message. */
+export const TurnContextSchema = Type.Object({
+  runId: Type.String(),
+  mode: Type.Union([Type.Literal('fast'), Type.Literal('deep')]),
+  manifest: ContextManifestSchema,
+});
+export type TurnContext = Static<typeof TurnContextSchema>;
 
 export interface UsageSummary {
   input: number;
@@ -122,11 +134,42 @@ export interface UiMessage {
   isError?: boolean;
 }
 
+export interface EditMessagePreview {
+  conversationId: string;
+  messageSeq: number;
+  text: string;
+  mode: ModelMode;
+  scope: ContextScope;
+  documentId: string;
+  documentPath: string;
+  targetRevision: number;
+  targetChangeCount: number;
+  currentRevision: number;
+  boundaryExact: boolean;
+  documentChanged: boolean;
+  laterMessageCount: number;
+  pendingPatchCount: number;
+  currentText: string;
+  targetText: string;
+  archivePassageIds?: string[];
+}
+
+export interface ForkMessageResult {
+  originalConversationId: string;
+  conversationId: string;
+  documentId: string;
+  restoredRevision: number;
+  mode: ModelMode;
+  scope: ContextScope;
+  archivePassageIds?: string[];
+}
+
 export const StartTurnRequestSchema = Type.Object({
   conversationId: Type.String(),
   text: Type.String({ minLength: 1 }),
   mode: Type.Union([Type.Literal('fast'), Type.Literal('deep')]),
   scope: ContextScopeSchema,
+  archivePassageIds: Type.Optional(Type.Array(Type.String(), { maxItems: 12 })),
 });
 export type StartTurnRequest = Static<typeof StartTurnRequestSchema>;
 
@@ -138,6 +181,15 @@ export const ConversationRequestSchema = Type.Object({
 });
 export type ConversationRequest = Static<typeof ConversationRequestSchema>;
 
+export const EditMessageRequestSchema = Type.Object({
+  conversationId: Type.String(),
+  messageSeq: Type.Integer({ minimum: 1 }),
+  reason: Type.Optional(
+    Type.Union([Type.Literal('edit'), Type.Literal('regenerate')]),
+  ),
+});
+export type EditMessageRequest = Static<typeof EditMessageRequestSchema>;
+
 export const ChatChannels = {
   getOrCreateConversation: 'texeris:chat-get-or-create-conversation',
   newConversation: 'texeris:chat-new-conversation',
@@ -147,6 +199,8 @@ export const ChatChannels = {
   listMessages: 'texeris:chat-list-messages',
   listRuns: 'texeris:chat-list-runs',
   listDelegations: 'texeris:chat-list-delegations',
+  previewMessageEdit: 'texeris:chat-preview-message-edit',
+  forkMessage: 'texeris:chat-fork-message',
   startTurn: 'texeris:chat-start-turn',
   cancel: 'texeris:chat-cancel',
   /** main → renderer push channel for NormalizedAgentEvent */

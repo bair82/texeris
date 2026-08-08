@@ -97,6 +97,32 @@ describe('assembleContext', () => {
     expect(contextText).toContain('Write plainly.');
     expect(manifest.items.map((i) => i.label)).toContain('project-instructions.md');
   });
+
+  it('includes explicitly attached archive passages and records their IDs', () => {
+    const { contextText, manifest } = assembleContext(
+      ctx,
+      { kind: 'document' },
+      undefined,
+      [{
+        passageId: 'passage-1',
+        sourceId: 'source-1',
+        title: 'Earlier Paper',
+        heading: 'Discussion',
+        page: 7,
+        excerpt: 'A characteristic sentence from the author’s earlier work.',
+        startOffset: 320,
+      }],
+    );
+
+    expect(contextText).toContain('<writing-archive>');
+    expect(contextText).toContain('title="Earlier Paper"');
+    expect(contextText).toContain('section="Discussion"');
+    expect(contextText).toContain('A characteristic sentence');
+    expect(manifest.archivePassageIds).toEqual(['passage-1']);
+    expect(manifest.items.at(-1)).toMatchObject({
+      label: 'Earlier Paper § Discussion · p. 7 (archive)',
+    });
+  });
 });
 
 describe('buildSystemPrompt', () => {

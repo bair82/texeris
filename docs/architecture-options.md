@@ -141,6 +141,14 @@ A skill should be more than a prompt file. Even when implemented through Pi skil
 
 This makes skills easier to present, test, and constrain.
 
+The first implementation keeps this metadata in the application-owned
+registry. Launchable skills are exposed over a narrow validated IPC contract;
+the renderer supplies explicit document scope, option, and model mode. At run
+creation, the runtime resolves the persisted skill ID and exact version and
+filters the application tool set to the skill's allow-list. Unknown skills or
+versions fail closed. This is intentionally a small built-in registry rather
+than a general third-party package loader.
+
 ---
 
 ## 4. Recommended starting architecture
@@ -396,7 +404,13 @@ type AppRequest =
   | { type: "export.run"; input: ExportInput };
 ```
 
-Validate IPC payloads at runtime. TypeScript types alone do not protect a process boundary.
+Treat renderer-to-main requests as untrusted and decode them at runtime in
+main; TypeScript types alone do not protect that process boundary. Decode
+main-to-renderer push events in preload when they trigger renderer actions or
+state changes. Ordinary invoke responses and streaming chat display events
+originate in trusted main code and remain statically typed; any renderer
+request they lead to is decoded again in main. This is the current trust model,
+not a claim that every value crossing IPC is redundantly decoded.
 
 ## 7.5 Native context menus
 
@@ -424,7 +438,7 @@ Example:
 my-paper/
   manuscript.md
   notes.md
-  references.json
+  references.csl.json
   style.md
   sources/
   .scholar-workspace/
@@ -476,6 +490,21 @@ Prefer a hybrid, file-centric model:
 - The application writes files atomically.
 - The database stores file hashes and known versions.
 - External changes are detected and imported as revisions.
+- Every persisted Markdown path is treated as untrusted project data and
+  passes one confinement resolver before filesystem access. Traversal,
+  absolute/drive paths, non-Markdown targets, and existing symlink escapes are
+  rejected.
+
+Closing a window or replacing a project is an awaited lifecycle operation:
+main requests a renderer flush, the renderer drains the editor accumulator and
+all pending image uploads and document commits, and main proceeds only after
+acknowledgement. Opening the project picker itself uses the same flush before
+unmounting the editor. Project candidates are opened first; runtime
+cancellation/handoff happens while the previous database is still valid, then
+the manager closes and replaces the old context. The incoming file watcher is
+also established before adoption, so a watcher setup failure cannot leave main
+and renderer on different projects. A failed flush leaves the current
+window/project intact.
 
 This is a default, not an irreversible commitment. A prototype may initially keep everything in SQLite if that accelerates the revision loop. Before real projects accumulate, choose and document the canonical source of truth.
 
@@ -788,6 +817,28 @@ Normalising events prevents UI code from becoming tightly coupled to one provide
 
 Persist application-level conversations independently of Pi's native session format. Pi-specific session data may be retained for continuity or debugging, but the product should be able to reconstruct a conversation and relevant context from its own records.
 
+Submission durability starts before provider work. The user `AgentMessage`, its
+turn context, and the `running` agent-run row are inserted in one SQLite
+transaction. Provider completion appends only the remaining assistant/tool
+messages, avoiding a duplicate user turn. On project open, any run still marked
+`running` is classified as `aborted` with an interruption reason; its submitted
+prompt remains available for retry.
+
+User-message editing is the first conversation/document rewind surface. Each
+persisted user message stores a compact, application-owned turn context: model
+mode, scope, document id, base revision, and the change count within that
+revision. The change count matters because recent typing can amend the tip
+revision after a turn starts. Saving an edited message copies only earlier
+transcript messages into a new conversation, records the fork origin, restores
+the scoped document as a new append-only revision, and resends with the
+original mode and scope. Runs, delegations, corpus grants, and patches are not
+copied; pending patches remain visibly attributable to the preserved original
+conversation. Regenerating the latest completed assistant response uses this
+same operation at its preceding user message without changing the prompt; the
+fork is labelled `regenerated` and the original response remains available.
+Checkpoints remain document-only until a demonstrated workflow requires linking
+them to conversation boundaries.
+
 ## 12.5 Context assembly
 
 Create a context-building layer that takes:
@@ -919,6 +970,12 @@ Each skill should have:
 
 Do not require a large evaluation platform initially. A directory of cases and a command that runs them against Fast and Deep models is enough.
 
+Conservative Rewrite v1 establishes the initial test shape: unit tests protect
+registry metadata, prompt constraints, exact version handling, and effective
+tool filtering; an offline Electron smoke covers command discovery, launcher
+escape/launch, patch review, acceptance, and undo. JSON fixtures record
+meaning-preservation failures for a later Fast/Deep model-evaluation runner.
+
 ---
 
 ## 15. Architecture of the LLM-verbal-ticks skill
@@ -951,6 +1008,14 @@ Possible stages:
    - Generate patches only for selected or high-confidence findings.
 
 A pure phrase blacklist will have too many false positives. A pure model pass will be inconsistent and harder to evaluate.
+
+The initial product slice starts with contextual model review and a balanced
+fixture set rather than shipping a brittle phrase blacklist. Findings are
+numbered, structured conversational output in the persisted skill
+conversation; users can request selected rewrites in ordinary language.
+`propose_patch` remains the only prose mutation path. A dedicated findings
+table/card and deterministic candidate pass are deferred until observed
+misses, inconsistency, or scale justify them.
 
 ## 15.2 Findings schema
 
@@ -1039,15 +1104,25 @@ The underlying document remains text. Clicking a marker can open a reference pop
 
 CSL JSON is a strong default for structured reference records because Pandoc and CSL processors can consume it.
 
-Possible arrangement:
+Implemented arrangement:
 
 ```text
-references.json
+references.csl.json
 ```
 
-or one reference table in SQLite with export to CSL JSON. The choice depends on whether file portability or transactional editing matters more.
+**Outcome (2026-07-30):** the project-root CSL JSON file is canonical and
+user-inspectable. SQLite’s `reference_index` is only a rebuildable search
+projection; a content hash detects external edits and repairs the index before
+reads. Imports preserve complete CSL records in the canonical file. This keeps
+Pandoc interoperability and recovery independent of Texeris while retaining
+fast local search.
 
-A hybrid is possible: JSON is the project interchange file; SQLite is the indexed working representation.
+Manual creation requires only a title; authors, year, type, DOI, URL, and the
+generated citation key remain editable. DOI enrichment is an explicit user
+action against Crossref’s public single-work endpoint. Only the DOI is sent;
+document text and project metadata stay local. A failed or missing lookup never
+blocks manual creation, and successful metadata is copied into the canonical
+CSL record rather than becoming a live external dependency.
 
 ## 16.4 Parsing and validation
 
@@ -1063,9 +1138,26 @@ Citation validation should be deterministic:
 
 Use Pandoc with citeproc and a chosen CSL style during export. The application can provide a preview, but the canonical manuscript need not contain formatted citation text.
 
+Implemented export settings are deliberately narrow: `.texeris/project.json`
+stores the selected style ID, four common CSL styles ship as offline resources,
+and a user-selected journal style is validated then copied to
+`.texeris/citation-style.csl`. The worker receives only the resolved
+application-owned style path and passes it to Pandoc with `--csl`; the
+unprivileged renderer never receives filesystem paths. Custom files must be
+independent styles containing their formatting rules; dependent CSL aliases
+are rejected with a focused message rather than failing later inside Pandoc.
+
 ## 16.6 Deferred evidence verification
 
 Do not mix reference resolution with claim verification in the first implementation. Evidence verification requires source acquisition, text extraction, page mapping, and uncertain model judgement. Preserve architecture room for source links later, but do not block the citation-marker feature on it.
+
+Complex citation maintenance is also not a reason to grow the core reference UI
+into a full reference manager. Batch reconciliation, metadata repair, and
+cross-document normalization can be packaged later as custom agent workflows.
+They should operate through domain-specific reference audit/proposal tools and
+produce reviewable structured changes against the canonical CSL JSON and
+document revisions. The application remains responsible for validation and
+apply; an agent never mutates either file directly.
 
 ---
 
@@ -1120,8 +1212,9 @@ A typical export job:
 - GUI applications on macOS and Linux may not inherit the user's shell PATH as expected.
 
 A personal prototype can use a configured system Pandoc. Texeris now uses that
-only as a development convenience; Linux distributions bundle the pinned
-converter so release behaviour is independent of the user's PATH.
+only as a development convenience; Linux and macOS distributions bundle the
+pinned converter for their exact platform and architecture so release
+behaviour is independent of the user's PATH.
 
 ### Current PDF derivative path
 
@@ -1198,6 +1291,31 @@ Add semantic search when full-text search demonstrably misses important use case
 ## 18.4 Archive versus current project
 
 Keep them logically separate. Searching “the project” and searching “all previous writing” should be distinct operations with visible scope.
+
+## 18.5 Implemented local archive boundary
+
+The G3 first slice stores workspace-global archive state under the application
+workspace directory, separate from project databases and bibliographic
+references:
+
+```text
+archive/
+  archive.sqlite       # source metadata, passages, FTS5 projection
+  snapshots/           # immutable imported bytes
+  derivatives/         # integrity-checked searchable Markdown
+```
+
+The Electron main process owns import, conversion, indexing, preview,
+retrieval, and deletion. The sandboxed renderer receives only typed archive
+records through the preload bridge. Search never adds model context by itself:
+the user attaches stable passage IDs, main resolves those IDs to raw saved
+passages for the turn, and the context manifest records the IDs. Profile builds
+reuse archived snapshots through the existing conversation-scoped corpus grant
+path. The FTS5 table is explicitly disposable: a user-triggered worker task
+rebuilds it atomically from `archive_sources` and `archive_passages`, preserving
+passage IDs already stored in conversation manifests. This intentionally leaves
+embeddings, live-folder watching, OCR, tags, and automatic retrieval outside
+the first slice.
 
 ---
 
@@ -1298,7 +1416,11 @@ Pandoc the project root as its resource path so those images are re-embedded.
 Paste and drag/drop use the same layout: the renderer sends validated image
 bytes over the narrow preload bridge, the main process writes a content-hashed
 asset, and the editor inserts only its project-relative reference. Alt text and
-captions are image-node attributes serialized into controlled HTML. Asset
+captions are image-node attributes serialized into controlled HTML. A new
+upload is leased in process until a canonical document revision references it,
+so flushing earlier typing cannot make reconciliation delete the file between
+upload and paste. Project-open reconciliation treats any leftover lease as an
+interrupted upload and removes it if no revision references it. Asset
 reconciliation runs after canonical revisions and at project open: current
 references stay public, files needed only by an older revision move to hidden
 `.texeris/asset-trash/`, and files referenced by no actual revision are
@@ -1416,7 +1538,8 @@ Security is not the initial product differentiator, but several defaults prevent
 
 - Enable renderer sandboxing and context isolation in Electron.
 - Expose only the required preload APIs.
-- Validate all IPC payloads.
+- Runtime-validate untrusted renderer requests and action/state push events at
+  their receiving boundary.
 - Keep provider credentials outside project files.
 - Treat imported HTML/web content as untrusted text.
 - Do not render arbitrary source HTML with application privileges.
@@ -1520,6 +1643,11 @@ Potential deliverables:
 - Notarisation if distribution extends beyond personal use.
 
 For personal use, signing and notarisation can be deferred, but the build process should not assume that forever.
+
+Texeris builds separate unsigned Apple Silicon and Intel DMG/ZIP artifacts on
+native GitHub-hosted macOS runners. Each build checksum-verifies and bundles
+the matching Pandoc executable, inspects the unpacked resources, and publishes
+SHA-256 checksums with the workflow artifact.
 
 ## 25.2 Linux
 

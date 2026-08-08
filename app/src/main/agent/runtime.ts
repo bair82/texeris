@@ -16,14 +16,15 @@ import type { ProjectContext } from '../services/project';
 import type { WorkspaceConfig } from '../services/settings';
 import type { ChangeSummary } from './changes';
 import { summarizeChangesSince } from './changes';
-import { assembleContext, buildSystemPrompt } from './context';
+import { assembleContext, buildSystemPrompt, DOC_BUDGET_CHARS } from './context';
 import { createAgentTools } from './tools';
 import type { CorpusService } from '../services/corpus';
 import { CorpusService as DefaultCorpusService } from '../services/corpus';
 import { WritingProfileService } from '../services/profile';
 import { AgentCoordinator } from './coordinator';
 import { PatchStyleGate } from './styleCritic';
-import { skillById } from './skills';
+import { skillById, type SkillDefinition } from './skills';
+import type { ArchiveService } from '../services/archive';
 
 /**
  * The AgentRuntime adapter (plan §10.1): one Pi Agent per conversation,
@@ -87,6 +88,7 @@ class EventQueue<T> implements AsyncIterable<T> {
 interface ActiveRun {
   runId: string;
   conversationId: string;
+  mode: ModelMode;
   agent: Agent;
   queue: EventQueue<NormalizedAgentEvent>;
   unsubscribe: () => void;
@@ -102,6 +104,7 @@ export class PiAgentRuntime implements AgentRuntime {
   private styleGate: PatchStyleGate;
   private corpus: CorpusService;
   private profiles: WritingProfileService;
+  private archive: Pick<ArchiveService, 'passages'>;
 
   constructor(
     private readonly options: {
@@ -112,12 +115,14 @@ export class PiAgentRuntime implements AgentRuntime {
       patches: PatchService;
       corpus?: CorpusService;
       profiles?: WritingProfileService;
+      archive?: ArchiveService;
       /** Per-provider key lookup (stored keychain key wins over env). */
       credentials?: { getApiKey(provider: string): string | undefined };
     },
   ) {
     this.corpus = options.corpus ?? new DefaultCorpusService();
     this.profiles = options.profiles ?? new WritingProfileService(options.config);
+    this.archive = options.archive ?? { passages: () => [] };
     this.coordinator = this.makeCoordinator(options.project);
     this.styleGate = new PatchStyleGate({
       models: options.models,
@@ -131,7 +136,17 @@ export class PiAgentRuntime implements AgentRuntime {
   async startTurn(input: StartTurnRequest): Promise<{ runId: string }> {
     this.assertIdle();
     const { project } = this.options;
-    const assembled = assembleContext(project, input.scope);
+    const requestedArchiveIds = [...new Set(input.archivePassageIds ?? [])];
+    const archivePassages = this.archive.passages(requestedArchiveIds);
+    if (archivePassages.length !== requestedArchiveIds.length) {
+      throw new Error('one or more attached archive passages are no longer available');
+    }
+    const assembled = assembleContext(
+      project,
+      input.scope,
+      DOC_BUDGET_CHARS,
+      archivePassages,
+    );
     const modeConfig = this.options.config.modes[input.mode];
     const model = this.options.models.getModel(modeConfig.provider, modeConfig.model);
     if (!model) {
@@ -142,7 +157,15 @@ export class PiAgentRuntime implements AgentRuntime {
 
     const conversationContext = this.options.conversations.context(input.conversationId);
     const skill = skillById(conversationContext.skillId);
-    const agent = this.agentFor(input.conversationId, model, skill?.id);
+    if (conversationContext.skillId && !skill) {
+      throw new Error(`unsupported skill: ${conversationContext.skillId}`);
+    }
+    if (skill && conversationContext.skillVersion !== skill.version) {
+      throw new Error(
+        `unsupported ${skill.name} version: ${conversationContext.skillVersion ?? 'unknown'}`,
+      );
+    }
+    const agent = this.agentFor(input.conversationId, model, skill);
     if (agent.state.isStreaming) {
       // Our run map cleared at agent_end; the agent may still be settling
       // listeners — wait for that, then proceed.
@@ -168,7 +191,7 @@ export class PiAgentRuntime implements AgentRuntime {
     agent.state.systemPrompt = this.systemPrompt(assembled, changeSummary, skill?.instructions);
     agent.state.model = model;
 
-    const runId = this.options.conversations.startRun({
+    const runId = this.options.conversations.startTurn({
       conversationId: input.conversationId,
       modelMode: input.mode,
       provider: modeConfig.provider,
@@ -176,7 +199,7 @@ export class PiAgentRuntime implements AgentRuntime {
       manifest: assembled.manifest,
       skillId: skill?.id,
       skillVersion: skill?.version,
-    });
+    }, input.text);
     this.activeRunContext = {
       conversationId: input.conversationId,
       runId,
@@ -189,6 +212,7 @@ export class PiAgentRuntime implements AgentRuntime {
     const run: ActiveRun = {
       runId,
       conversationId: input.conversationId,
+      mode: input.mode,
       agent,
       queue,
       unsubscribe: () => undefined,
@@ -273,39 +297,47 @@ export class PiAgentRuntime implements AgentRuntime {
   }
 
   /** One Agent per conversation; history replayed verbatim from SQLite. */
-  private agentFor(conversationId: string, model: Agent['state']['model'], skillId?: string): Agent {
+  private agentFor(
+    conversationId: string,
+    model: Agent['state']['model'],
+    skill: SkillDefinition | null,
+  ): Agent {
     const existing = this.agents.get(conversationId);
     if (existing) {
       return existing;
     }
     const messages = this.options.conversations.listAgentMessages(conversationId);
+    const tools = createAgentTools(
+      this.options.project,
+      this.options.patches,
+      () => this.activeRunContext,
+      {
+        conversationId,
+        skillId: skill?.id,
+        corpus: this.corpus,
+        profiles: this.profiles,
+        coordinator: this.coordinator,
+        propose: (runId, task, input, origin) => this.styleGate.propose(runId, task, input, origin),
+        verifyApproval: (id, quote) => this.options.conversations.latestUserText(id).includes(quote),
+        onProfileArtifacts: (artifacts) => {
+          const current = this.activeRunContext;
+          if (!current) return;
+          this.runs.get(current.runId)?.queue.push({
+            type: 'profile_artifacts_created',
+            runId: current.runId,
+            ...artifacts,
+          });
+        },
+      },
+    );
+    const allowedTools = skill
+      ? tools.filter((tool) => skill.allowedTools.includes(tool.name))
+      : tools;
     const agent = new Agent({
       initialState: {
         systemPrompt: '',
         model,
-        tools: createAgentTools(
-          this.options.project,
-          this.options.patches,
-          () => this.activeRunContext,
-          {
-            conversationId,
-            skillId,
-            corpus: this.corpus,
-            profiles: this.profiles,
-            coordinator: this.coordinator,
-            propose: (runId, task, input, origin) => this.styleGate.propose(runId, task, input, origin),
-            verifyApproval: (id, quote) => this.options.conversations.latestUserText(id).includes(quote),
-            onProfileArtifacts: (artifacts) => {
-              const current = this.activeRunContext;
-              if (!current) return;
-              this.runs.get(current.runId)?.queue.push({
-                type: 'profile_artifacts_created',
-                runId: current.runId,
-                ...artifacts,
-              });
-            },
-          },
-        ),
+        tools: allowedTools,
         messages,
       },
       streamFn: (m, c, o) => this.options.models.streamSimple(m, c, o),
@@ -318,7 +350,11 @@ export class PiAgentRuntime implements AgentRuntime {
 
   private finishRun(run: ActiveRun, newMessages: AgentMessage[]): void {
     const { conversations } = this.options;
-    conversations.appendMessages(run.conversationId, newMessages);
+    const remaining =
+      newMessages[0]?.role === 'user' ? newMessages.slice(1) : newMessages;
+    if (remaining.length > 0) {
+      conversations.appendMessages(run.conversationId, remaining);
+    }
 
     const assistant = newMessages.filter((m) => m.role === 'assistant');
     const usage = sumUsage(assistant);

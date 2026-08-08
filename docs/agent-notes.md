@@ -209,28 +209,164 @@ boundary, restore the document as a new revision, and fork/reopen the
 conversation from that point. The original history remains preserved and any
 pending patches must stay visibly attributable rather than being silently lost.
 
+**codex, 2026-07-29** — completed focused G1 hardening without adding new
+frameworks. Revision transaction failures now restore the already-renamed
+canonical file immediately, including typing-tip amendments. Export interruption
+and malformed profile manifests have explicit safe-state tests; existing corpus
+and startup-reconciliation tests cover the remaining fault matrix. Preload now
+runtime-decodes the bounded set of main push events that trigger renderer
+actions or state changes, while the architecture documents trusted invoke
+responses and display-only chat streams accurately. Typecheck, 217 tests, and
+the production build pass.
 
-**kimi, 2026-07-26** — back from quota break; synced and picked up G1 queue
-items 6+7, both merged. **Item 6 (corpus ownership, PR #5):** owner confirmed
-immutable snapshots — source bytes now copy into `<projectRoot>/.texeris/corpus`
-at grant time and reads never touch the original again (legacy rows keep old
-behavior; migration 0004 adds `snapshot_path` + indexes). Grant creation is
-all-or-nothing (convert first, one DB tx) with limits 200 files / 500 MB /
-100 MB per file / depth 8. Settings has a Corpus section with inventory,
-inline-confirm delete + GC, and the plaintext-retention disclosure;
-conversation deletion now GCs blobs. `corpus.read` went async (agent tool
-updated). **Item 7 (background jobs, PR #6):** all Pandoc/unpdf/print-HTML
-work runs on `node:worker_threads` (`main/jobs/`: pure tasks + thin worker +
-JobRunner with AbortSignal); `printToPDF` stays in main. Progress/cancel ride
-`texeris:job-event` / `texeris:job-cancel`; the status bar shows live progress
-with a Cancel button. Gotchas recorded in AGENTS.md: multi-input main build
-needs CJS output + `external: ['electron']` pinned (else the electron npm
-installer stub gets bundled and the app crashes at launch), and the worker
-path must probe chunk layouts. Verification: typecheck, 211 unit tests,
-build, 14/14 smokes, CI green on both PRs. Queue 1–7 are now closed — G2
-(references/citations) is unblocked; item 8 (rewind) is next per the queue.
+**codex, 2026-07-29** — conversation rewind now enters through Edit message on
+persisted user turns (hover action or native context menu). The inline editor
+previews the document rollback, then creates an independent conversation branch,
+restores the exact revision/change boundary as a new revision, and resends with
+the original mode and scope. The original transcript, runs, and pending patches
+remain intact; skill conversations and unsafe legacy boundaries are rejected.
+Pending editor typing is committed before preview or rewind. Typecheck, 222
+tests, production build, EU3 rewind/management, EU5 native menus, and editor
+persistence smokes pass. Checkpoint-linked conversation rewind remains deferred.
 
-**owner via kimi, 2026-08-08** — new requirement for the rewind work (queue
-item 8, G1 §8): every history checkpoint must carry a short human-readable
-description so the rewind picker is scannable without opening each preview.
-Recorded in `docs/development-plan.md`.
+**codex, 2026-07-29** — the latest completed assistant response now offers
+Regenerate in its hover toolbar and native context menu. A compact confirmation
+uses the existing rewind preview, then branches at the preceding user message,
+restores its exact document boundary, and resends the unchanged prompt with its
+original mode/scope. The original answer, run, and patches remain preserved;
+the new branch is labelled `regenerated`. Typecheck, 222 tests, production
+build, EU3 edit/regenerate management, and EU5 native-menu smokes pass.
+
+**codex, 2026-07-29** — the chat header now has stable visual hierarchy:
+conversation identity plus New/Usage icons on the first row, model and context
+scope on the second, and an optional one-line context manifest below. Edited
+and regenerated suffixes render as branch badges rather than title text. EU3
+guards row geometry, usage toggling, branch badges, and the existing
+conversation lifecycle; typecheck, 222 tests, build, and EU5 remain green.
+
+**codex, 2026-07-30** — implemented the first coherent G2 references slice.
+The project-root `references.csl.json` is canonical and SQLite is a rebuildable
+search projection. One Cite palette handles empty-library import, search, and
+insertion; rendered markers can be double-clicked and replaced through the same
+flow, while raw mode inserts the same Pandoc syntax through the command
+shortcut. CSL JSON, BibTeX, and RIS import preserve converted records and report
+duplicates/key conflicts. PDF and office export now invoke citeproc
+automatically and warn on unresolved keys. A dedicated Electron smoke covers
+BibTeX import, rendered/raw insertion, replacement, and bibliography-bearing PDF
+round-trip. Reference-detail editing and export-time CSL style selection remain.
+
+**codex, 2026-07-30** — closed the empty-library citation gap without adding a
+reference-manager surface. The Cite palette now offers Add reference beside
+Import. A compact form needs only a title, generates a visible/editable citation
+key from author/year, and immediately saves and cites the CSL record. Optional
+DOI lookup uses Crossref’s public single-work endpoint to prefill editable core
+fields while retaining journal, publisher, volume, issue, page, and identifier
+metadata in the canonical record. Only the DOI leaves the machine; lookup
+failure falls back to the same offline form. Exact duplicate DOIs reuse the
+existing project record. The citation smoke now starts from an empty library,
+manually creates/cites a record, then combines it with imported references and
+verifies the shared exported bibliography.
+
+**owner/codex, 2026-07-30** — set a boundary for later citation work: keep the
+built-in reference UI simple and deterministic, and handle complex batch
+reconciliation, metadata repair, and cross-document citation normalization
+through custom agent workflows. Such workflows must propose reviewable
+structured reference/document changes through application-owned validation and
+apply paths; they do not get raw filesystem access or mutate
+`references.csl.json` directly.
+
+**codex, 2026-07-30** — added a compact export preflight for citation styles.
+Projects remember Chicago author-date, APA 7, IEEE, or Elsevier Vancouver;
+journal-specific requirements use a validated custom CSL file copied into
+`.texeris/` for portable repeat exports. Citeproc receives the explicit style
+for PDF/DOCX/ODT/RTF while canonical Markdown remains unchanged. The renderer
+never receives a style path, and the permanent workspace gains no new panel.
+
+**codex, 2026-07-30** — implemented the first G3 local writing archive slice.
+The workspace-global archive keeps immutable imported bytes and Markdown/text
+derivatives with original-path provenance, change/missing status, hashes,
+duplicate detection, passage segmentation, and SQLite FTS5. A compact activity-
+rail panel supports import, search, source preview, predictable deletion,
+explicit “Use in chat” attachments, and archive-selected writing-profile
+builds. Chat manifests persist passage IDs through edit/regenerate rewind; raw
+saved passages, not highlighted snippets, enter model context. Embeddings, OCR,
+tags, folder watching, and automatic retrieval remain deliberately deferred.
+
+**codex, 2026-07-30** — closed the lifecycle-integrity audit findings. Window
+close and every project-picker/switch route now await editor typing, image
+uploads, and canonical commits; failures preserve the current window/project.
+Project candidates, watchers, runtime cancellation, and database ownership are
+handed off in a safe order. Canonical Markdown paths are confined against
+traversal and symlink escape across document/revision/export/asset services.
+Submitted prompts and running-run boundaries persist transactionally before
+provider work, with interrupted runs marked aborted on restart. New asset
+leases protect upload-before-reference races and startup removes abandoned
+uploads. Failure-mode tests cover provider rejection, restart interruption,
+tampered paths, upload/typing composition, and manager handoff; real Electron
+smokes cover immediate close and picker-mediated immediate project switch.
+Typecheck, 247 tests (6 skipped), production build, both targeted desktop
+smokes, and an independent post-fix review pass.
+
+**codex, 2026-07-30** — rewrote the seeded `welcome.md` around a first real
+writing session instead of a feature inventory. It now leads from
+`manuscript.md` through autosave and the two editor views, scoped assistant
+work and reviewable patches, conversation branching, history/checkpoints,
+citations, and explicit local archive attachments, ending with only the
+essential controls. Existing user-owned `welcome.md` files remain untouched.
+Typecheck, 247 tests (6 skipped), production build, and the EU7 new-project
+onboarding smoke pass.
+
+**codex, 2026-07-30** — added a bounded archive repair surface before moving
+to G4 skills. The Archive header can now rebuild its disposable FTS5 projection
+atomically from stored source/passage rows in a cancellable worker. Passage IDs
+do not change, preserving archive attachments and historical chat manifests.
+A corruption test replaces the index with false content and verifies that
+re-index removes it and restores real search results with the original passage
+identity; the archive desktop smoke covers the renderer/preload/main/worker
+path. Also recorded the later searchable Help system as shipped Markdown with
+contextual entry points, keeping `welcome.md` brief. Typecheck, 248 tests
+(6 skipped), production build, and archive smoke pass.
+
+**codex, 2026-07-30** — implemented the first G4 product skill: Conservative
+Rewrite v1. Ctrl+K exposes a compact launcher for selection, section, or whole-
+document scope; users choose Light copy-edit, Shorten, Improve flow, or Reduce
+repetition and may override Fast with Deep. Skill conversations persist an
+exact version and fail closed when it is unavailable. The runtime now filters
+the actual Pi tool set to each skill's allow-list, while prose mutations remain
+reviewable patches. Prompt and JSON fixtures protect qualifications, citations,
+specialist terms, no-op behaviour, and scope boundaries. Unit coverage checks
+tool/version failures; the offline patch smoke now covers command discovery,
+launcher Escape/launch, review, apply, and undo.
+
+**codex, 2026-07-30** — added the second G4 product skill, an audit-first LLM
+verbal-tick review. The shared launcher offers Audit first (numbered findings,
+no initial patch) and Audit + rewrite clear cases for selection, section, or
+whole-document scope. The prompt judges repetition and function in context,
+never infers AI authorship, and explicitly protects legitimate disciplinary
+language, qualifications, citations, negation, and logical structure. Users
+can request selected numbered findings in the persisted conversation; all
+changes remain ordinary reviewable patches. Balanced fixtures include three
+real findings and three false-positive/no-finding cases. A dedicated findings
+database/UI and deterministic phrase scanner remain deferred. Typecheck, 257
+tests (6 skipped), production build, and the combined skill/patch desktop smoke
+pass.
+
+**codex, 2026-07-30** — made the configured macOS packaging path real. Pinned
+Pandoc 3.10 preparation now supports checksum-verified Apple Silicon and Intel
+archives as well as Linux, and packaged-resource inspection resolves the
+native `.app` layout. A manual GitHub Actions matrix builds unsigned DMG and
+ZIP artifacts on native arm64 and x64 macOS runners, inspects bundled Pandoc
+and CSL resources, emits SHA-256 manifests, and uploads both architecture
+sets. Linux x64 AppImage packaging and resource verification remain green.
+
+**kimi, 2026-08-08** — back; hit a scope collision on queue item 8: I built a
+full rewind implementation (global turn/checkpoint picker, end-of-turn
+boundary columns, run-copying fork) on `kimi/rewind` while codex's
+edit-message rewind was landing on main (PRs through #25). Closed PR #26
+unmerged with a comparison comment; the branch stays for reference. Owner
+arbitration: main's per-message model stands. Salvaged the owner-requested
+complement as a fresh PR: checkpoints gain an optional short description
+(migration 0007, `CheckpointInfo.description`, HistoryPanel form/display,
+IPC schema) so history/rewind pickers stay scannable. Note for both agents:
+check agent-notes + origin/main before starting queued items — the queue
+moved fast this cycle (items 8–10 all closed by codex).

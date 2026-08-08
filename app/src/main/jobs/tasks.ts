@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { referencedAssets } from '../services/assets';
 import { extractPdfTextInProcess, type PdfTextExtraction } from '../services/pdf';
 import { renderPrintDocument, sanitizePrintHtml } from '../services/pdfExportHtml';
@@ -28,11 +29,21 @@ export interface PandocExportPayload {
   outputPath: string;
   format: 'docx' | 'odt' | 'rtf';
   resourceRoot?: string;
+  bibliographyPath?: string;
+  citationStylePath?: string;
 }
 
 export interface PandocHtmlPayload {
   pandocPath: string;
   markdown: string;
+  bibliographyPath?: string;
+  citationStylePath?: string;
+}
+
+export interface PandocReferenceImportPayload {
+  pandocPath: string;
+  fileName: string;
+  format: 'bibtex' | 'ris';
 }
 
 export interface PdfPrepareHtmlPayload {
@@ -40,10 +51,16 @@ export interface PdfPrepareHtmlPayload {
   markdown: string;
   title: string;
   resourceRoot: string;
+  bibliographyPath?: string;
+  citationStylePath?: string;
 }
 
 export interface PdfExtractPayload {
   bytes: Buffer;
+}
+
+export interface ArchiveReindexPayload {
+  databasePath: string;
 }
 
 /** execFile as a promise, with optional stdin (execFile has no `input` option). */
@@ -99,6 +116,13 @@ async function pandocExport(payload: PandocExportPayload): Promise<{ warnings: s
         '--output', payload.outputPath,
         '--sandbox',
         ...(payload.resourceRoot ? [`--resource-path=${payload.resourceRoot}`] : []),
+        ...(payload.bibliographyPath
+          ? [
+              '--citeproc',
+              `--bibliography=${payload.bibliographyPath}`,
+              ...(payload.citationStylePath ? [`--csl=${payload.citationStylePath}`] : []),
+            ]
+          : []),
       ],
       { input: payload.markdown, cwd: payload.resourceRoot },
     );
@@ -112,12 +136,41 @@ async function pandocHtml(payload: PandocHtmlPayload): Promise<{ html: string; w
   try {
     const html = await execFileAsync(
       payload.pandocPath,
-      ['--from=markdown', '--to=html5', '--wrap=none', '--sandbox'],
+      [
+        '--from=markdown',
+        '--to=html5',
+        '--wrap=none',
+        '--sandbox',
+        ...(payload.bibliographyPath
+          ? [
+              '--citeproc',
+              `--bibliography=${payload.bibliographyPath}`,
+              ...(payload.citationStylePath ? [`--csl=${payload.citationStylePath}`] : []),
+            ]
+          : []),
+      ],
       { input: payload.markdown },
     );
     return { html, warnings: [] };
   } catch (error) {
     throw new Error(`Pandoc PDF preparation failed: ${errorMessage(error)}`);
+  }
+}
+
+async function pandocReferenceImport(
+  payload: PandocReferenceImportPayload,
+): Promise<{ cslJson: string }> {
+  try {
+    const cslJson = await execFileAsync(payload.pandocPath, [
+      payload.fileName,
+      `--from=${payload.format}`,
+      '--to=csljson',
+      '--standalone',
+      '--sandbox',
+    ]);
+    return { cslJson };
+  } catch (error) {
+    throw new Error(`Reference import failed: ${errorMessage(error)}`);
   }
 }
 
@@ -154,7 +207,12 @@ export async function inlineProjectImages(
 /** Inline images, convert to HTML via Pandoc, sanitize, and wrap for printToPDF. */
 async function pdfPrepareHtml(payload: PdfPrepareHtmlPayload): Promise<{ html: string; warnings: string[] }> {
   const inlined = await inlineProjectImages(payload.markdown, payload.resourceRoot);
-  const converted = await pandocHtml({ pandocPath: payload.pandocPath, markdown: inlined.markdown });
+  const converted = await pandocHtml({
+    pandocPath: payload.pandocPath,
+    markdown: inlined.markdown,
+    bibliographyPath: payload.bibliographyPath,
+    citationStylePath: payload.citationStylePath,
+  });
   if (/<img\b[^>]*\bsrc=["']https?:\/\//i.test(converted.html)
     && !inlined.warnings.some((warning) => warning.startsWith('Remote images'))) {
     inlined.warnings.push('Remote images were omitted from the PDF; only project-owned image assets are embedded.');
@@ -168,6 +226,39 @@ async function pdfPrepareHtml(payload: PdfPrepareHtmlPayload): Promise<{ html: s
 
 async function pdfExtract(payload: PdfExtractPayload): Promise<PdfTextExtraction> {
   return extractPdfTextInProcess(payload.bytes);
+}
+
+function archiveReindex(
+  payload: ArchiveReindexPayload,
+): { sources: number; passages: number } {
+  const db = new DatabaseSync(payload.databasePath);
+  try {
+    db.exec('PRAGMA busy_timeout = 5000');
+    const sources = (
+      db.prepare('SELECT COUNT(*) AS count FROM archive_sources').get() as { count: number }
+    ).count;
+    const passages = (
+      db.prepare('SELECT COUNT(*) AS count FROM archive_passages').get() as { count: number }
+    ).count;
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.exec(`
+        DELETE FROM archive_fts;
+        INSERT INTO archive_fts (passage_id, source_id, title, heading, text)
+        SELECT p.id, p.source_id, s.title, COALESCE(p.heading, ''), p.text
+        FROM archive_passages p
+        JOIN archive_sources s ON s.id = p.source_id
+        ORDER BY s.rowid, p.ordinal
+      `);
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+    return { sources, passages };
+  } finally {
+    db.close();
+  }
 }
 
 /** Dispatch table shared by the worker entry and in-process test runs. */
@@ -184,10 +275,14 @@ export async function runTask(
       return pandocExport(payload as PandocExportPayload);
     case 'pandoc-html':
       return pandocHtml(payload as PandocHtmlPayload);
+    case 'pandoc-reference-import':
+      return pandocReferenceImport(payload as PandocReferenceImportPayload);
     case 'pdf-prepare-html':
       return pdfPrepareHtml(payload as PdfPrepareHtmlPayload);
     case 'pdf-extract':
       return pdfExtract(payload as PdfExtractPayload);
+    case 'archive-reindex':
+      return archiveReindex(payload as ArchiveReindexPayload);
     default:
       throw new Error(`unknown job task: ${kind}`);
   }

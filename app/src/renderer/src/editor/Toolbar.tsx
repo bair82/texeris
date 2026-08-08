@@ -6,7 +6,13 @@ import type { Editor } from '@tiptap/core';
  * who don't write Markdown. Everything maps to Tiptap commands; the
  * canonical Markdown stays the source of truth underneath.
  */
-export default function Toolbar({ editor }: { editor: Editor }) {
+export default function Toolbar({
+  editor,
+  onCite,
+}: {
+  editor: Editor;
+  onCite(): void;
+}) {
   // Re-render on every transaction so active states stay current.
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -170,6 +176,9 @@ export default function Toolbar({ editor }: { editor: Editor }) {
       )}
       <button className="footnote-insert" title="Insert footnote" onClick={insertFootnote}>
         [ⁿ]
+      </button>
+      <button className="citation-insert" title="Insert citation" onClick={onCite}>
+        Cite
       </button>
       <span className="toolbar-sep" />
       {linkMode ? (

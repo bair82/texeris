@@ -93,6 +93,55 @@ describe('job tasks', () => {
     expect(result.markdown).toContain('Body paragraph text.');
   });
 
+  it.skipIf(!pandoc)('converts BibTeX and RIS bibliographies to CSL JSON', async () => {
+    const fixtures = path.resolve(import.meta.dirname, '../../../test-fixtures');
+    for (const [fileName, format] of [
+      ['references.bib', 'bibtex'],
+      ['references.ris', 'ris'],
+    ] as const) {
+      const result = (await runTask('pandoc-reference-import', {
+        pandocPath: pandoc!,
+        fileName: path.join(fixtures, fileName),
+        format,
+      })) as { cslJson: string };
+      const records = JSON.parse(result.cslJson) as Array<{
+        id: string;
+        title: string;
+      }>;
+      expect(records).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'smith2024',
+            title: 'The Geometry of Attention',
+          }),
+        ]),
+      );
+    }
+  });
+
+  it.skipIf(!pandoc)('applies an explicit CSL style during citeproc HTML conversion', async () => {
+    const bibliography = path.join(root, 'references.json');
+    fs.writeFileSync(
+      bibliography,
+      JSON.stringify([{
+        id: 'smith2024',
+        type: 'article-journal',
+        title: 'Styled Evidence',
+        author: [{ family: 'Smith', given: 'Ada' }],
+        issued: { 'date-parts': [[2024]] },
+      }]),
+    );
+    const style = path.resolve(import.meta.dirname, '../../../resources/csl/ieee.csl');
+    const result = (await runTask('pandoc-html', {
+      pandocPath: pandoc!,
+      markdown: 'A claim [@smith2024].',
+      bibliographyPath: bibliography,
+      citationStylePath: style,
+    })) as { html: string };
+    expect(result.html).toMatch(/A claim \[1\]/);
+    expect(result.html).toContain('Styled Evidence');
+  });
+
   it.skipIf(!pandoc)('prepares sanitized print HTML with inlined images via pdf-prepare-html', async () => {
     const relative = 'assets/paper/media/figure.png';
     fs.mkdirSync(path.dirname(path.join(root, relative)), { recursive: true });

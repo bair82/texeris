@@ -1,3 +1,5 @@
+import { Type } from '@sinclair/typebox';
+
 /**
  * Command definitions (M1.5 EU5): the single source for the app menu
  * (main), the command palette and the shortcuts overlay (renderer). Actions
@@ -26,6 +28,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   { id: 'edit:undo', section: 'Edit', title: 'Undo', shortcutHint: 'Ctrl+Z in editor' },
   { id: 'edit:redo', section: 'Edit', title: 'Redo', shortcutHint: 'Ctrl+Shift+Z in editor' },
   { id: 'edit:find', section: 'Edit', title: 'Find in Document', accelerator: 'CmdOrCtrl+F' },
+  { id: 'edit:insert-citation', section: 'Edit', title: 'Insert Citation…', accelerator: 'CmdOrCtrl+Shift+C' },
 
   { id: 'view:command-palette', section: 'View', title: 'Command Palette', accelerator: 'CmdOrCtrl+K', shortcutHint: 'Ctrl+K / Ctrl+P' },
   { id: 'view:toggle-mode', section: 'View', title: 'Toggle Rendered / Raw', accelerator: 'CmdOrCtrl+E' },
@@ -35,12 +38,17 @@ export const COMMANDS: readonly CommandSpec[] = [
   { id: 'view:toggle-history', section: 'View', title: 'Revision History' },
 
   { id: 'chat:new', section: 'Chat', title: 'New Conversation' },
+  { id: 'chat:conservative-rewrite', section: 'Chat', title: 'Conservative Rewrite…' },
+  { id: 'chat:audit-verbal-ticks', section: 'Chat', title: 'Audit LLM Verbal Ticks…' },
   { id: 'chat:build-writing-profile', section: 'Chat', title: 'Build or Update Writing Profile…' },
 
   { id: 'help:shortcuts', section: 'Help', title: 'Keyboard Shortcuts', accelerator: 'CmdOrCtrl+/' },
 ] as const;
 
 export type CommandId = (typeof COMMANDS)[number]['id'];
+export const MenuCommandSchema = Type.Union(
+  COMMANDS.map((command) => Type.Literal(command.id)),
+);
 
 /** main → renderer push channel carrying a command id from the app menu. */
 export const MenuCommandChannel = 'texeris:menu-command';
