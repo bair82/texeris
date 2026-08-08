@@ -80,6 +80,8 @@ when product or architecture decisions change, update them.
   `node app/scripts/smoke-ui.mjs`
 - Find & outline e2e smoke (search, cycle, replace one, outline click):
   `node app/scripts/smoke-find.mjs`
+- Rewind e2e smoke (two scripted turns, dialog preview, fork + restore):
+  `node app/scripts/smoke-rewind.mjs`
 - Doc & conversation management e2e smoke (rename, set-main, duplicate,
   trash, reopen renamed conversation): `node app/scripts/smoke-eu3.mjs`
 - Live provider smoke (needs `DEEPSEEK_API_KEY` in env):

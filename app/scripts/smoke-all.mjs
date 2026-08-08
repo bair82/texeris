@@ -21,6 +21,7 @@ const SMOKE = [
   'scripts/smoke-eu6.mjs',
   'scripts/smoke-eu7.mjs',
   'scripts/smoke-pdf.mjs',
+  'scripts/smoke-rewind.mjs',
 ];
 
 const results = [];

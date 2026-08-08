@@ -28,13 +28,15 @@ export function createAppModels(): Models {
  * TEXERIS_FAUX_PATCH=1 additionally scripts a propose_patch call with a
  * valid patch against the seeded dev manuscript (offsets are computed from
  * the seed text in devProject.ts), so the patch pipeline is exercisable
- * end-to-end offline.
+ * end-to-end offline. TEXERIS_FAUX_REWIND=1 scripts the same patch turn
+ * followed by a plain second turn, so the rewind flow has two completed
+ * turn boundaries to pick from.
  */
 export function createFauxModels(scripted: string): { models: Models; config: WorkspaceConfig } {
   const faux = fauxProvider({ models: [{ id: 'faux-model' }] });
   const models = createModels();
   models.setProvider(faux.provider);
-  if (process.env.TEXERIS_FAUX_PATCH) {
+  if (process.env.TEXERIS_FAUX_PATCH || process.env.TEXERIS_FAUX_REWIND) {
     faux.setResponses([
       fauxAssistantMessage([
         fauxToolCall('propose_patch', {
@@ -50,6 +52,9 @@ export function createFauxModels(scripted: string): { models: Models; config: Wo
         }),
       ]),
       fauxAssistantMessage('I proposed a patch replacing one term; please review it.'),
+      ...(process.env.TEXERIS_FAUX_REWIND
+        ? [fauxAssistantMessage('Nothing further to change.')]
+        : []),
     ]);
   } else {
     faux.setResponses([fauxAssistantMessage(scripted)]);
