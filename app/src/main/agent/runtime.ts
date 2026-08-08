@@ -318,7 +318,7 @@ export class PiAgentRuntime implements AgentRuntime {
 
   private finishRun(run: ActiveRun, newMessages: AgentMessage[]): void {
     const { conversations } = this.options;
-    conversations.appendMessages(run.conversationId, newMessages);
+    const firstSeq = conversations.appendMessages(run.conversationId, newMessages);
 
     const assistant = newMessages.filter((m) => m.role === 'assistant');
     const usage = sumUsage(assistant);
@@ -330,10 +330,19 @@ export class PiAgentRuntime implements AgentRuntime {
         ? 'aborted'
         : 'error'
       : 'completed';
+    // End-of-turn boundary for rewind (migration 0005): last message seq of
+    // the turn and the document revision current at turn end.
+    const endMessageSeq = newMessages.length > 0 ? firstSeq + newMessages.length - 1 : null;
+    const documentId = run.manifest.documentId;
+    const endRevision = documentId
+      ? this.options.project.revisions.getCurrentRevision(documentId)
+      : null;
     conversations.finishRun(run.runId, {
       status,
       usage,
       error: failed?.errorMessage,
+      endMessageSeq,
+      endRevision,
     });
     this.styleGate.finalize(run.runId);
 

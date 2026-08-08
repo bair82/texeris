@@ -153,6 +153,50 @@ describe('conversation management (EU3)', () => {
     expect(conversations.listRuns(id)).toHaveLength(0);
   });
 
+  it('forks a conversation at a message boundary without mutating the original', () => {
+    const id = conversations.startNewConversation();
+    conversations.renameConversation(id, 'intro work');
+    conversations.appendMessages(id, [userMessage('first question'), userMessage('second question')]);
+    const run1 = conversations.startRun({
+      conversationId: id,
+      modelMode: 'fast',
+      provider: 'faux',
+      model: 'faux-model',
+      manifest,
+    });
+    conversations.finishRun(run1, { status: 'completed', endMessageSeq: 1, endRevision: 1 });
+    const run2 = conversations.startRun({
+      conversationId: id,
+      modelMode: 'fast',
+      provider: 'faux',
+      model: 'faux-model',
+      manifest,
+    });
+    conversations.finishRun(run2, { status: 'completed', endMessageSeq: 2, endRevision: 2 });
+
+    const forkId = conversations.forkConversation(id, 1);
+    expect(forkId).not.toBe(id);
+
+    // fork: title marked, messages up to the boundary verbatim, only the
+    // run inside the boundary copied
+    const fork = conversations.listConversations().find((c) => c.id === forkId);
+    expect(fork?.title).toBe('intro work (rewind)');
+    expect(conversations.listUiMessages(forkId).map((m) => [m.seq, m.text])).toEqual([
+      [1, 'first question'],
+    ]);
+    const forkRuns = conversations.listRuns(forkId);
+    expect(forkRuns).toHaveLength(1);
+    expect(forkRuns[0].id).not.toBe(run1);
+
+    // original untouched
+    expect(conversations.listUiMessages(id)).toHaveLength(2);
+    expect(conversations.listRuns(id)).toHaveLength(2);
+
+    // boundaries outside the message range are rejected
+    expect(() => conversations.forkConversation(id, 0)).toThrow(/outside message range/);
+    expect(() => conversations.forkConversation(id, 3)).toThrow(/outside message range/);
+  });
+
   it('deletes profile grants, sources, and delegated results with their conversation', () => {
     const id = conversations.startNewConversation({ id: 'writing-profile', version: 1 });
     const grantId = 'grant-1';

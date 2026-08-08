@@ -107,6 +107,24 @@ describe('PiAgentRuntime', () => {
     expect(runs[0].provider).toBe('faux');
   });
 
+  it('records the end-of-turn boundary for rewind (message seq + revision)', async () => {
+    faux.setResponses([fauxAssistantMessage('The fox is quick.')]);
+    const { runId } = await runtime.startTurn({
+      conversationId,
+      text: 'How quick is the fox?',
+      mode: 'fast',
+      scope: { kind: 'document' },
+    });
+    await drain(runId);
+
+    const row = ctx.db
+      .prepare('SELECT end_message_seq, end_revision FROM agent_runs WHERE id = ?')
+      .get(runId) as { end_message_seq: number | null; end_revision: number | null };
+    // user + assistant messages appended; the document stayed at rev 1
+    expect(row.end_message_seq).toBe(2);
+    expect(row.end_revision).toBe(1);
+  });
+
   it('executes read-only tools and records tool events', async () => {
     faux.setResponses([
       fauxAssistantMessage([fauxToolCall('read_document', {})]),

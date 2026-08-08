@@ -277,12 +277,21 @@ export class ConversationService {
 
   finishRun(
     runId: string,
-    outcome: { status: RunStatus; usage?: UsageSummary; error?: string },
+    outcome: {
+      status: RunStatus;
+      usage?: UsageSummary;
+      error?: string;
+      /** End-of-turn boundary for rewind (migration 0005): last message seq
+       * of the turn and the document revision current at turn end. */
+      endMessageSeq?: number | null;
+      endRevision?: number | null;
+    },
   ): void {
     this.db
       .prepare(
         `UPDATE agent_runs
-         SET status = ?, ended_at = ?, usage_json = ?, error_json = ?
+         SET status = ?, ended_at = ?, usage_json = ?, error_json = ?,
+             end_message_seq = ?, end_revision = ?
          WHERE id = ?`,
       )
       .run(
@@ -290,8 +299,142 @@ export class ConversationService {
         new Date().toISOString(),
         outcome.usage ? JSON.stringify(outcome.usage) : null,
         outcome.error ? JSON.stringify({ message: outcome.error }) : null,
+        outcome.endMessageSeq ?? null,
+        outcome.endRevision ?? null,
         runId,
       );
+  }
+
+  /**
+   * Fork a conversation at a message boundary (rewind, plan G1 §8): copy
+   * messages with seq <= boundarySeq and the runs wholly inside the boundary
+   * into a NEW conversation with fresh ids. The original conversation, its
+   * messages, and its runs are never mutated.
+   */
+  forkConversation(conversationId: string, boundarySeq: number): string {
+    const source = this.db
+      .prepare(
+        'SELECT title, skill_id, skill_version, corpus_grant_id FROM conversations WHERE id = ?',
+      )
+      .get(conversationId) as
+      | { title: string; skill_id: string | null; skill_version: number | null; corpus_grant_id: string | null }
+      | undefined;
+    if (!source) {
+      throw new Error(`unknown conversation: ${conversationId}`);
+    }
+    const maxSeq = (
+      this.db
+        .prepare('SELECT COALESCE(MAX(seq), 0) AS max_seq FROM messages WHERE conversation_id = ?')
+        .get(conversationId) as { max_seq: number }
+    ).max_seq;
+    if (boundarySeq < 1 || boundarySeq > maxSeq) {
+      throw new Error(`fork boundary ${boundarySeq} outside message range 1..${maxSeq}`);
+    }
+
+    const forkId = randomUUID();
+    this.db.exec('BEGIN');
+    try {
+      this.db
+        .prepare(
+          `INSERT INTO conversations (id, title, created_at, skill_id, skill_version, corpus_grant_id)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          forkId,
+          `${source.title} (rewind)`,
+          new Date().toISOString(),
+          source.skill_id,
+          source.skill_version,
+          source.corpus_grant_id,
+        );
+
+      const copyMessage = this.db.prepare(
+        `INSERT INTO messages (id, conversation_id, seq, role, payload_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      );
+      const messages = this.db
+        .prepare(
+          'SELECT seq, role, payload_json, created_at FROM messages WHERE conversation_id = ? AND seq <= ? ORDER BY seq',
+        )
+        .all(conversationId, boundarySeq) as Array<{
+        seq: number;
+        role: string;
+        payload_json: string;
+        created_at: string;
+      }>;
+      for (const message of messages) {
+        copyMessage.run(randomUUID(), forkId, message.seq, message.role, message.payload_json, message.created_at);
+      }
+
+      // Copy finished runs whose recorded boundary fits inside the fork
+      // (runs predating migration 0005 have NULL boundaries and are skipped),
+      // plus delegated child runs of copied parents; remap parent ids.
+      const runs = this.db
+        .prepare(
+          `SELECT * FROM agent_runs
+           WHERE conversation_id = ? AND status != 'running'
+           ORDER BY rowid`,
+        )
+        .all(conversationId) as unknown as Array<{
+        id: string;
+        model_mode: string;
+        provider: string;
+        model: string;
+        status: string;
+        started_at: string;
+        ended_at: string | null;
+        usage_json: string | null;
+        context_manifest_json: string | null;
+        error_json: string | null;
+        parent_run_id: string | null;
+        role_id: string | null;
+        skill_id: string | null;
+        skill_version: number | null;
+        result_json: string | null;
+        end_message_seq: number | null;
+        end_revision: number | null;
+      }>;
+      const idMap = new Map<string, string>();
+      const selected = runs.filter((run) => run.end_message_seq !== null && run.end_message_seq <= boundarySeq);
+      for (const run of selected) {
+        idMap.set(run.id, randomUUID());
+      }
+      const copyRun = this.db.prepare(
+        `INSERT INTO agent_runs
+           (id, conversation_id, model_mode, provider, model, status, started_at,
+            ended_at, usage_json, context_manifest_json, error_json, parent_run_id,
+            role_id, skill_id, skill_version, result_json, end_message_seq, end_revision)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const run of selected) {
+        const parent = run.parent_run_id;
+        copyRun.run(
+          idMap.get(run.id) ?? randomUUID(),
+          forkId,
+          run.model_mode,
+          run.provider,
+          run.model,
+          run.status,
+          run.started_at,
+          run.ended_at,
+          run.usage_json,
+          run.context_manifest_json,
+          run.error_json,
+          parent ? (idMap.get(parent) ?? null) : null,
+          run.role_id,
+          run.skill_id,
+          run.skill_version,
+          run.result_json,
+          run.end_message_seq,
+          run.end_revision,
+        );
+      }
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+    return forkId;
   }
 
   listRuns(conversationId: string): AgentRunRecord[] {
@@ -337,7 +480,7 @@ export class ConversationService {
   }
 }
 
-function userText(content: unknown): string {
+export function userText(content: unknown): string {
   if (typeof content === 'string') {
     return content;
   }

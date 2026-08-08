@@ -86,6 +86,7 @@ export type CheckpointListRequest = Static<typeof CheckpointListRequestSchema>;
 export const CheckpointCreateRequestSchema = Type.Object({
   documentId: Type.Optional(Type.String()),
   name: Type.String({ minLength: 1 }),
+  description: Type.Optional(Type.String()),
 });
 export type CheckpointCreateRequest = Static<typeof CheckpointCreateRequestSchema>;
 

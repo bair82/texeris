@@ -107,4 +107,50 @@ describe('openDatabase / migration 0001', () => {
     expect(indexes).toContain('idx_corpus_grants_conversation');
     migrated.close();
   });
+
+  it('migrates a 0004 database to 0005, adding rewind boundary columns', () => {
+    // Build a database exactly at schema version 4 with a run and a
+    // checkpoint that predate the boundary/description columns.
+    const db = new DatabaseSync(dbPath);
+    for (let i = 0; i < 4; i++) {
+      migrations[i](db);
+      db.exec(`PRAGMA user_version = ${i + 1}`);
+    }
+    db.prepare("INSERT INTO conversations (id, title, created_at) VALUES ('c1', 't', 'now')").run();
+    db.prepare(
+      `INSERT INTO agent_runs
+         (id, conversation_id, model_mode, provider, model, status, started_at)
+       VALUES ('r1', 'c1', 'fast', 'faux', 'faux', 'completed', 'now')`,
+    ).run();
+    db.prepare(
+      "INSERT INTO documents (id, path, title, created_at, content_hash) VALUES ('d1', '/tmp/d.md', 'd', 'now', 'h')",
+    ).run();
+    db.prepare(
+      `INSERT INTO checkpoints (id, document_id, revision_seq, name, created_at, snapshot_text)
+       VALUES ('k1', 'd1', 1, 'before edits', 'now', 'text')`,
+    ).run();
+    db.close();
+
+    const migrated = openDatabase(dbPath);
+    const runColumns = (
+      migrated.prepare('PRAGMA table_info(agent_runs)').all() as Array<{ name: string }>
+    ).map((c) => c.name);
+    expect(runColumns).toContain('end_message_seq');
+    expect(runColumns).toContain('end_revision');
+    const checkpointColumns = (
+      migrated.prepare('PRAGMA table_info(checkpoints)').all() as Array<{ name: string }>
+    ).map((c) => c.name);
+    expect(checkpointColumns).toContain('description');
+    // Legacy rows: no boundary recorded, empty description.
+    const run = migrated
+      .prepare('SELECT end_message_seq, end_revision FROM agent_runs WHERE id = ?')
+      .get('r1') as { end_message_seq: number | null; end_revision: number | null };
+    expect(run.end_message_seq).toBeNull();
+    expect(run.end_revision).toBeNull();
+    const checkpoint = migrated
+      .prepare('SELECT description FROM checkpoints WHERE id = ?')
+      .get('k1') as { description: string };
+    expect(checkpoint.description).toBe('');
+    migrated.close();
+  });
 });

@@ -199,4 +199,16 @@ export const migrations: ReadonlyArray<(db: DatabaseSync) => void> = [
       CREATE INDEX IF NOT EXISTS idx_corpus_grants_conversation ON corpus_grants(conversation_id);
     `);
   },
+  // 0005: conversation/document rewind — runs record their end-of-turn
+  // boundary (last message seq + document revision at turn end) so the rewind
+  // picker never has to infer it; checkpoints gain an optional human-readable
+  // description. NULL boundaries = pre-0005 runs, not offered as rewind
+  // points.
+  (db) => {
+    db.exec(`
+      ALTER TABLE agent_runs ADD COLUMN end_message_seq INTEGER;
+      ALTER TABLE agent_runs ADD COLUMN end_revision INTEGER;
+      ALTER TABLE checkpoints ADD COLUMN description TEXT NOT NULL DEFAULT '';
+    `);
+  },
 ];

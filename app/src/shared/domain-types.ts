@@ -55,5 +55,7 @@ export interface CheckpointInfo {
   documentId: string;
   revisionSeq: number;
   name: string;
+  /** Optional human-readable description shown in the rewind picker ('' = none). */
+  description: string;
   createdAt: string;
 }
