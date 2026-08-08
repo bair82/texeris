@@ -85,6 +85,61 @@ describe('PatchService.propose', () => {
       'base-revision-mismatch',
     );
   });
+
+  it('accepts the FIRST patch into a brand-new empty document (base 0)', () => {
+    // Regression: base >= 1 was required by the tool schema while base <=
+    // current (0) was enforced here, so no value could ever attach the first
+    // edit to an empty document (observed in a real 2026-07-30 session).
+    const emptyId = ensureDocument(ctx, 'empty.md');
+    const emptyPath = path.join(root, 'empty.md');
+    fs.writeFileSync(emptyPath, ''); // registered, never edited — revision 0
+    expect(ctx.revisions.getCurrentRevision(emptyId)).toBe(0);
+
+    const result = patches.propose(
+      {
+        ...input(
+          [
+            {
+              explanation: 'initial content',
+              changes: [{ from: 0, to: 0, expectedText: '', insert: '# Test doc\n\nOne page of text.\n' }],
+            },
+          ],
+          0,
+        ),
+        documentId: emptyId,
+      },
+      { conversationId: 'c1', agentRunId: 'r1' },
+    );
+    expect(result).toHaveProperty('patchId');
+    const { patchId } = result as { patchId: string };
+
+    const accepted = patches.accept(patchId);
+    expect(accepted).toHaveProperty('seq', 1);
+    expect(fs.readFileSync(emptyPath, 'utf8')).toBe('# Test doc\n\nOne page of text.\n');
+    const record = patches.get(patchId)!;
+    expect(record.status).toBe('accepted');
+  });
+
+  it('still rejects base 1 on an empty document and base 0 once content exists', () => {
+    const emptyId = ensureDocument(ctx, 'empty.md');
+    fs.writeFileSync(path.join(root, 'empty.md'), '');
+    const tooHigh = patches.propose(
+      { ...input([{ explanation: 'x', changes: [{ from: 0, to: 0, expectedText: '', insert: 'y' }] }], 1), documentId: emptyId },
+    );
+    expect(tooHigh).toHaveProperty('conflict');
+    expect(
+      (tooHigh as { conflict: Array<{ message: string }> }).conflict[0].message,
+    ).toContain('out of range (0..0)');
+
+    // the document here is at revision 1 — base 0 only applies to empty docs
+    const staleZero = patches.propose(
+      { ...input([{ explanation: 'x', changes: [{ from: 13, to: 18, expectedText: 'quick', insert: 'slow' }] }], 0), documentId: docId },
+    );
+    expect(staleZero).toHaveProperty('conflict');
+    expect(
+      (staleZero as { conflict: Array<{ message: string }> }).conflict[0].message,
+    ).toContain('out of range (1..1)');
+  });
 });
 
 describe('PatchService.accept', () => {

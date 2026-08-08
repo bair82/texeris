@@ -43,6 +43,33 @@ function shiftChanges(
   });
 }
 
+/**
+ * Valid base-revision range for a proposal: 1..current, except a brand-new
+ * document (current 0), which accepts base 0 — otherwise the FIRST edit to an
+ * empty document can never attach (base 0 was rejected by the >= 1 floor and
+ * base 1 by the <= current ceiling).
+ */
+function baseRevisionRange(current: number): { min: number; max: number } {
+  return { min: current === 0 ? 0 : 1, max: current };
+}
+
+function baseRevisionConflict(baseRevision: number, current: number): PatchConflictItem[] {
+  const { min, max } = baseRevisionRange(current);
+  return [
+    {
+      groupIdx: -1,
+      changeIdx: -1,
+      reason: 'base-revision-mismatch',
+      message: `base revision ${baseRevision} out of range (${min}..${max}) — re-read the document`,
+    },
+  ];
+}
+
+function baseRevisionOutOfRange(baseRevision: number, current: number): boolean {
+  const { min, max } = baseRevisionRange(current);
+  return baseRevision < min || baseRevision > max;
+}
+
 export class PatchService {
   constructor(
     private readonly db: DatabaseSync,
@@ -56,17 +83,8 @@ export class PatchService {
     styleReview: PatchStyleReview | null = null,
   ): { patchId: string } | { conflict: PatchConflictItem[] } {
     const current = this.revisions.getCurrentRevision(input.documentId);
-    if (input.baseRevision < 1 || input.baseRevision > current) {
-      return {
-        conflict: [
-          {
-            groupIdx: -1,
-            changeIdx: -1,
-            reason: 'base-revision-mismatch',
-            message: `base revision ${input.baseRevision} out of range (1..${current}) — re-read the document`,
-          },
-        ],
-      };
+    if (baseRevisionOutOfRange(input.baseRevision, current)) {
+      return { conflict: baseRevisionConflict(input.baseRevision, current) };
     }
     const text = this.revisions.getCurrentText(input.documentId);
     const resolved = resolveAnchors(text, input.groups);
@@ -218,8 +236,8 @@ export class PatchService {
     | { ok: true; text: string }
     | { ok: false; conflict: PatchConflictItem[] } {
     const current = this.revisions.getCurrentRevision(input.documentId);
-    if (input.baseRevision < 1 || input.baseRevision > current) {
-      return { ok: false, conflict: [{ groupIdx: -1, changeIdx: -1, reason: 'base-revision-mismatch', message: `base revision ${input.baseRevision} out of range (1..${current}) — re-read the document` }] };
+    if (baseRevisionOutOfRange(input.baseRevision, current)) {
+      return { ok: false, conflict: baseRevisionConflict(input.baseRevision, current) };
     }
     const text = this.revisions.getCurrentText(input.documentId);
     const resolved = resolveAnchors(text, input.groups);
