@@ -229,3 +229,8 @@ installer stub gets bundled and the app crashes at launch), and the worker
 path must probe chunk layouts. Verification: typecheck, 211 unit tests,
 build, 14/14 smokes, CI green on both PRs. Queue 1–7 are now closed — G2
 (references/citations) is unblocked; item 8 (rewind) is next per the queue.
+
+**owner via kimi, 2026-08-08** — new requirement for the rewind work (queue
+item 8, G1 §8): every history checkpoint must carry a short human-readable
+description so the rewind picker is scannable without opening each preview.
+Recorded in `docs/development-plan.md`.

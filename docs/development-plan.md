@@ -294,7 +294,9 @@ Work packages, in order:
    boundary, then restore the document as a new revision and fork/reopen the
    conversation from that boundary. Preserve the abandoned conversation and
    revision history; invalidate or clearly retain pending patches by origin,
-   never silently delete evidence.
+   never silently delete evidence. Every history checkpoint carries a short
+   human-readable description (owner request 2026-08-08) so the rewind picker
+   is scannable without opening each preview.
 
 Exit gate:
 
