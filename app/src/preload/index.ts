@@ -256,8 +256,9 @@ const api: TexerisApi = {
     revisions: (documentId) => ipcRenderer.invoke(HistoryChannels.revisions, { documentId }),
     listCheckpoints: (documentId) =>
       ipcRenderer.invoke(HistoryChannels.checkpointList, { documentId }),
-    createCheckpoint: (name, documentId, description) =>
-      ipcRenderer.invoke(HistoryChannels.checkpointCreate, { documentId, name, description }),
+    createCheckpoint: (input) => ipcRenderer.invoke(HistoryChannels.checkpointCreate, input),
+    renameCheckpoint: (checkpointId, input) =>
+      ipcRenderer.invoke(HistoryChannels.checkpointRename, { checkpointId, ...input }),
     restoreCheckpoint: (checkpointId) =>
       ipcRenderer.invoke(HistoryChannels.checkpointRestore, { checkpointId }),
   },

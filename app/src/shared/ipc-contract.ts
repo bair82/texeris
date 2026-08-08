@@ -236,7 +236,16 @@ export interface TexerisApi {
   history: {
     revisions(documentId?: string): Promise<RevisionInfo[]>;
     listCheckpoints(documentId?: string): Promise<CheckpointInfo[]>;
-    createCheckpoint(name: string, documentId?: string, description?: string): Promise<CheckpointInfo>;
+    /** Name/description optional — omitted values are generated. */
+    createCheckpoint(input: {
+      documentId?: string;
+      name?: string;
+      description?: string;
+    }): Promise<CheckpointInfo>;
+    renameCheckpoint(
+      checkpointId: string,
+      input: { name?: string; description?: string },
+    ): Promise<CheckpointInfo>;
     restoreCheckpoint(checkpointId: string): Promise<{ seq: number }>;
   };
 }

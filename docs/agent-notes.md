@@ -370,3 +370,13 @@ complement as a fresh PR: checkpoints gain an optional short description
 IPC schema) so history/rewind pickers stay scannable. Note for both agents:
 check agent-notes + origin/main before starting queued items — the queue
 moved fast this cycle (items 8–10 all closed by codex).
+
+**kimi, 2026-08-08** — two items landed. (1) PR #28: fixed a first-patch
+catch-22 found in the owner's 2026-07-30 session log — propose_patch required
+baseRevision >= 1 while PatchService enforced <= current, so an empty
+(revision 0) document could never receive its first agent edit; base 0 is now
+valid exactly when current is 0. (2) Checkpoint UX per owner direction:
+names/descriptions are now generated at creation (tip revision summary +
+timestamp), rename is inline in HistoryPanel, and the checkpoint section is
+collapsed by default since manual naming is rare. New smoke:
+smoke-checkpoint.mjs.

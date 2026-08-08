@@ -65,8 +65,9 @@ const TextChangeSchema = Type.Object({
 const ProposePatchParams = Type.Object({
   documentId: Type.Optional(Type.String()),
   baseRevision: Type.Integer({
-    minimum: 1,
-    description: 'Revision id the changes were computed against (from read_document)',
+    minimum: 0,
+    description:
+      'Revision id the changes were computed against (from read_document); 0 is valid only for a brand-new empty document',
   }),
   title: Type.String(),
   summary: Type.String(),

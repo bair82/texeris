@@ -346,7 +346,9 @@ Work packages, in order:
    checkpoint-linked conversation rewind is deferred rather than inferred from
    legacy data. Every history checkpoint carries a short human-readable
    description (owner request 2026-08-08) so history/rewind pickers stay
-   scannable without opening each preview.
+   scannable without opening each preview; names and descriptions are
+   generated at creation (rename inline when needed) and the checkpoint
+   section is collapsed by default in the history panel.
 9. **Lifecycle integrity audit:** require awaited editor flushes for close and
    project replacement; confine persisted document paths; make project/runtime
    handoff ordered; persist prompts before provider work; and protect

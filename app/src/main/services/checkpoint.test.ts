@@ -56,11 +56,40 @@ describe('CheckpointService', () => {
     type('chapter one', 0);
     const described = checkpoints.create(docId, 'first draft', 'before agent edits');
     expect(described.description).toBe('before agent edits');
-    const plain = checkpoints.create(docId, 'second');
-    expect(plain.description).toBe('');
 
     const listed = checkpoints.list(docId);
-    expect(listed.map((cp) => cp.description)).toEqual(['before agent edits', '']);
+    expect(listed.map((cp) => cp.description)).toEqual(['before agent edits']);
+  });
+
+  it('generates name and description when omitted (owner request 2026-08-08)', () => {
+    type('chapter one', 0);
+    const auto = checkpoints.create(docId);
+    expect(auto.name).toBe('checkpoint rev 1');
+    // description carries the tip revision summary and a timestamp
+    expect(auto.description).toContain('chars in');
+    expect(auto.description).toContain('·');
+
+    // an explicit name still gets a generated description
+    const named = checkpoints.create(docId, 'first draft');
+    expect(named.name).toBe('first draft');
+    expect(named.description).not.toBe('');
+  });
+
+  it('renames a checkpoint and edits its description', () => {
+    type('chapter one', 0);
+    const cp = checkpoints.create(docId);
+    const renamed = checkpoints.rename(cp.id, { name: 'before agent edits', description: 'keep this state' });
+    expect(renamed.name).toBe('before agent edits');
+    expect(renamed.description).toBe('keep this state');
+    expect(checkpoints.get(cp.id)?.name).toBe('before agent edits');
+
+    // partial rename keeps the other field
+    const reDescribed = checkpoints.rename(cp.id, { description: 'new description' });
+    expect(reDescribed.name).toBe('before agent edits');
+    expect(reDescribed.description).toBe('new description');
+
+    expect(() => checkpoints.rename(cp.id, { name: '   ' })).toThrow(/empty/);
+    expect(() => checkpoints.rename('nope', { name: 'x' })).toThrow(/unknown checkpoint/);
   });
 
   it('restores a checkpoint as a new revision (append-only)', () => {

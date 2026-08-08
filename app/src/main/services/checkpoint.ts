@@ -13,19 +13,31 @@ export class CheckpointService {
     private readonly revisions: RevisionService,
   ) {}
 
-  create(documentId: string, name: string, description = ''): CheckpointInfo {
+  /**
+   * Create a checkpoint at the current revision. Name and description are
+   * optional (owner request 2026-08-08): when omitted they are generated —
+   * the name is `checkpoint rev N` and the description carries the tip
+   * revision summary and creation time. Users can rename later, but normally
+   * shouldn't have to.
+   */
+  create(documentId: string, name?: string, description?: string): CheckpointInfo {
     const revisionSeq = this.revisions.getCurrentRevision(documentId);
     if (revisionSeq === 0) {
       throw new Error('cannot checkpoint a document with no revisions');
     }
     const snapshot = this.revisions.getTextAt(documentId, revisionSeq);
+    const createdAt = new Date().toISOString();
+    const finalName = name?.trim() || `checkpoint rev ${revisionSeq}`;
+    const finalDescription =
+      description?.trim() ||
+      this.autoDescription(documentId, revisionSeq, createdAt);
     const info: CheckpointInfo = {
       id: randomUUID(),
       documentId,
       revisionSeq,
-      name,
-      description,
-      createdAt: new Date().toISOString(),
+      name: finalName,
+      description: finalDescription,
+      createdAt,
     };
     this.db
       .prepare(
@@ -33,8 +45,65 @@ export class CheckpointService {
            (id, document_id, revision_seq, name, description, created_at, snapshot_text)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(info.id, documentId, revisionSeq, name, description, info.createdAt, snapshot);
+      .run(info.id, documentId, revisionSeq, info.name, info.description, createdAt, snapshot);
     return info;
+  }
+
+  /** Rename a checkpoint / edit its description (either field optional). */
+  rename(
+    checkpointId: string,
+    input: { name?: string; description?: string },
+  ): CheckpointInfo {
+    const existing = this.get(checkpointId);
+    if (!existing) {
+      throw new Error(`unknown checkpoint: ${checkpointId}`);
+    }
+    const finalName = input.name !== undefined ? input.name.trim() : existing.name;
+    if (!finalName) {
+      throw new Error('checkpoint name cannot be empty');
+    }
+    const finalDescription =
+      input.description !== undefined ? input.description.trim() : existing.description;
+    this.db
+      .prepare('UPDATE checkpoints SET name = ?, description = ? WHERE id = ?')
+      .run(finalName, finalDescription, checkpointId);
+    return { ...existing, name: finalName, description: finalDescription };
+  }
+
+  get(checkpointId: string): CheckpointInfo | null {
+    const row = this.db
+      .prepare(
+        'SELECT id, document_id, revision_seq, name, description, created_at FROM checkpoints WHERE id = ?',
+      )
+      .get(checkpointId) as
+      | {
+          id: string;
+          document_id: string;
+          revision_seq: number;
+          name: string;
+          description: string;
+          created_at: string;
+        }
+      | undefined;
+    if (!row) {
+      return null;
+    }
+    return {
+      id: row.id,
+      documentId: row.document_id,
+      revisionSeq: row.revision_seq,
+      name: row.name,
+      description: row.description,
+      createdAt: row.created_at,
+    };
+  }
+
+  /** Generated description: tip revision summary + timestamp. */
+  private autoDescription(documentId: string, revisionSeq: number, createdAt: string): string {
+    const tip = this.revisions.listRevisions(documentId, 1)[0];
+    const summary = tip?.summary.trim() || `revision ${revisionSeq}`;
+    const stamp = createdAt.slice(0, 16).replace('T', ' ');
+    return `${summary} · ${stamp}`;
   }
 
   list(documentId: string): CheckpointInfo[] {

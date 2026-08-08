@@ -2316,17 +2316,31 @@ body.col-resizing {
 
 .checkpoint-form {
   display: flex;
+  align-items: center;
   gap: 6px;
-  margin-bottom: 8px;
+  margin: 6px 0 8px;
 }
 
-.checkpoint-form input {
+.checkpoint-form input,
+.checkpoint-rename input {
   flex: 1;
   background: var(--bg-input);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 4px 8px;
+}
+
+.checkpoint-rename {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+}
+
+.checkpoint-section summary {
+  cursor: pointer;
+  color: var(--text-muted);
 }
 
 .checkpoint-form button,
