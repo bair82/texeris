@@ -17,6 +17,7 @@ import {
 } from '../shared/chat-types';
 import {
   CheckpointCreateRequestSchema,
+  CheckpointRenameRequestSchema,
   CheckpointListRequestSchema,
   CheckpointRestoreRequestSchema,
   DocChannels,
@@ -854,14 +855,23 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   });
 
   ipcMain.handle(HistoryChannels.checkpointCreate, (_event, raw: unknown) => {
-    const req = Value.Decode(CheckpointCreateRequestSchema, raw);
+    const req = Value.Decode(CheckpointCreateRequestSchema, raw ?? {});
     const project = deps.requireProject();
     const docId = req.documentId ?? mainDocId(project);
     return new CheckpointService(project.db, project.revisions).create(
       docId,
       req.name,
-      req.description ?? '',
+      req.description,
     );
+  });
+
+  ipcMain.handle(HistoryChannels.checkpointRename, (_event, raw: unknown) => {
+    const req = Value.Decode(CheckpointRenameRequestSchema, raw);
+    const project = deps.requireProject();
+    return new CheckpointService(project.db, project.revisions).rename(req.checkpointId, {
+      name: req.name,
+      description: req.description,
+    });
   });
 
   ipcMain.handle(HistoryChannels.checkpointRestore, (_event, raw: unknown) => {
