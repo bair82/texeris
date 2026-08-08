@@ -158,4 +158,34 @@ describe('openDatabase / migration 0001', () => {
     ]));
     migrated.close();
   });
+
+  it('migrates a 0006 database to 0007, adding checkpoint descriptions', () => {
+    const db = new DatabaseSync(dbPath);
+    for (let i = 0; i < 6; i++) {
+      migrations[i](db);
+      db.exec(`PRAGMA user_version = ${i + 1}`);
+    }
+    db.prepare(
+      "INSERT INTO documents (id, path, title, created_at, content_hash) VALUES ('d1', '/tmp/d.md', 'd', 'now', 'h')",
+    ).run();
+    db.prepare(
+      `INSERT INTO checkpoints (id, document_id, revision_seq, name, created_at, snapshot_text)
+       VALUES ('k1', 'd1', 1, 'before edits', 'now', 'text')`,
+    ).run();
+    db.close();
+
+    const migrated = openDatabase(dbPath);
+    const version = migrated.prepare('PRAGMA user_version').get() as { user_version: number };
+    expect(version.user_version).toBe(migrations.length);
+    const columns = (
+      migrated.prepare('PRAGMA table_info(checkpoints)').all() as Array<{ name: string }>
+    ).map((c) => c.name);
+    expect(columns).toContain('description');
+    // legacy rows migrate to an empty description
+    const row = migrated
+      .prepare('SELECT description FROM checkpoints WHERE id = ?')
+      .get('k1') as { description: string };
+    expect(row.description).toBe('');
+    migrated.close();
+  });
 });

@@ -57,5 +57,7 @@ export interface CheckpointInfo {
   documentId: string;
   revisionSeq: number;
   name: string;
+  /** Optional human-readable description ('' = none; owner request 2026-08-08). */
+  description: string;
   createdAt: string;
 }

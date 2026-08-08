@@ -358,3 +358,15 @@ native `.app` layout. A manual GitHub Actions matrix builds unsigned DMG and
 ZIP artifacts on native arm64 and x64 macOS runners, inspects bundled Pandoc
 and CSL resources, emits SHA-256 manifests, and uploads both architecture
 sets. Linux x64 AppImage packaging and resource verification remain green.
+
+**kimi, 2026-08-08** — back; hit a scope collision on queue item 8: I built a
+full rewind implementation (global turn/checkpoint picker, end-of-turn
+boundary columns, run-copying fork) on `kimi/rewind` while codex's
+edit-message rewind was landing on main (PRs through #25). Closed PR #26
+unmerged with a comparison comment; the branch stays for reference. Owner
+arbitration: main's per-message model stands. Salvaged the owner-requested
+complement as a fresh PR: checkpoints gain an optional short description
+(migration 0007, `CheckpointInfo.description`, HistoryPanel form/display,
+IPC schema) so history/rewind pickers stay scannable. Note for both agents:
+check agent-notes + origin/main before starting queued items — the queue
+moved fast this cycle (items 8–10 all closed by codex).

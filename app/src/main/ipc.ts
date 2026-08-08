@@ -857,7 +857,11 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const req = Value.Decode(CheckpointCreateRequestSchema, raw);
     const project = deps.requireProject();
     const docId = req.documentId ?? mainDocId(project);
-    return new CheckpointService(project.db, project.revisions).create(docId, req.name);
+    return new CheckpointService(project.db, project.revisions).create(
+      docId,
+      req.name,
+      req.description ?? '',
+    );
   });
 
   ipcMain.handle(HistoryChannels.checkpointRestore, (_event, raw: unknown) => {

@@ -52,6 +52,17 @@ describe('CheckpointService', () => {
     expect(() => checkpoints.create(docId, 'too early')).toThrow(/no revisions/);
   });
 
+  it('round-trips an optional human-readable description', () => {
+    type('chapter one', 0);
+    const described = checkpoints.create(docId, 'first draft', 'before agent edits');
+    expect(described.description).toBe('before agent edits');
+    const plain = checkpoints.create(docId, 'second');
+    expect(plain.description).toBe('');
+
+    const listed = checkpoints.list(docId);
+    expect(listed.map((cp) => cp.description)).toEqual(['before agent edits', '']);
+  });
+
   it('restores a checkpoint as a new revision (append-only)', () => {
     type('v1 text', 0);
     const cp = checkpoints.create(docId, 'v1');
