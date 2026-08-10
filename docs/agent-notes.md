@@ -380,3 +380,12 @@ names/descriptions are now generated at creation (tip revision summary +
 timestamp), rename is inline in HistoryPanel, and the checkpoint section is
 collapsed by default since manual naming is rare. New smoke:
 smoke-checkpoint.mjs.
+
+**kimi, 2026-08-08** — checkpoint descriptions are now LLM-generated (owner
+follow-up): creation stays instant with the deterministic fallback, then a
+background fast-model call (`CheckpointDescriber`, prompt = tip revision
+changes capped at 2k chars) rewrites the description and pushes
+`texeris:history-event` so HistoryPanel refreshes. Toggle in Settings → "AI
+checkpoint descriptions" (`llmCheckpointDescriptions`, default on). Failure
+or disabled keeps the fallback. smoke-checkpoint.mjs asserts the replacement
+end-to-end via the faux provider.

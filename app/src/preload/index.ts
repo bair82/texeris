@@ -15,7 +15,7 @@ import { PatchChannels, PatchProposedEventSchema } from '../shared/patch-types';
 import { AppearanceConfigSchema, SettingsChannels } from '../shared/settings-types';
 import { UiChannels } from '../shared/ui-types';
 import { ProjectChannels, ProjectInfoSchema } from '../shared/project-types';
-import { HistoryChannels } from '../shared/doc-types';
+import { HistoryChannels, type HistoryEvent } from '../shared/doc-types';
 import { CorpusChannels, ProfileChannels } from '../shared/profile-types';
 import { JobChannels, JobEventSchema } from '../shared/job-types';
 import {
@@ -218,6 +218,8 @@ const api: TexerisApi = {
       ipcRenderer.invoke(SettingsChannels.setAppearance, input),
     setPatchStyleMode: (mode) =>
       ipcRenderer.invoke(SettingsChannels.setPatchStyleMode, { mode }),
+    setCheckpointDescriptions: (enabled) =>
+      ipcRenderer.invoke(SettingsChannels.setCheckpointDescriptions, { enabled }),
     disableWritingProfile: () =>
       ipcRenderer.invoke(SettingsChannels.disableWritingProfile),
     onAppearanceChanged: (callback) => {
@@ -261,6 +263,15 @@ const api: TexerisApi = {
       ipcRenderer.invoke(HistoryChannels.checkpointRename, { checkpointId, ...input }),
     restoreCheckpoint: (checkpointId) =>
       ipcRenderer.invoke(HistoryChannels.checkpointRestore, { checkpointId }),
+    onEvent: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
+        callback(payload as HistoryEvent);
+      };
+      ipcRenderer.on(HistoryChannels.event, listener);
+      return () => {
+        ipcRenderer.removeListener(HistoryChannels.event, listener);
+      };
+    },
   },
 };
 

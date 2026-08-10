@@ -26,6 +26,15 @@ export default function HistoryPanel({ documentId }: { documentId: string }) {
     void refresh();
   }, [refresh]);
 
+  // LLM checkpoint descriptions land in the background — refresh when one does.
+  useEffect(() => {
+    return window.texeris.history.onEvent((event) => {
+      if (event.type === 'checkpoint-updated') {
+        void refresh();
+      }
+    });
+  }, [refresh]);
+
   const restoreRevision = async (revision: number) => {
     setError(null);
     try {
