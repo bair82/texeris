@@ -75,6 +75,7 @@ export function createFauxModels(scripted: string): { models: Models; config: Wo
         editorWidth: 'comfortable' as const,
       },
       patchStyleMode: 'off' as const,
+      llmCheckpointDescriptions: true,
       activeProfileId: null,
     },
   };

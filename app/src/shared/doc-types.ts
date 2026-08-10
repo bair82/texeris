@@ -109,7 +109,11 @@ export const HistoryChannels = {
   checkpointCreate: 'texeris:checkpoint-create',
   checkpointRename: 'texeris:checkpoint-rename',
   checkpointRestore: 'texeris:checkpoint-restore',
+  /** main → renderer push: a checkpoint's description was (re)generated. */
+  event: 'texeris:history-event',
 } as const;
+
+export type HistoryEvent = { type: 'checkpoint-updated'; checkpointId: string };
 
 export interface DocText {
   documentId: string;

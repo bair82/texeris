@@ -67,6 +67,8 @@ export interface SettingsView {
   spellcheck: SpellcheckView;
   appearance: AppearanceConfig;
   patchStyleMode: PatchStyleMode;
+  /** LLM-generated checkpoint descriptions on checkpoint creation. */
+  llmCheckpointDescriptions: boolean;
   writingProfile: WritingProfileView;
 }
 
@@ -96,6 +98,13 @@ export const SetPatchStyleModeRequestSchema = Type.Object({
 });
 export type SetPatchStyleModeRequest = Static<typeof SetPatchStyleModeRequestSchema>;
 
+export const SetCheckpointDescriptionsRequestSchema = Type.Object({
+  enabled: Type.Boolean(),
+});
+export type SetCheckpointDescriptionsRequest = Static<
+  typeof SetCheckpointDescriptionsRequestSchema
+>;
+
 export const SettingsChannels = {
   get: 'texeris:settings-get',
   setApiKey: 'texeris:settings-set-api-key',
@@ -103,6 +112,7 @@ export const SettingsChannels = {
   setSpellcheck: 'texeris:settings-set-spellcheck',
   setAppearance: 'texeris:settings-set-appearance',
   setPatchStyleMode: 'texeris:settings-set-patch-style-mode',
+  setCheckpointDescriptions: 'texeris:settings-set-checkpoint-descriptions',
   disableWritingProfile: 'texeris:settings-disable-writing-profile',
   /** main → renderer push: appearance changed, repaint now (EU6). */
   appearanceChanged: 'texeris:settings-appearance-changed',

@@ -17,6 +17,7 @@ import type {
   DocumentExportResult,
   DocumentImportResult,
   HeadingInfo,
+  HistoryEvent,
   TrashedDocumentInfo,
 } from './doc-types';
 import type {
@@ -216,6 +217,7 @@ export interface TexerisApi {
     }): Promise<{ enabled: boolean; language: string }>;
     setAppearance(input: Partial<AppearanceConfig>): Promise<AppearanceConfig>;
     setPatchStyleMode(mode: PatchStyleMode): Promise<{ mode: PatchStyleMode }>;
+    setCheckpointDescriptions(enabled: boolean): Promise<{ enabled: boolean }>;
     disableWritingProfile(): Promise<{ disabled: boolean }>;
     /** Appearance changed anywhere (settings UI or another window); repaint. */
     onAppearanceChanged(callback: (appearance: AppearanceConfig) => void): () => void;
@@ -247,5 +249,7 @@ export interface TexerisApi {
       input: { name?: string; description?: string },
     ): Promise<CheckpointInfo>;
     restoreCheckpoint(checkpointId: string): Promise<{ seq: number }>;
+    /** Fired when a checkpoint's description is (re)generated in the background. */
+    onEvent(callback: (event: HistoryEvent) => void): () => void;
   };
 }

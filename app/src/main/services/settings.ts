@@ -27,6 +27,8 @@ export interface WorkspaceConfig {
   spellcheck: SpellcheckConfig;
   appearance: import('../../shared/settings-types').AppearanceConfig;
   patchStyleMode: import('../../shared/settings-types').PatchStyleMode;
+  /** LLM-generated checkpoint descriptions (owner request 2026-08-08). */
+  llmCheckpointDescriptions: boolean;
   activeProfileId: string | null;
 }
 
@@ -43,6 +45,7 @@ export const DEFAULT_CONFIG: WorkspaceConfig = {
     editorWidth: 'comfortable',
   },
   patchStyleMode: 'off',
+  llmCheckpointDescriptions: true,
   activeProfileId: null,
 };
 
@@ -117,6 +120,10 @@ export function loadWorkspaceConfig(dir = workspaceDir()): WorkspaceConfig {
       parsed.patchStyleMode === 'audit' || parsed.patchStyleMode === 'revise-once'
         ? parsed.patchStyleMode
         : 'off',
+    llmCheckpointDescriptions:
+      typeof parsed.llmCheckpointDescriptions === 'boolean'
+        ? parsed.llmCheckpointDescriptions
+        : DEFAULT_CONFIG.llmCheckpointDescriptions,
     activeProfileId:
       typeof parsed.activeProfileId === 'string' ? parsed.activeProfileId : null,
   };

@@ -14,12 +14,14 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { registerIpcHandlers, projectInfo } from './ipc';
 import { COMMANDS, MenuCommandChannel } from '../shared/commands';
-import { DocChannels } from '../shared/doc-types';
+import { DocChannels, HistoryChannels } from '../shared/doc-types';
 import { PatchChannels } from '../shared/patch-types';
 import { ProjectChannels } from '../shared/project-types';
 import { PiAgentRuntime } from './agent/runtime';
 import { createAppModels, createFauxModels } from './agent/models';
 import { ConversationService } from './services/conversation';
+import { CheckpointService } from './services/checkpoint';
+import { CheckpointDescriber } from './services/checkpointDescriber';
 import { CredentialsService } from './services/credentials';
 import { openDevProject } from './services/devProject';
 import { PatchService } from './services/patch';
@@ -258,6 +260,8 @@ app.whenReady().then(() => {
   let runtime: PiAgentRuntime | null = null;
   let conversations: ConversationService | null = null;
   let patches: PatchService | null = null;
+  let checkpoints: CheckpointService | null = null;
+  let checkpointDescriber: CheckpointDescriber | null = null;
   let stopWatcher: (() => void) | null = null;
 
   const broadcast = (channel: string, payload: unknown) => {
@@ -271,6 +275,16 @@ app.whenReady().then(() => {
     const nextConversations = new ConversationService(ctx.db, () => corpus.gc(ctx));
     const nextPatches = new PatchService(ctx.db, ctx.revisions, (patchId, title) => {
       broadcast(PatchChannels.event, { type: 'patch-proposed', patchId, title });
+    });
+    const nextCheckpoints = new CheckpointService(ctx.db, ctx.revisions);
+    const nextDescriber = new CheckpointDescriber({
+      db: ctx.db,
+      checkpoints: nextCheckpoints,
+      models,
+      config,
+      credentials,
+      onUpdated: (checkpointId) =>
+        broadcast(HistoryChannels.event, { type: 'checkpoint-updated', checkpointId }),
     });
     const nextStopWatcher = watchProjectFiles(ctx, (docEvent) => {
       broadcast(DocChannels.event, docEvent);
@@ -300,6 +314,8 @@ app.whenReady().then(() => {
     }
     conversations = nextConversations;
     patches = nextPatches;
+    checkpoints = nextCheckpoints;
+    checkpointDescriber = nextDescriber;
     stopWatcher?.();
     stopWatcher = nextStopWatcher;
     broadcast(ProjectChannels.changed, projectInfo(ctx));
@@ -329,12 +345,26 @@ app.whenReady().then(() => {
     }
     return patches;
   };
+  const requireCheckpoints = (): CheckpointService => {
+    if (!checkpoints) {
+      throw new Error('no project open');
+    }
+    return checkpoints;
+  };
+  const requireCheckpointDescriber = (): CheckpointDescriber => {
+    if (!checkpointDescriber) {
+      throw new Error('no project open');
+    }
+    return checkpointDescriber;
+  };
 
   registerIpcHandlers({
     requireProject,
     requireRuntime,
     requireConversations,
     requirePatches,
+    requireCheckpoints,
+    requireCheckpointDescriber,
     credentials,
     config,
     manager,
