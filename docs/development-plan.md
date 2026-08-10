@@ -348,7 +348,9 @@ Work packages, in order:
    description (owner request 2026-08-08) so history/rewind pickers stay
    scannable without opening each preview; names and descriptions are
    generated at creation (rename inline when needed) and the checkpoint
-   section is collapsed by default in the history panel.
+   section is collapsed by default in the history panel. Descriptions are
+   LLM-generated in the background from the tip revision's changes (fast
+   model, deterministic fallback, Settings toggle).
 9. **Lifecycle integrity audit:** require awaited editor flushes for close and
    project replacement; confine persisted document paths; make project/runtime
    handoff ordered; persist prompts before provider work; and protect

@@ -207,6 +207,20 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
               <option value="revise-once">Ask agent to revise once</option>
             </select>
           </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={settings.llmCheckpointDescriptions}
+              onChange={(event) => void window.texeris.settings
+                .setCheckpointDescriptions(event.target.checked)
+                .then(refresh)}
+            />
+            {' '}AI checkpoint descriptions
+          </label>
+          <p className="settings-hint">
+            New checkpoints get a one-line description from the fast model in
+            the background. Off keeps the plain summary + timestamp text.
+          </p>
         </div>
 
         <h3>Corpus</h3>

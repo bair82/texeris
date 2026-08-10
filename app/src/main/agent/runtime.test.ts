@@ -37,6 +37,7 @@ const CONFIG = {
     editorWidth: 'comfortable' as const,
   },
   patchStyleMode: 'off' as const,
+  llmCheckpointDescriptions: false,
   activeProfileId: null,
 };
 

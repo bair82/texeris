@@ -153,17 +153,27 @@ try {
     `[...document.querySelectorAll('.checkpoint-form button')].find(b => b.textContent === 'Checkpoint now').click(); true`,
   );
   await waitFor(cdp, `!!document.querySelector('.checkpoint-list li')`, 'checkpoint never appeared');
-  const generated = await evaluate(
+  const generatedName = await evaluate(
     cdp,
-    `(() => {
-      const row = document.querySelector('.checkpoint-list li');
-      return { name: row.querySelector('.checkpoint-name')?.textContent ?? '', text: row.textContent };
-    })()`,
+    `document.querySelector('.checkpoint-list .checkpoint-name')?.textContent ?? ''`,
+  );
+  check('generated checkpoint has an auto name', generatedName.includes('checkpoint rev'), generatedName);
+
+  // the LLM description replaces the fallback in the background (faux
+  // provider's scripted reply, sanitized: trailing period stripped)
+  await waitFor(
+    cdp,
+    `document.querySelector('.checkpoint-list li')?.textContent.includes('scripted offline response')`,
+    'LLM checkpoint description never landed',
+  );
+  const withLlm = await evaluate(
+    cdp,
+    `document.querySelector('.checkpoint-list li')?.textContent ?? ''`,
   );
   check(
-    'generated checkpoint has an auto name and description',
-    generated.name.includes('checkpoint rev') && generated.text.includes('·'),
-    JSON.stringify(generated),
+    'LLM description replaced the fallback',
+    withLlm.includes('scripted offline response') && !withLlm.includes('chars in'),
+    withLlm,
   );
 
   // inline rename edits name and description

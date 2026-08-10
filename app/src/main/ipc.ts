@@ -51,6 +51,7 @@ import {
   SetAppearanceRequestSchema,
   SetSpellcheckRequestSchema,
   SetPatchStyleModeRequestSchema,
+  SetCheckpointDescriptionsRequestSchema,
   SettingsChannels,
   type AppearanceConfig,
   type SettingsView,
@@ -65,6 +66,7 @@ import {
 } from './services/conversationRewind';
 import { CredentialsService } from './services/credentials';
 import { CheckpointService } from './services/checkpoint';
+import { CheckpointDescriber } from './services/checkpointDescriber';
 import type { PatchService } from './services/patch';
 import type { ProjectContext } from './services/project';
 import type { ProjectManager } from './services/projectManager';
@@ -135,6 +137,8 @@ export interface IpcDeps {
   requireRuntime(): AgentRuntime;
   requireConversations(): ConversationService;
   requirePatches(): PatchService;
+  requireCheckpoints(): CheckpointService;
+  requireCheckpointDescriber(): CheckpointDescriber;
   credentials: CredentialsService;
   config: WorkspaceConfig;
   manager: ProjectManager;
@@ -851,24 +855,24 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const req = Value.Decode(CheckpointListRequestSchema, raw ?? {});
     const project = deps.requireProject();
     const docId = req.documentId ?? mainDocId(project);
-    return new CheckpointService(project.db, project.revisions).list(docId);
+    return deps.requireCheckpoints().list(docId);
   });
 
   ipcMain.handle(HistoryChannels.checkpointCreate, (_event, raw: unknown) => {
     const req = Value.Decode(CheckpointCreateRequestSchema, raw ?? {});
     const project = deps.requireProject();
     const docId = req.documentId ?? mainDocId(project);
-    return new CheckpointService(project.db, project.revisions).create(
-      docId,
-      req.name,
-      req.description,
-    );
+    const info = deps.requireCheckpoints().create(docId, req.name, req.description);
+    // The LLM description lands in the background; the deterministic
+    // fallback above is what the caller gets synchronously.
+    deps.requireCheckpointDescriber().schedule(info.id);
+    return info;
   });
 
   ipcMain.handle(HistoryChannels.checkpointRename, (_event, raw: unknown) => {
     const req = Value.Decode(CheckpointRenameRequestSchema, raw);
-    const project = deps.requireProject();
-    return new CheckpointService(project.db, project.revisions).rename(req.checkpointId, {
+    deps.requireProject();
+    return deps.requireCheckpoints().rename(req.checkpointId, {
       name: req.name,
       description: req.description,
     });
@@ -876,8 +880,8 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
   ipcMain.handle(HistoryChannels.checkpointRestore, (_event, raw: unknown) => {
     const req = Value.Decode(CheckpointRestoreRequestSchema, raw);
-    const project = deps.requireProject();
-    const seq = new CheckpointService(project.db, project.revisions).restore(req.checkpointId);
+    deps.requireProject();
+    const seq = deps.requireCheckpoints().restore(req.checkpointId);
     return { seq };
   });
 
@@ -928,6 +932,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       },
       appearance: deps.config.appearance,
       patchStyleMode: deps.config.patchStyleMode,
+      llmCheckpointDescriptions: deps.config.llmCheckpointDescriptions,
       writingProfile: deps.profiles.view(),
     };
   });
@@ -967,6 +972,13 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     deps.config.patchStyleMode = req.mode;
     if (shouldPersistWorkspaceConfig()) saveWorkspaceConfig(deps.config);
     return { mode: req.mode };
+  });
+
+  ipcMain.handle(SettingsChannels.setCheckpointDescriptions, (_event, raw: unknown) => {
+    const req = Value.Decode(SetCheckpointDescriptionsRequestSchema, raw);
+    deps.config.llmCheckpointDescriptions = req.enabled;
+    if (shouldPersistWorkspaceConfig()) saveWorkspaceConfig(deps.config);
+    return { enabled: req.enabled };
   });
 
   ipcMain.handle(SettingsChannels.disableWritingProfile, () => {
