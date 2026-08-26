@@ -36,7 +36,7 @@ This plan is ordered around that thesis and the application that exists now.
 | Packaging | Linux x64 AppImage and native macOS Apple Silicon/Intel DMG+ZIP targets build with pinned, checksum-verified Pandoc resources. Linux packaged launch is tested; macOS artifacts are unsigned and not notarised. |
 
 The local verification baseline is strong but narrower than the documentation
-has sometimes implied: TypeScript passes; Vitest reports 257 passing tests and
+has sometimes implied: TypeScript passes; Vitest reports 267 passing tests and
 6 conditional tests skipped; focused Electron smokes and the
 packaged-app verifier pass.
 
@@ -228,8 +228,11 @@ rapidly turning a prototype into a real application.
    as the only migration, and projects current features into M2–M4.
 2. Architecture milestone labels similarly place multi-file projects,
    profiles, subagents, PDF, and export in the future.
-3. The README still presents the spike as the development entry point and does
-   not explain how to run or package the real app.
+3. ~~The README still presents the spike as the development entry point and does
+   not explain how to run or package the real app.~~ **Resolved 2026-08-27:**
+   the root README now presents the real application, its revision-safety
+   boundary, current capabilities and gaps, architecture, verification path,
+   and reproducible screenshots including a live DeepSeek patch review.
 4. Packaging succeeds with warnings for missing application icon and Linux
    desktop identity. The artifact remains version `0.1.0`; there is no release
    manifest, changelog, checksum publication flow, licence/third-party notice,
