@@ -1,4 +1,8 @@
-import { createModels, type Models } from '@earendil-works/pi-ai';
+import {
+  createModels,
+  type Models,
+  type SimpleStreamOptions,
+} from '@earendil-works/pi-ai';
 import { deepseekProvider } from '@earendil-works/pi-ai/providers/deepseek';
 import { moonshotaiProvider } from '@earendil-works/pi-ai/providers/moonshotai';
 import {
@@ -7,6 +11,13 @@ import {
   fauxToolCall,
 } from '@earendil-works/pi-ai/providers/faux';
 import type { WorkspaceConfig } from '../services/settings';
+
+/** Retry transient transport failures and retryable HTTP responses. */
+export function withProviderRetries(
+  options: SimpleStreamOptions | undefined,
+): SimpleStreamOptions {
+  return { ...options, maxRetries: options?.maxRetries ?? 2 };
+}
 
 /**
  * One Models collection registering only the providers we use (plan §10.3).

@@ -389,3 +389,16 @@ changes capped at 2k chars) rewrites the description and pushes
 checkpoint descriptions" (`llmCheckpointDescriptions`, default on). Failure
 or disabled keeps the fallback. smoke-checkpoint.mjs asserts the replacement
 end-to-end via the faux provider.
+
+**codex, 2026-08-27** — refreshed the public project presentation around the
+functional application rather than the historical editor spike. The root
+README now documents the revision loop, shipped workflows, security and
+process boundaries, honest pre-release gaps, local setup, verification, and
+two real application screenshots. The patch-review image comes from a live
+DeepSeek turn over a realistic academic example; the capture path remains
+reproducible through `smoke-live.mjs`, while `smoke-patch.mjs` retains offline
+screenshot hooks. Diagnosing intermittent DeepSeek failures reproduced
+`UND_ERR_CONNECT_TIMEOUT` outside Texeris; all main, delegated, and patch-style
+agent streams now allow two bounded provider retries. The live harness follows
+`run_end`, reports provider errors directly, and rejects pending CDP calls when
+the window closes instead of ending with an unsettled top-level await.

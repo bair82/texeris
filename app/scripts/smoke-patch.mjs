@@ -115,6 +115,17 @@ async function waitFor(cdp, expression, label, tries = 60) {
   return false;
 }
 
+async function captureScreenshot(cdp, target) {
+  await cdp.send('Emulation.setDeviceMetricsOverride', {
+    width: 1440,
+    height: 900,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  const screenshot = await cdp.send('Page.captureScreenshot', { format: 'png' });
+  fs.writeFileSync(target, Buffer.from(screenshot.data, 'base64'));
+}
+
 const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'texeris-wp4-smoke-'));
 let app;
 try {
@@ -123,6 +134,11 @@ try {
   const cdp = new Cdp(ws);
   await waitFor(cdp, `!!window.texeris`, 'preload API never attached');
   await waitFor(cdp, `!!document.querySelector('.tiptap-rendered')`, 'editor never mounted');
+
+  if (process.env.TEXERIS_WORKSPACE_SCREENSHOT) {
+    await sleep(Number(process.env.TEXERIS_SCREENSHOT_DELAY_MS ?? 500));
+    await captureScreenshot(cdp, process.env.TEXERIS_WORKSPACE_SCREENSHOT);
+  }
 
   const boot = await evaluate(cdp, 'window.texeris.doc.getText()');
   const baseRevision = boot.revision;
@@ -214,6 +230,11 @@ try {
     `!!document.querySelector('.review-highlight')`,
   );
   check('affected range is highlighted in the editor', highlighted === true);
+
+  if (process.env.TEXERIS_PATCH_SCREENSHOT) {
+    await sleep(300);
+    await captureScreenshot(cdp, process.env.TEXERIS_PATCH_SCREENSHOT);
+  }
 
   // accept-all → applied as an agent revision, undo offered
   await evaluate(

@@ -25,6 +25,7 @@ import { AgentCoordinator } from './coordinator';
 import { PatchStyleGate } from './styleCritic';
 import { skillById, type SkillDefinition } from './skills';
 import type { ArchiveService } from '../services/archive';
+import { withProviderRetries } from './models';
 
 /**
  * The AgentRuntime adapter (plan §10.1): one Pi Agent per conversation,
@@ -340,7 +341,8 @@ export class PiAgentRuntime implements AgentRuntime {
         tools: allowedTools,
         messages,
       },
-      streamFn: (m, c, o) => this.options.models.streamSimple(m, c, o),
+      streamFn: (m, c, o) =>
+        this.options.models.streamSimple(m, c, withProviderRetries(o)),
       getApiKey: (provider) => this.options.credentials?.getApiKey(provider),
       transformContext: async (messages) => compactToolContext(messages),
     });

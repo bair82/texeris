@@ -6,6 +6,7 @@ import type { PatchService } from '../services/patch';
 import type { WritingProfileService } from '../services/profile';
 import type { WorkspaceConfig } from '../services/settings';
 import { PATCH_STYLE_CRITIC_PROMPT } from './skills';
+import { withProviderRetries } from './models';
 
 const PROMPT_VERSION = 1;
 
@@ -90,7 +91,8 @@ export class PatchStyleGate {
     let ended: AgentMessage[] = [];
     const agent = new Agent({
       initialState: { systemPrompt: PATCH_STYLE_CRITIC_PROMPT, model, tools: [], messages: [] },
-      streamFn: (m, c, o) => this.options.models.streamSimple(m, c, o),
+      streamFn: (m, c, o) =>
+        this.options.models.streamSimple(m, c, withProviderRetries(o)),
       getApiKey: (provider) => this.options.credentials?.getApiKey(provider),
     });
     const unsubscribe = agent.subscribe((event) => {
