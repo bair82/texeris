@@ -4,6 +4,7 @@ import type { Models } from '@earendil-works/pi-ai';
 import type { DatabaseSync } from 'node:sqlite';
 import type { ModelMode, UsageSummary } from '../../shared/chat-types';
 import type { WorkspaceConfig } from '../services/settings';
+import { withProviderRetries } from './models';
 
 export type SubagentRole = 'conversion-reviewer' | 'metadata-researcher' | 'corpus-analyst';
 
@@ -64,7 +65,8 @@ export class AgentCoordinator {
     let endedMessages: AgentMessage[] = [];
     const agent = new Agent({
       initialState: { systemPrompt: ROLE_PROMPTS[input.role], model, tools: input.tools, messages: [] },
-      streamFn: (m, c, o) => this.options.models.streamSimple(m, c, o),
+      streamFn: (m, c, o) =>
+        this.options.models.streamSimple(m, c, withProviderRetries(o)),
       getApiKey: (provider) => this.options.credentials?.getApiKey(provider),
     });
     this.active.set(id, agent);

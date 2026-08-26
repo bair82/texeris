@@ -108,6 +108,25 @@ describe('PiAgentRuntime', () => {
     expect(runs[0].provider).toBe('faux');
   });
 
+  it('enables bounded provider retries by default', async () => {
+    let maxRetries: number | undefined;
+    faux.setResponses([
+      ((_context, options) => {
+        maxRetries = options?.maxRetries;
+        return fauxAssistantMessage('Recovered response.');
+      }) as FauxResponseStep,
+    ]);
+    const { runId } = await runtime.startTurn({
+      conversationId,
+      text: 'Try the provider.',
+      mode: 'fast',
+      scope: { kind: 'document' },
+    });
+    await drain(runId);
+
+    expect(maxRetries).toBe(2);
+  });
+
   it('keeps the submitted prompt when the provider fails before answering', async () => {
     faux.setResponses([
       (() => {
